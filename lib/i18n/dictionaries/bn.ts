@@ -225,6 +225,8 @@ export const bn: Dictionary = {
     "status-change": (status: string) => `"${status}" অবস্থায় গেছে`,
     "hearing-held": (ordinal: number) => `${n(ordinal)} নম্বর শুনানি অনুষ্ঠিত হয়েছে`,
     "field-visit-scheduled": "সরেজমিন পরিদর্শন নির্ধারিত",
+    "field-visit-completed": "সরেজমিন প্রতিবেদন জমা হয়েছে",
+    ruled: "রায় দেওয়া হয়েছে",
   },
 
   domain: {
@@ -330,6 +332,7 @@ export const bn: Dictionary = {
       assign: "বরাদ্দ",
       ruling: "রায়",
       upload: "আপলোড",
+      delete: "মুছে ফেলা",
     },
     areaUnit: {
       decimal: "শতাংশ",
@@ -376,6 +379,48 @@ export const bn: Dictionary = {
       sessions: (count: number) => `${n(count)}টি অধিবেশন`,
       ruling: "রায়",
       viewDispute: "বিরোধের রেকর্ড দেখুন",
+      openCase: "মামলা খুলুন",
+    },
+
+    hearing: {
+      eyebrow: "মধ্যস্থতা",
+      notFound: "এই মামলাটি পাওয়া যায়নি।",
+      backToCases: "মামলার তালিকায় ফিরুন",
+      scheduledFor: (when: string) => `শুনানি নির্ধারিত ${when}`,
+
+      parties: "পক্ষগণ",
+      heard: "শোনা হয়েছে",
+      notHeard: "এখনো শোনা হয়নি",
+
+      sessions: "অধিবেশন",
+      noSessions: "এখনো কোনো অধিবেশন লিপিবদ্ধ হয়নি।",
+      attendees: "উপস্থিত",
+      recordSession: "অধিবেশন লিপিবদ্ধ করুন",
+      summary: "যা ঘটেছে",
+      summaryHint: "যা উপস্থাপন, যুক্তি ও সম্মত হয়েছে।",
+      summaryPlaceholder: "অধিবেশনের সারসংক্ষেপ লিখুন…",
+      whoAttended: "কারা উপস্থিত ছিলেন",
+      whoAttendedHint: "উপস্থিত প্রতিটি পক্ষে টিক দিন।",
+      saveSession: "অধিবেশন সংরক্ষণ করুন",
+      savingSession: "সংরক্ষণ হচ্ছে…",
+      sessionSaved: "অধিবেশন লিপিবদ্ধ হয়েছে।",
+
+      ruling: "রায়",
+      rulingHint: "রেকর্ডভুক্ত সিদ্ধান্ত। এতে মামলা নিষ্পত্তি হবে।",
+      rulingPlaceholder: "সিদ্ধান্ত লিখুন…",
+      issueRuling: "রায় দিন",
+      issuing: "দেওয়া হচ্ছে…",
+      ruled: "রায় দেওয়া হয়েছে।",
+      ruledAt: (when: string) => `রায় ${when}`,
+      needsBefore: "রায় দেওয়ার আগে:",
+
+      blocker: {
+        alreadyDecided: "এই মামলার সিদ্ধান্ত ইতিমধ্যে হয়ে গেছে।",
+        noSessions: "রায়ের আগে অধিবেশন করুন — এখনো কোনো পক্ষকে শোনা হয়নি।",
+        unheard: (parties: string) =>
+          `এখনো অধিবেশনে উপস্থিত হননি: ${parties}। যে পক্ষকে শোনা হয়নি, তার বিরুদ্ধে মামলার সিদ্ধান্ত দেওয়া যায় না।`,
+        needRuling: "সিদ্ধান্ত লিখুন।",
+      },
     },
 
     visits: {
@@ -386,15 +431,65 @@ export const bn: Dictionary = {
       gpsCount: (count: number) => `${n(count)}টি জিপিএস`,
       photoCount: (count: number) => `${n(count)}টি ছবি`,
       openCapture: "সংগ্রহ শুরু করুন",
-      captureToastTitle: "সংগ্রহের স্ক্রিন এখনো যুক্ত হয়নি",
-      captureToastBody:
-        "মোবাইল সংগ্রহ প্রবাহ (জিপিএস + ছবি + নোট) মাঠকর্মী ট্র্যাকের পরবর্তী কাজ।",
       submitted: (when: string) => `জমা ${when}`,
+    },
+
+    capture: {
+      eyebrow: "সরেজমিন জরিপ",
+      notFound: "এই পরিদর্শনটি পাওয়া যায়নি।",
+      backToVisits: "পরিদর্শন তালিকায় ফিরুন",
+      scheduled: (when: string) => `নির্ধারিত ${when}`,
+
+      markEnRoute: "রওনা হয়েছি",
+      markOnSite: "ঘটনাস্থলে পৌঁছেছি",
+
+      evidence: "প্রমাণ",
+      gpsPoints: "জিপিএস পয়েন্ট",
+      photos: "ছবি",
+      capturePoint: "পয়েন্ট নিন",
+      capturing: "নেওয়া হচ্ছে…",
+      addPhoto: "ছবি যোগ করুন",
+      pointLabel: "পয়েন্টের নাম",
+      pointLabelHint: "আপনি যেখানে দাঁড়িয়ে আছেন — যেমন উত্তর-পূর্ব কোণের পিলার।",
+      photoCaption: "বিবরণ",
+      photoCaptionHint: "ছবিতে যা দেখা যাচ্ছে।",
+      accuracy: (metres: number) => `±${n(metres)} মি নির্ভুলতা`,
+      noGps: "এখনো কোনো পয়েন্ট নেওয়া হয়নি।",
+      noPhotos: "এখনো কোনো ছবি নেই।",
+      photoPlaceholder: "ছবি",
+      simulatedNote:
+        "সম্ভব হলে ডিভাইসের জিপিএস ব্যবহার করা হয়; নইলে এই প্রিভিউর জন্য দাগের কাছাকাছি একটি পয়েন্ট অনুকরণ করা হয়।",
+      simulatedPoint: "অনুকরণ",
+
+      notes: "পর্যবেক্ষণ",
+      notesHint: "ঘটনাস্থলে যা দেখেছেন। মামলায় এটিই পড়া হবে।",
+      notesPlaceholder: "যা পেয়েছেন লিখুন…",
+      fileReport: "প্রতিবেদন জমা দিন",
+      filing: "জমা হচ্ছে…",
+      filed: "প্রতিবেদন জমা হয়েছে।",
+      needsBefore: "জমা দেওয়ার আগে:",
+      required: (have: number, need: number) => `${n(need)}টির মধ্যে ${n(have)}টি`,
+
+      blocker: {
+        notActionable: "এই প্রতিবেদনটি ইতিমধ্যে বন্ধ হয়ে গেছে।",
+        needGps: (have: number, need: number) =>
+          `${n(need)}টি জিপিএস পয়েন্ট নিন — আপনার আছে ${n(have)}টি।`,
+        needPhotos: (have: number, need: number) =>
+          `${n(need)}টি ছবি যোগ করুন — আপনার আছে ${n(have)}টি।`,
+        needNotes: "আপনার পর্যবেক্ষণ লিখুন।",
+      },
     },
 
     policies: {
       description: "ফি, আপত্তির সময়সীমা ও জালিয়াতি স্কোরের সীমা নির্ধারণ করুন।",
-      buildNote: "React Hook Form + Zod দিয়ে এখানে সেটিংস ফর্ম তৈরি করুন।",
+      mutationFee: "নামজারি ফি",
+      mutationFeeHint: "প্রতিটি নামজারি আবেদনের জন্য টাকায় অর্থ।",
+      objectionWindow: "আপত্তির সময়সীমা",
+      objectionWindowHint: "পক্ষগুলি আপত্তি দাখিল করার জন্য যতদিন সময় পাবে।",
+      days: "দিন",
+      fraudThreshold: "জালিয়াতি স্কোরের সীমা",
+      fraudThresholdHint: "কোনো দলিল ম্যানুয়াল পর্যালোচনার জন্য চিহ্নিত করার ন্যূনতম স্কোর (০–১)।",
+      saved: "নীতিমালা সফলভাবে আপডেট হয়েছে।",
     },
 
     users: {

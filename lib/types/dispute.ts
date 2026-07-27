@@ -48,7 +48,9 @@ export type DisputeEventContent =
   | { code: "evidence-added" }
   | { code: "status-change"; status: DisputeStatus }
   | { code: "hearing-held"; ordinal: number }
-  | { code: "field-visit-scheduled" };
+  | { code: "field-visit-scheduled" }
+  | { code: "field-visit-completed" }
+  | { code: "ruled" };
 
 /** One entry in a dispute's tracking timeline. */
 export interface DisputeEvent {

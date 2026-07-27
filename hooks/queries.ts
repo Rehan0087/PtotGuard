@@ -16,6 +16,7 @@ import type {
   Mutation as LandMutation,
   LandDocument,
   FieldReport,
+  FieldReportStatus,
   Hearing,
   AppNotification,
   User,
@@ -30,6 +31,7 @@ import type {
   InheritanceResult,
   AuditEvent,
   AuditVerifyResult,
+  Policy,
 } from "@/lib/types";
 
 /** The active role scopes every query key so switching roles refetches. */
@@ -341,6 +343,21 @@ export function useAddFieldReportMedia(id: string) {
   });
 }
 
+/** The agent's own edits: status along the ladder, notes, and filing. */
+export function useUpdateFieldReport(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { status?: FieldReportStatus; notes?: string }) =>
+      api.patch<FieldReport>(`/field-reports/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
 // --- Hearings --------------------------------------------------------------
 export function useHearings(params: ListParams = {}) {
   const role = useRole();
@@ -363,6 +380,19 @@ export function useHearingRuling(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (ruling: string) => api.patch<Hearing>(`/hearings/${id}/ruling`, { ruling }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearing", id] });
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+    },
+  });
+}
+
+/** Recording a sitting. The ruling gate reads these, so this is what unblocks a decision. */
+export function useRecordHearingSession(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { summary: string; attendees: string[] }) =>
+      api.post<Hearing>(`/hearings/${id}/sessions`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hearing", id] });
       qc.invalidateQueries({ queryKey: ["hearings"] });
@@ -434,5 +464,24 @@ export function useUsers(params: ListParams = {}) {
     queryKey: ["users", params],
     queryFn: () => api.get<Paginated<User>>(`/users${qs(params)}`),
     placeholderData: keepPreviousData,
+  });
+}
+
+// --- Policies (admin) -------------------------------------------------------
+export function usePolicies() {
+  return useQuery({
+    queryKey: ["policies"],
+    queryFn: () => api.get<Policy>("/policies"),
+  });
+}
+
+export function useUpdatePolicies() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (updates: Partial<Policy>) =>
+      api.patch<Policy>("/policies", updates),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["policies"] });
+    },
   });
 }

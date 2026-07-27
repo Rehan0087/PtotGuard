@@ -310,6 +310,15 @@ export const hearings: Hearing[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Policies (system configuration)
+// ---------------------------------------------------------------------------
+export const policies = {
+  mutationFeeBdt: 5400,
+  objectionWindowDays: 15,
+  fraudScoreThreshold: 0.5,
+};
+
+// ---------------------------------------------------------------------------
 // Notifications (citizen inbox is richest for the demo)
 // ---------------------------------------------------------------------------
 export const notifications: AppNotification[] = [

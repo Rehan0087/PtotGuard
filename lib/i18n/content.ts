@@ -69,6 +69,10 @@ export function useDisputeEventTitle() {
           return t.disputeEvents["hearing-held"](c.ordinal);
         case "field-visit-scheduled":
           return t.disputeEvents["field-visit-scheduled"];
+        case "field-visit-completed":
+          return t.disputeEvents["field-visit-completed"];
+        case "ruled":
+          return t.disputeEvents.ruled;
       }
     },
     [t],

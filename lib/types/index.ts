@@ -14,4 +14,5 @@ export * from "./notification";
 export * from "./auth";
 export * from "./inheritance";
 export * from "./audit";
+export * from "./policy";
 export * from "./api";

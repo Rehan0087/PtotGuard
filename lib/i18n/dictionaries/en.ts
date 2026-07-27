@@ -245,6 +245,8 @@ export const en = {
     "status-change": (status: string) => `Moved to ${status}`,
     "hearing-held": (ordinal: number) => `Hearing ${n(ordinal)} held`,
     "field-visit-scheduled": "Field visit scheduled",
+    "field-visit-completed": "Field survey filed",
+    ruled: "Ruling issued",
   },
 
   // ── Domain enums that appear as plain text, not badges ───────────────────
@@ -351,6 +353,7 @@ export const en = {
       assign: "Assign",
       ruling: "Ruling",
       upload: "Upload",
+      delete: "Delete",
     },
     areaUnit: {
       decimal: "decimal",
@@ -404,6 +407,52 @@ export const en = {
       sessions: (count: number) => `${n(count)} session${count === 1 ? "" : "s"}`,
       ruling: "Ruling",
       viewDispute: "View dispute record",
+      openCase: "Open case",
+    },
+
+    hearing: {
+      eyebrow: "Mediation",
+      notFound: "That case could not be found.",
+      backToCases: "Back to cases",
+      scheduledFor: (when: string) => `Hearing scheduled ${when}`,
+
+      // Parties
+      parties: "Parties",
+      heard: "Heard",
+      notHeard: "Not yet heard",
+
+      // Sessions
+      sessions: "Sittings",
+      noSessions: "No sittings recorded yet.",
+      attendees: "Present",
+      recordSession: "Record a sitting",
+      summary: "What happened",
+      summaryHint: "What was presented, argued, and agreed.",
+      summaryPlaceholder: "Summarise the sitting…",
+      whoAttended: "Who attended",
+      whoAttendedHint: "Tick each party who was present.",
+      saveSession: "Save sitting",
+      savingSession: "Saving…",
+      sessionSaved: "Sitting recorded.",
+
+      // Ruling
+      ruling: "Ruling",
+      rulingHint: "The decision on the record. This closes the case.",
+      rulingPlaceholder: "State the decision…",
+      issueRuling: "Issue ruling",
+      issuing: "Issuing…",
+      ruled: "Ruling issued.",
+      ruledAt: (when: string) => `Ruled ${when}`,
+      needsBefore: "Before ruling:",
+
+      blocker: {
+        alreadyDecided: "This case has already been decided.",
+        noSessions: "Hold a sitting before ruling — no party has been heard yet.",
+        /** Natural justice: a case is not decided against someone never heard. */
+        unheard: (parties: string) =>
+          `Has not attended a sitting yet: ${parties}. A case cannot be decided against a party who has not been heard.`,
+        needRuling: "Write the decision.",
+      },
     },
 
     visits: {
@@ -414,15 +463,69 @@ export const en = {
       gpsCount: (count: number) => `${n(count)} GPS`,
       photoCount: (count: number) => `${n(count)} photos`,
       openCapture: "Open capture",
-      captureToastTitle: "Capture screen not wired yet",
-      captureToastBody:
-        "The mobile capture flow (GPS + photos + notes) is next on the field-agent track.",
       submitted: (when: string) => `Submitted ${when}`,
+    },
+
+    capture: {
+      eyebrow: "Field survey",
+      notFound: "That visit could not be found.",
+      backToVisits: "Back to visits",
+      scheduled: (when: string) => `Scheduled ${when}`,
+
+      // Status ladder
+      markEnRoute: "Mark en route",
+      markOnSite: "Mark on site",
+
+      // Evidence
+      evidence: "Evidence",
+      gpsPoints: "GPS points",
+      photos: "Photos",
+      capturePoint: "Capture point",
+      capturing: "Capturing…",
+      addPhoto: "Add photo",
+      pointLabel: "Point label",
+      pointLabelHint: "What you are standing on — e.g. NE corner pillar.",
+      photoCaption: "Caption",
+      photoCaptionHint: "What the picture shows.",
+      accuracy: (metres: number) => `±${n(metres)} m accuracy`,
+      noGps: "No points captured yet.",
+      noPhotos: "No photos yet.",
+      photoPlaceholder: "Photo",
+      /** The mock has no camera or object store; captures are simulated. */
+      simulatedNote:
+        "Device GPS is used when available; otherwise a point near the parcel is simulated for this preview.",
+      simulatedPoint: "Simulated",
+
+      // Notes + filing
+      notes: "Findings",
+      notesHint: "What you observed on the ground. This is what the case reads.",
+      notesPlaceholder: "Describe what you found…",
+      fileReport: "File report",
+      filing: "Filing…",
+      filed: "Report filed.",
+      needsBefore: "Before filing:",
+      required: (have: number, need: number) => `${n(have)} of ${n(need)}`,
+
+      blocker: {
+        notActionable: "This report is already closed.",
+        needGps: (have: number, need: number) =>
+          `Capture ${n(need)} GPS point${need === 1 ? "" : "s"} — you have ${n(have)}.`,
+        needPhotos: (have: number, need: number) =>
+          `Add ${n(need)} photo${need === 1 ? "" : "s"} — you have ${n(have)}.`,
+        needNotes: "Write your findings.",
+      },
     },
 
     policies: {
       description: "Configure fees, objection windows, and fraud-scoring thresholds.",
-      buildNote: "Build the settings forms here with React Hook Form + Zod.",
+      mutationFee: "Mutation fee",
+      mutationFeeHint: "Amount in BDT charged per mutation application.",
+      objectionWindow: "Objection window",
+      objectionWindowHint: "Number of days for parties to file objections.",
+      days: "days",
+      fraudThreshold: "Fraud score threshold",
+      fraudThresholdHint: "Minimum score (0–1) to flag a document for manual review.",
+      saved: "Policies updated successfully.",
     },
 
     users: {

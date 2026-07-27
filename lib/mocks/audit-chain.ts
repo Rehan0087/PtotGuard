@@ -45,6 +45,30 @@ export async function getAuditChain(): Promise<AuditEvent[]> {
   return chain;
 }
 
+/**
+ * Record an action on the ledger, linked to the current tail.
+ *
+ * Appending rather than rebuilding is the point: the chain is only meaningful
+ * if a new link is computed from the hash that is already there. A write that
+ * recomputed the whole ledger from source could quietly paper over a break —
+ * which is exactly what the chain exists to make impossible.
+ */
+export async function appendAudit(
+  raw: Omit<RawEvent, "id" | "createdAt"> & Partial<Pick<RawEvent, "id" | "createdAt">>,
+): Promise<AuditEvent> {
+  const chain = await getAuditChain();
+  const event: RawEvent = {
+    ...raw,
+    id: raw.id ?? `au-${Date.now()}-${chain.length}`,
+    createdAt: raw.createdAt ?? new Date().toISOString(),
+  };
+  const prevHash = chain.length > 0 ? chain[chain.length - 1].hash : "";
+  const hash = await sha256(hashInput(prevHash, event));
+  const linked = { ...event, prevHash, hash };
+  chain.push(linked);
+  return linked;
+}
+
 /** Recompute every link and report the first break, if any. */
 export async function verifyAuditChain(): Promise<AuditVerifyResult> {
   const chain = await getAuditChain();

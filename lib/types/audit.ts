@@ -8,7 +8,8 @@ export type AuditAction =
   | "reject"
   | "assign"
   | "ruling"
-  | "upload";
+  | "upload"
+  | "delete";
 
 /**
  * One link in the append-only, hash-chained audit ledger. The backend enforces

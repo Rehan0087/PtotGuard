@@ -85,6 +85,8 @@ lib/
   inheritance.ts       # Pure Faraiz + Hindu succession calc (shared-package candidate)
   mutations.ts         # Pure namjari approval gate (objection window + objections)
   ocr.ts               # Pure extraction gate (required fields + register mismatch)
+  field-capture.ts     # Pure survey filing gate (evidence required per purpose)
+  hearings.ts          # Pure ruling gate (a party never heard is never ruled against)
   assignment.ts        # Pure survey-assignment rules (jurisdiction tree + agent load)
   jurisdictions.ts     # Pure hierarchy rules (level ladder, cycles, referential deletes)
   api-client.ts        # The one fetch wrapper (mock ↔ real swap point)
@@ -137,6 +139,17 @@ Two are worth noting: `inheritance/calculate` runs the real (simplified) calcula
 `lib/inheritance.ts`, and `audit/verify` walks a genuine SHA-256 hash chain
 (`lib/mocks/audit-chain.ts`) — the same tamper-evidence guarantee the DB enforces in prod.
 
+**The ledger is live, not a fixture.** Decisions taken in the app are appended to it as they
+happen — a document or mutation decision, a dispute filed or moved, a ruling, a filed survey, a
+policy change, and jurisdiction writes. `appendAudit` links each new entry to the hash already
+at the tail rather than rebuilding the chain from source, because a write that recomputed the
+whole ledger could quietly paper over a break — which is the one thing the chain exists to make
+impossible. Verify after acting: the count goes up and the chain still reports intact.
+
+Payload values are rendered by coercing each to a string, so **every payload is flat scalars** —
+an update records `field.from` / `field.to` for the fields that actually moved, never a nested
+before/after object.
+
 **Additive to the frozen spec** (needed by screens, please implement server-side too):
 
 | Endpoint | Purpose |
@@ -144,6 +157,9 @@ Two are worth noting: `inheritance/calculate` runs the real (simplified) calcula
 | `PATCH /documents/:id/decision` | Officer clears (`verify`) or rejects a flagged document — fraud review queue. Mirrors the `/mutations/:id/decision` verb. |
 | `GET /audit` | Full ledger for the admin audit page (the spec froze only per-entity + `/verify`). |
 | `POST /jurisdictions` · `PATCH /jurisdictions/:id` · `DELETE /jurisdictions/:id` | Editing the administrative tree (the spec froze only the `GET`). `422` when the body breaks a rule in `lib/jurisdictions.ts`, `409` when other records still point at the node. |
+| `PATCH /field-reports/:id` | The agent's own edits to a survey they are carrying out — status along the ladder, notes, and filing. `status: "completed"` is the filing and `422`s with a code from `lib/field-capture.ts` when the evidence that purpose requires is missing. |
+| `PATCH /policies` | Admin edits to fees, the objection window, and the fraud threshold (the spec froze only the `GET`). |
+| `POST /hearings/:id/sessions` | Recording a sitting. The ruling gate reads these, so this is the write that unblocks a decision. `422` when the summary is empty. |
 
 Note `GET /documents?fraud=true` means *awaiting review* — it filters on
 `verificationStatus === "flagged"`, so a decision removes the document from the queue.
@@ -287,8 +303,10 @@ cadastral result map), parcel detail (chain of title, documents, disputes), disp
 **jurisdictions** (the hierarchy editor, with referential delete guards), **audit ledger**
 (live SHA-256 hash-chain verify — the demo centerpiece), and the disputes/documents lists.
 
-**Scaffolded** (route + placeholder, ready to build — each `ComingSoon` page names the hooks
-to use): policies.
+**field capture** (GPS + photos + findings, behind the filing gate), **case detail** (sittings,
+attendance, and the ruling gate), and **policies** (fees, objection window, fraud threshold).
+
+Every route in `lib/nav.ts` is now built; nothing is left scaffolded.
 
 ### Registry search
 
@@ -378,6 +396,75 @@ Booking posts to `POST /field-reports` with an agent and a date, which also move
 `field-visit-scheduled` and writes a `field-visit` entry on its tracking timeline — so the case
 detail screen reflects the booking without any extra call.
 
+### Carrying out the survey
+
+`/visits/[id]` is the other half of the booking board: what the agent does once they are
+standing on the land. It moves the visit along its status ladder (assigned → en route → on
+site), collects GPS points and photos, and takes the findings that the case will actually read.
+
+`lib/field-capture.ts` (`filingReview`) is the pure rule, and it is a rule about *evidence*:
+
+- **`EVIDENCE_REQUIRED` is per purpose, not one blanket minimum.** A boundary survey needs two
+  GPS points because a line needs two ends; a possession check needs a photograph, because what
+  it establishes is what was visible. Sending an agent to measure and getting back a paragraph
+  is not a survey.
+- **Findings are always required.** Points and pictures without a reading of them is data
+  nobody downstream can act on — the dispute timeline quotes the notes, not the coordinates.
+- **A filed or cancelled report is not a draft.** It exposes no capture controls at all.
+
+The gate returns **codes plus the counts the sentence needs** (`{ code: "need-gps", have: 1,
+need: 2 }`) and the screen words them per locale, the same way `approvalGate` and
+`extractionReview` do. It lists *every* blocker rather than one at a time, because an agent on
+site wants the whole remaining checklist, not a repeating prompt.
+
+Filing is `PATCH /field-reports/:id` with `status: "completed"` — additive to the frozen spec.
+The mock runs `filingReview` on that request and answers `422` with the code, so the client
+copy explains a refusal while the server copy is what actually refuses.
+
+Filing also **moves the dispute back**: the booking put it in `field-visit-scheduled`, and the
+survey is what it was waiting on, so it returns to `under-review` with the agent's findings on
+the tracking timeline. That only happens when the visit is what held the case up — a dispute
+that moved on in the meantime is left where it is.
+
+> GPS uses the device when the browser will give it and otherwise simulates a point near the
+> parcel centroid, labelled as such. The preview has no way to be standing in a field, and a
+> capture screen with nothing captured isn't reviewable.
+
+### Hearing a case, and ruling on it
+
+`/cases/[id]` is the mediator's working surface: the sittings held so far, who was present at
+each, and the ruling. Recording a sitting is the write that moves the case — a case with a
+sitting on record is `in-hearing`, not merely `scheduled`, so the mediator never sets a status
+by hand.
+
+`lib/hearings.ts` (`rulingGate`) is the pure rule, and the rule that matters is older than the
+software: **a case is not decided against someone who was never heard.**
+
+- **Attendance is aggregated across sittings, not per sitting.** A party who came to the first
+  hearing and missed the second has been heard. Requiring everyone in one room would make a
+  ruling hostage to whoever declines to show up last.
+- **No sittings at all reports itself as such**, rather than listing every party as unheard —
+  with none held, "nobody has been heard" is the same fact stated twice.
+- **A decided case is not a draft.** `ruled` and `appealed` short-circuit to a single blocker
+  and the screen drops the capture form entirely; listing what else is missing would imply
+  there is still something to do.
+
+The gate returns **codes plus the names the sentence needs** (`{ code: "unheard", parties:
+[...] }`) and the screen words them per locale, the same way `approvalGate` and `filingReview`
+do. The parties panel doubles as the read on this: each name carries Heard / Not yet heard, so
+the blocker explains a state the mediator can already see.
+
+`PATCH /hearings/:id/ruling` runs the gate server-side and answers `422` with the code, so the
+client copy explains a refusal while the server copy is what actually refuses. Recording a
+sitting on a decided case is refused the same way — the screen hides the form, and this is what
+makes that true of the record rather than only of the UI.
+
+**Both writes move the dispute**, the way booking a survey does (see
+[Assigning field surveys](#assigning-field-surveys)). A sitting puts the case `in-mediation` and
+writes a `hearing-held` entry on the tracking timeline; a ruling resolves it, stores the ruling
+text as the dispute's `resolution`, and writes a `ruled` entry. Both skip a dispute that is
+already `resolved`, `rejected`, or `withdrawn` — a decided case is not reopened by a late write.
+
 ### The jurisdiction tree
 
 `/jurisdictions` edits the hierarchy everything else hangs off — parcels, users, and (through
@@ -439,8 +526,8 @@ on an unreadable scan drains the same way a fresh upload does.
 1. Shared kit + shell + mock data — **done**, extend as needed.
 2. Citizen portal (largest surface) — dashboard, search, upload, dispute wizard all done.
 3. Land Office portal — records, mutations, OCR queue, fraud review, field-agent board — **done**.
-4. Field Agent + Mediator — lists done; build the capture screen and hearing/ruling flow.
-5. Admin + polish — users, audit ledger, and jurisdictions done; build policies.
+4. Field Agent + Mediator — lists, the capture screen, and the hearing/ruling flow — **done**.
+5. Admin + polish — users, audit ledger, jurisdictions, and policies — **done**.
 
 ---
 

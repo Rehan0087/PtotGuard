@@ -5,12 +5,23 @@
  * mirror the frozen spec. Writes mutate the in-memory arrays for the session.
  */
 import { http, HttpResponse, delay } from "msw";
-import type { Jurisdiction, JurisdictionLevel, Paginated, Role, User } from "@/lib/types";
+import type {
+  DisputeStatus,
+  FieldReportStatus,
+  Jurisdiction,
+  JurisdictionLevel,
+  Paginated,
+  Policy,
+  Role,
+  User,
+} from "@/lib/types";
 import { ROLES } from "@/lib/types";
 import { calcInheritance } from "@/lib/inheritance";
+import { filingReview } from "@/lib/field-capture";
+import { rulingGate } from "@/lib/hearings";
 import { deletionGate, reviewDraft } from "@/lib/jurisdictions";
 import * as db from "./data";
-import { getAuditChain, verifyAuditChain } from "./audit-chain";
+import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 
 // --- helpers ---------------------------------------------------------------
 
@@ -60,6 +71,37 @@ function unprocessable(errors: Record<string, { code: string } | undefined>) {
 /** A write refused because of the state of other records. See `unprocessable`. */
 function conflict(message: string, reason?: unknown) {
   return HttpResponse.json({ error: "conflict", message, reason }, { status: 409 });
+}
+
+/**
+ * Flat `field.from` / `field.to` pairs for the fields that actually changed.
+ *
+ * Audit payloads are rendered by coercing each value to a string, so every
+ * entry in the ledger is a flat scalar — nesting a before/after object would
+ * read as "[object Object]". Recording only what moved also keeps a one-field
+ * edit from looking like a rewrite of the whole record.
+ */
+function changedFields<T extends Record<string, unknown>>(
+  before: T,
+  after: T,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const key of Object.keys(after)) {
+    if (before[key] !== after[key]) {
+      payload[`${key}.from`] = before[key];
+      payload[`${key}.to`] = after[key];
+    }
+  }
+  return payload;
+}
+
+/**
+ * A dispute nobody should be moving any more. Writes that would otherwise
+ * advance a case (a sitting, a ruling) leave these alone rather than reopening
+ * something that was withdrawn or rejected.
+ */
+function isClosed(status: DisputeStatus) {
+  return status === "resolved" || status === "rejected" || status === "withdrawn";
 }
 
 function distance(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -169,6 +211,17 @@ export const handlers = [
 
     const created: Jurisdiction = { id: `j-${Date.now()}`, ...draft };
     db.jurisdictions.push(created);
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "jurisdiction",
+      entityId: created.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: created.name, code: created.code, level: created.level },
+    });
+
     return HttpResponse.json(created, { status: 201 });
   }),
 
@@ -190,11 +243,27 @@ export const handlers = [
     const review = reviewDraft(draft, db.jurisdictions);
     if (!review.valid) return unprocessable(review.errors);
 
+    const before = { name: target.name, code: target.code, level: target.level };
     Object.assign(target, draft);
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "jurisdiction",
+      entityId: target.id,
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: changedFields(before, {
+        name: target.name,
+        code: target.code,
+        level: target.level,
+      }),
+    });
+
     return HttpResponse.json(target);
   }),
 
-  http.delete(`${API}/jurisdictions/:id`, async ({ params }) => {
+  http.delete(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
     const index = db.jurisdictions.findIndex((j) => j.id === params.id);
     if (index === -1) return notFound("Jurisdiction not found");
@@ -207,7 +276,18 @@ export const handlers = [
       );
     }
 
-    db.jurisdictions.splice(index, 1);
+    const [removed] = db.jurisdictions.splice(index, 1);
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "jurisdiction",
+      entityId: removed.id,
+      action: "delete",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: removed.name, code: removed.code, level: removed.level },
+    });
+
     return new HttpResponse(null, { status: 204 });
   }),
 
@@ -304,6 +384,17 @@ export const handlers = [
     };
     doc.verificationStatus =
       decision === "verify" ? "verified" : decision === "flag" ? "flagged" : "rejected";
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "document",
+      entityId: doc.id,
+      action: decision === "verify" ? "approve" : "reject",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { decision, fileName: doc.fileName, status: doc.verificationStatus },
+    });
+
     return HttpResponse.json(doc);
   }),
 
@@ -379,6 +470,21 @@ export const handlers = [
     const { decision } = (await request.json()) as { decision: "approve" | "reject" };
     mutation.status = decision === "approve" ? "approved" : "rejected";
     mutation.decidedAt = new Date().toISOString();
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "mutation",
+      entityId: mutation.id,
+      action: decision,
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        mutationNumber: mutation.mutationNumber,
+        parcelDagNo: mutation.parcelDagNo,
+        toOwnerName: mutation.toOwnerName,
+      },
+    });
+
     return HttpResponse.json(mutation);
   }),
 
@@ -442,8 +548,20 @@ export const handlers = [
     const dispute = db.disputes.find((d) => d.id === params.id);
     if (!dispute) return notFound("Dispute not found");
     const { status } = (await request.json()) as { status: string };
+    const from = dispute.status;
     dispute.status = status as never;
     dispute.updatedAt = new Date().toISOString();
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "dispute",
+      entityId: dispute.id,
+      action: "status-change",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { from, to: dispute.status },
+    });
+
     return HttpResponse.json(dispute);
   }),
 
@@ -538,6 +656,17 @@ export const handlers = [
       actorId: me.id,
       actorName: me.name,
     });
+
+    await appendAudit({
+      entityType: "dispute",
+      entityId: dispute.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { type: dispute.type, parcelDagNo: dispute.parcelDagNo },
+      createdAt: now,
+    });
+
     return HttpResponse.json(dispute, { status: 201 });
   }),
 
@@ -570,6 +699,77 @@ export const handlers = [
         label: body.gps.label,
         capturedAt: now,
       });
+    return HttpResponse.json(report);
+  }),
+
+  // Additive to the frozen spec: the agent's own edits to a report they are
+  // carrying out — moving it along the status ladder, saving notes, and filing
+  // it. `status: "completed"` is the filing, and it runs the same gate the
+  // client shows (lib/field-capture.ts) so a hand-rolled request can't skip it.
+  http.patch(`${API}/field-reports/:id`, async ({ params, request }) => {
+    await latency();
+    const report = db.fieldReports.find((v) => v.id === params.id);
+    if (!report) return notFound("Field report not found");
+
+    const body = (await request.json()) as Partial<{
+      status: FieldReportStatus;
+      notes: string;
+    }>;
+
+    const notes = body.notes ?? report.notes ?? "";
+
+    if (body.status === "completed") {
+      const review = filingReview(report, notes);
+      if (!review.canFile) {
+        return unprocessable({ status: review.blockers[0] });
+      }
+      const now = new Date().toISOString();
+      report.submittedAt = now;
+
+      const actor = currentUser(request);
+      await appendAudit({
+        entityType: "field-report",
+        entityId: report.id,
+        action: "create",
+        actorId: actor.id,
+        actorName: actor.name,
+        payload: {
+          parcelDagNo: report.parcelDagNo,
+          purpose: report.purpose,
+          gpsCount: report.gpsCaptures.length,
+          photoCount: report.photos.length,
+        },
+        createdAt: now,
+      });
+
+      // The booking moved the case to `field-visit-scheduled`; filing is what
+      // it was waiting on, so it goes back to an officer. Only when the visit
+      // is what held it up — a case that moved on since is left alone.
+      const dispute = report.disputeId
+        ? db.disputes.find((d) => d.id === report.disputeId)
+        : undefined;
+      if (dispute && dispute.status === "field-visit-scheduled") {
+        const me = currentUser(request);
+        dispute.status = "under-review";
+        dispute.updatedAt = now;
+        db.disputeEvents.push({
+          id: `de-${Date.now()}`,
+          disputeId: dispute.id,
+          at: now,
+          type: "field-visit",
+          title: "Field survey filed",
+          content: { code: "field-visit-completed" },
+          // The agent's findings are record content — carried across as typed.
+          description: notes,
+          actorId: me.id,
+          actorName: me.name,
+        });
+      }
+    }
+
+    if (body.notes !== undefined) report.notes = body.notes;
+    if (body.status) report.status = body.status;
+
     return HttpResponse.json(report);
   }),
 
@@ -665,10 +865,106 @@ export const handlers = [
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
     const { ruling } = (await request.json()) as { ruling: string };
+
+    // The same gate the client shows (lib/hearings.ts), so a hand-rolled
+    // request can't enter a ruling against a party who was never heard.
+    const review = rulingGate(hearing, ruling ?? "");
+    if (!review.canRule) return unprocessable({ ruling: review.blockers[0] });
+
+    const now = new Date().toISOString();
     hearing.ruling = ruling;
     hearing.status = "ruled";
-    hearing.ruledAt = new Date().toISOString();
+    hearing.ruledAt = now;
+
+    const actor = currentUser(request);
+    await appendAudit({
+      entityType: "hearing",
+      entityId: hearing.id,
+      action: "ruling",
+      actorId: actor.id,
+      actorName: actor.name,
+      payload: { caseNumber: hearing.caseNumber, ruling },
+      createdAt: now,
+    });
+
+    // A ruling is what closes the dispute the hearing was convened over —
+    // without this the case would sit in mediation forever with a decided
+    // hearing hanging off it.
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute && !isClosed(dispute.status)) {
+      const me = currentUser(request);
+      dispute.status = "resolved";
+      // The ruling text is the resolution — record content, stored as typed.
+      dispute.resolution = ruling;
+      dispute.updatedAt = now;
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "resolved",
+        title: "Ruling issued",
+        content: { code: "ruled" },
+        description: ruling,
+        actorId: me.id,
+        actorName: me.name,
+      });
+    }
+
     return HttpResponse.json(hearing);
+  }),
+
+  // Additive to the frozen spec: recording what happened in a sitting. The
+  // ruling gate reads these, so this is the write that unblocks a decision.
+  http.post(`${API}/hearings/:id/sessions`, async ({ params, request }) => {
+    await latency();
+    const hearing = db.hearings.find((h) => h.id === params.id);
+    if (!hearing) return notFound("Hearing not found");
+
+    // A decided case takes no further sittings. The screen already hides the
+    // form; this is what makes it true of the record and not just the UI.
+    if (hearing.status === "ruled" || hearing.status === "appealed") {
+      return unprocessable({ status: { code: "already-decided" } });
+    }
+
+    const body = (await request.json()) as Partial<{
+      summary: string;
+      attendees: string[];
+    }>;
+    const summary = body.summary?.trim();
+    if (!summary) return unprocessable({ summary: { code: "need-summary" } });
+
+    const now = new Date().toISOString();
+    hearing.sessions.push({
+      id: `s-${Date.now()}`,
+      at: now,
+      summary,
+      attendees: body.attendees ?? [],
+    });
+    // A case with a sitting on record is being heard, not merely scheduled.
+    if (hearing.status === "scheduled") hearing.status = "in-hearing";
+
+    // A sitting is a public step in the case, so it belongs on the tracking
+    // timeline the citizen watches — not only in the mediator's own view.
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute && !isClosed(dispute.status)) {
+      const me = currentUser(request);
+      dispute.status = "in-mediation";
+      dispute.updatedAt = now;
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "hearing",
+        title: "Hearing held",
+        content: { code: "hearing-held", ordinal: hearing.sessions.length },
+        // The mediator's summary is record content — carried across as typed.
+        description: summary,
+        actorId: me.id,
+        actorName: me.name,
+      });
+    }
+
+    return HttpResponse.json(hearing, { status: 201 });
   }),
 
   http.get(`${API}/hearings/:id`, async ({ params }) => {
@@ -787,10 +1083,27 @@ export const handlers = [
 
   http.get(`${API}/policies`, async () => {
     await latency();
-    return HttpResponse.json({
-      mutationFeeBdt: 5400,
-      objectionWindowDays: 15,
-      fraudScoreThreshold: 0.5,
+    return HttpResponse.json(db.policies);
+  }),
+
+  http.patch(`${API}/policies`, async ({ request }) => {
+    await latency();
+    const updates = (await request.json()) as Partial<Policy>;
+    // Recorded as before/after: a fee or a threshold changing is exactly the
+    // kind of thing someone later needs to date precisely.
+    const before = { ...db.policies };
+    Object.assign(db.policies, updates);
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "policy",
+      entityId: "policies",
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: changedFields(before, { ...db.policies }),
     });
+
+    return HttpResponse.json(db.policies);
   }),
 ];

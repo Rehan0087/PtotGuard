@@ -76,10 +76,10 @@ export default function CasesPage() {
               ) : null}
 
               <Link
-                href={`/disputes/${c.disputeId}`}
+                href={`/cases/${c.id}`}
                 className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
               >
-                {t.pages.cases.viewDispute} <ArrowRight className="size-3.5" />
+                {t.pages.cases.openCase} <ArrowRight className="size-3.5" />
               </Link>
             </Card>
           ))}

@@ -1,7 +1,7 @@
 "use client";
 
+import Link from "next/link";
 import { MapPin, Navigation, Camera, Ruler, Calendar, ArrowRight } from "lucide-react";
-import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { IdChip } from "@/components/id-chip";
@@ -85,11 +85,8 @@ export default function VisitsPage() {
                   <Button
                     size="sm"
                     className="w-fit"
-                    onClick={() =>
-                      toast.info(t.pages.visits.captureToastTitle, {
-                        description: t.pages.visits.captureToastBody,
-                      })
-                    }
+                    nativeButton={false}
+                    render={<Link href={`/visits/${v.id}`} />}
                   >
                     <Ruler className="size-3.5" />
                     {t.pages.visits.openCapture}
