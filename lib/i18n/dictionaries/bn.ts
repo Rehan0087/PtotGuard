@@ -1,0 +1,976 @@
+/**
+ * Bangla (বাংলা) dictionary.
+ *
+ * Typed as `Dictionary`, so TypeScript refuses the file if a key is missing,
+ * misspelled, or takes different arguments than its English counterpart — the
+ * two locales cannot drift apart silently.
+ *
+ * Terminology follows Bangladesh land administration as it appears on the
+ * records themselves, not literal translation: mutation is নামজারি, a plot is a
+ * দাগ, the record-of-rights is খতিয়ান, land tax receipts are দাখিলা, and a field
+ * inspection is সরেজমিন তদন্ত. Where a term is genuinely borrowed in daily
+ * office use (ওসিআর, ড্যাশবোর্ড), it stays borrowed.
+ */
+import { formatNumber, localizeDigits } from "@/lib/format";
+import type { Dictionary } from "./en";
+
+/** Quantities inside a sentence: Bengali digits, lakh/crore grouping. */
+const n = (x: number) => formatNumber(x, "bn");
+
+/** Bare digits — years, ordinals, anything that must not pick up separators. */
+const d = (x: number | string) => localizeDigits(String(x), "bn");
+
+export const bn: Dictionary = {
+  meta: {
+    title: "PlotGuard — ভূমি রেকর্ড ও বিরোধ নিষ্পত্তি",
+    titleTemplate: "%s · PlotGuard",
+    description:
+      "নিরাপদ ভূমি রেকর্ড, নামজারি, বিরোধ নিষ্পত্তি ও মাঠ জরিপের জন্য একটি নাগরিক প্ল্যাটফর্ম।",
+  },
+
+  common: {
+    appName: "PlotGuard",
+    tagline: "ভূমি নিবন্ধন",
+    loading: "লোড হচ্ছে…",
+    save: "সংরক্ষণ করুন",
+    saving: "সংরক্ষণ হচ্ছে…",
+    cancel: "বাতিল",
+    close: "বন্ধ করুন",
+    back: "পেছনে",
+    next: "পরবর্তী",
+    submit: "জমা দিন",
+    submitting: "জমা হচ্ছে…",
+    confirm: "নিশ্চিত করুন",
+    edit: "সম্পাদনা",
+    delete: "মুছে ফেলুন",
+    remove: "সরান",
+    view: "দেখুন",
+    viewAll: "সব দেখুন",
+    search: "খুঁজুন",
+    filter: "ছাঁকনি",
+    clear: "পরিষ্কার করুন",
+    all: "সব",
+    none: "কোনোটি নয়",
+    yes: "হ্যাঁ",
+    no: "না",
+    open: "খুলুন",
+    retry: "আবার চেষ্টা করুন",
+    optional: "ঐচ্ছিক",
+    required: "আবশ্যক",
+    notAvailable: "—",
+    unknown: "অজানা",
+    byteUnits: { b: "বাইট", kb: "কেবি", mb: "এমবি" },
+    somethingWentWrong: "কিছু একটা ভুল হয়েছে",
+    tryAgain: "অনুগ্রহ করে আবার চেষ্টা করুন।",
+  },
+
+  shell: {
+    navigation: "নেভিগেশন",
+    openNavigation: "নেভিগেশন খুলুন",
+    searchRecords: "রেকর্ড খুঁজুন",
+    toggleTheme: "থিম বদলান",
+    language: "ভাষা",
+    changeLanguage: "ভাষা পরিবর্তন করুন",
+    accountMenu: "অ্যাকাউন্ট মেনু",
+    signOut: "সাইন আউট",
+    signOutTitle: "সাইন আউট এখনো যুক্ত হয়নি",
+    signOutBody:
+      "ব্যাকএন্ড যুক্ত হলে প্রমাণীকরণ আসবে। এখন পোর্টালগুলো দেখতে ভূমিকা পরিবর্তনকারী ব্যবহার করুন।",
+    previewAs: "যে ভূমিকায়",
+    previewAsRole: "ভূমিকা বেছে দেখুন",
+    dev: "ডেভ",
+    notifications: "বিজ্ঞপ্তি",
+    notificationsAria: (unread: number) =>
+      unread ? `বিজ্ঞপ্তি, ${n(unread)}টি অপঠিত` : "বিজ্ঞপ্তি",
+    markAllRead: "সব পঠিত চিহ্নিত করুন",
+    allCaughtUp: "সব দেখা হয়ে গেছে।",
+  },
+
+  nav: {
+    portals: {
+      citizen: "নাগরিক পোর্টাল",
+      landOffice: "ভূমি অফিস",
+      fieldSurvey: "মাঠ জরিপ",
+      mediation: "মধ্যস্থতা",
+      administration: "প্রশাসন",
+    },
+    dashboard: "ড্যাশবোর্ড",
+    searchRecords: "রেকর্ড খুঁজুন",
+    myDocuments: "আমার দলিলপত্র",
+    disputes: "বিরোধ",
+    inheritance: "উত্তরাধিকার",
+    records: "রেকর্ড",
+    mutations: "নামজারি",
+    ocrQueue: "ওসিআর সারি",
+    fraudReview: "জালিয়াতি পর্যালোচনা",
+    fieldAgents: "মাঠকর্মী",
+    assignedVisits: "নির্ধারিত পরিদর্শন",
+    cases: "মামলা",
+    users: "ব্যবহারকারী",
+    auditLedger: "নিরীক্ষা লেজার",
+    jurisdictions: "এখতিয়ার",
+    policies: "নীতিমালা",
+  },
+
+  roles: {
+    citizen: "নাগরিক",
+    "land-office": "ভূমি অফিস",
+    "field-agent": "মাঠকর্মী",
+    mediator: "মধ্যস্থতাকারী",
+    admin: "প্রশাসক",
+  },
+
+  status: {
+    registry: {
+      verified: "যাচাইকৃত",
+      pending: "অপেক্ষমাণ",
+      disputed: "বিরোধপূর্ণ",
+      flagged: "চিহ্নিত",
+      "under-mutation": "নামজারি চলছে",
+    },
+    dispute: {
+      submitted: "দাখিলকৃত",
+      "under-review": "পর্যালোচনাধীন",
+      "field-visit-scheduled": "সরেজমিন নির্ধারিত",
+      "in-mediation": "মধ্যস্থতাধীন",
+      "hearing-scheduled": "শুনানি নির্ধারিত",
+      resolved: "নিষ্পত্তিকৃত",
+      rejected: "প্রত্যাখ্যাত",
+      withdrawn: "প্রত্যাহৃত",
+    },
+    priority: {
+      low: "নিম্ন",
+      medium: "মাঝারি",
+      high: "উচ্চ",
+    },
+    mutation: {
+      submitted: "দাখিলকৃত",
+      verification: "যাচাই চলছে",
+      "objection-period": "আপত্তির সময়",
+      approved: "অনুমোদিত",
+      rejected: "প্রত্যাখ্যাত",
+    },
+    ocr: {
+      pending: "সারিতে",
+      processing: "প্রক্রিয়াধীন",
+      extracted: "উদ্ধারকৃত",
+      failed: "ব্যর্থ",
+    },
+    verification: {
+      unverified: "অযাচাইকৃত",
+      verified: "যাচাইকৃত",
+      flagged: "চিহ্নিত",
+      rejected: "প্রত্যাখ্যাত",
+    },
+    fieldReport: {
+      assigned: "নির্ধারিত",
+      "en-route": "পথে",
+      "in-progress": "চলমান",
+      completed: "সম্পন্ন",
+      cancelled: "বাতিল",
+    },
+    hearing: {
+      scheduled: "নির্ধারিত",
+      "in-hearing": "শুনানি চলছে",
+      deliberation: "বিবেচনাধীন",
+      ruled: "রায় হয়েছে",
+      appealed: "আপিলকৃত",
+    },
+    user: {
+      active: "সক্রিয়",
+      suspended: "স্থগিত",
+      invited: "আমন্ত্রিত",
+    },
+  },
+
+  notifications: {
+    "dispute-status": (caseNumber: string, status: string) => ({
+      title: `বিরোধ "${status}" অবস্থায় গেছে`,
+      body: `ভূমি অফিস ${caseNumber} মামলাটি হালনাগাদ করেছে।`,
+    }),
+    "dispute-assigned": (caseNumber: string) => ({
+      title: "নতুন বিরোধ বরাদ্দ হয়েছে",
+      body: `${caseNumber} পর্যালোচনা করা প্রয়োজন।`,
+    }),
+    "document-verified": (dagNo: string) => ({
+      title: "দলিল যাচাই হয়েছে",
+      body: `${dagNo} দাগের খতিয়ান যাচাইয়ে উত্তীর্ণ হয়েছে।`,
+    }),
+    "document-unclear": (dagNo: string) => ({
+      title: "পদক্ষেপ প্রয়োজন: স্ক্যান অস্পষ্ট",
+      body: `${dagNo} দাগের হলফনামাটি পড়া চালিয়ে যেতে আরও স্পষ্ট স্ক্যান প্রয়োজন।`,
+    }),
+    "document-processed": (fileName: string) => ({
+      title: "দলিল প্রক্রিয়া সম্পন্ন",
+      body: `${fileName} থেকে লেখা উদ্ধার করা হয়েছে। এখন কর্মকর্তার যাচাইয়ের অপেক্ষায়।`,
+    }),
+    "survey-scheduled": (dagNo: string) => ({
+      title: "মাঠ জরিপ নির্ধারিত",
+      body: `${dagNo} দাগের সীমানা জরিপ নির্ধারণ করা হয়েছে।`,
+    }),
+    "mutation-verification": (mutationNumber: string, dagNo: string) => ({
+      title: "নামজারি যাচাই চলছে",
+      body: `${dagNo} দাগের নামজারি ${mutationNumber} যাচাই করা হচ্ছে।`,
+    }),
+    welcome: () => ({
+      title: "PlotGuard-এ স্বাগতম",
+      body: "আপনার অ্যাকাউন্ট সক্রিয়। এখন আপনি রেকর্ড খুঁজতে ও বিরোধের অগ্রগতি দেখতে পারবেন।",
+    }),
+  },
+
+  disputeEvents: {
+    filed: "বিরোধ দাখিল হয়েছে",
+    assigned: (to: string) => `${to}-কে বরাদ্দ করা হয়েছে`,
+    "evidence-added": "প্রমাণ যুক্ত হয়েছে",
+    "status-change": (status: string) => `"${status}" অবস্থায় গেছে`,
+    "hearing-held": (ordinal: number) => `${n(ordinal)} নম্বর শুনানি অনুষ্ঠিত হয়েছে`,
+    "field-visit-scheduled": "সরেজমিন পরিদর্শন নির্ধারিত",
+  },
+
+  domain: {
+    jurisdictionLevel: {
+      division: "বিভাগ",
+      district: "জেলা",
+      upazila: "উপজেলা",
+      mouza: "মৌজা",
+    },
+    jurisdictionLevelPlural: {
+      division: "বিভাগসমূহ",
+      district: "জেলাসমূহ",
+      upazila: "উপজেলাসমূহ",
+      mouza: "মৌজাসমূহ",
+    },
+    documentType: {
+      "title-deed": "মূল দলিল",
+      "sale-deed": "বিক্রয় দলিল",
+      "mutation-order": "নামজারি আদেশ",
+      "survey-report": "জরিপ প্রতিবেদন",
+      "id-proof": "পরিচয়পত্র",
+      "tax-receipt": "খাজনার দাখিলা",
+      "inheritance-affidavit": "ওয়ারিশান হলফনামা",
+      "court-order": "আদালতের আদেশ",
+      photo: "ছবি",
+    },
+    disputeType: {
+      boundary: "সীমানা",
+      ownership: "মালিকানা",
+      inheritance: "উত্তরাধিকার",
+      encroachment: "অবৈধ দখল",
+      fraud: "জালিয়াতি",
+      easement: "সুখাধিকার",
+    },
+    surveyPurpose: {
+      "boundary-survey": "সীমানা জরিপ",
+      "encroachment-check": "অবৈধ দখল যাচাই",
+      "possession-verify": "দখল যাচাই",
+      measurement: "পরিমাপ",
+    },
+    partyRole: {
+      claimant: "বাদী",
+      respondent: "বিবাদী",
+    },
+    disputeEvent: {
+      filed: "দাখিল",
+      assigned: "বরাদ্দ",
+      "status-change": "অবস্থা পরিবর্তন",
+      comment: "মন্তব্য",
+      "field-visit": "সরেজমিন পরিদর্শন",
+      "document-added": "দলিল যুক্ত",
+      hearing: "শুনানি",
+      resolved: "নিষ্পত্তি",
+    },
+    landUse: {
+      agricultural: "কৃষি",
+      residential: "আবাসিক",
+      commercial: "বাণিজ্যিক",
+      industrial: "শিল্প",
+      mixed: "মিশ্র",
+      vacant: "খালি",
+    },
+    ownershipType: {
+      sole: "একক",
+      joint: "যৌথ",
+      inherited: "উত্তরাধিকারসূত্রে",
+      corporate: "কর্পোরেট",
+      government: "সরকারি",
+    },
+    acquisitionType: {
+      purchase: "ক্রয়",
+      inheritance: "উত্তরাধিকার",
+      gift: "হেবা",
+      grant: "বন্দোবস্ত",
+      partition: "বণ্টন",
+      "court-order": "আদালতের আদেশ",
+    },
+    mutationType: {
+      sale: "বিক্রয়",
+      inheritance: "উত্তরাধিকার",
+      gift: "হেবা",
+      partition: "বণ্টন",
+      correction: "সংশোধন",
+    },
+    heirRelation: {
+      husband: "স্বামী",
+      wife: "স্ত্রী",
+      son: "পুত্র",
+      daughter: "কন্যা",
+      father: "পিতা",
+      mother: "মাতা",
+    },
+    successionMethod: {
+      faraiz: "ফরায়েজ (মুসলিম)",
+      hindu: "হিন্দু উত্তরাধিকার",
+    },
+    auditAction: {
+      create: "তৈরি",
+      update: "হালনাগাদ",
+      "status-change": "অবস্থা পরিবর্তন",
+      approve: "অনুমোদন",
+      reject: "প্রত্যাখ্যান",
+      assign: "বরাদ্দ",
+      ruling: "রায়",
+      upload: "আপলোড",
+    },
+    areaUnit: {
+      decimal: "শতাংশ",
+      katha: "কাঠা",
+      bigha: "বিঘা",
+      acre: "একর",
+      sqm: "বর্গমি.",
+      sqft: "বর্গফু.",
+    },
+  },
+
+  fields: {
+    "Dag No": "দাগ নম্বর",
+    Khatian: "খতিয়ান",
+    Owner: "মালিক",
+    "Stamp Value": "স্ট্যাম্প মূল্য",
+    "Order No": "আদেশ নম্বর",
+    Area: "পরিমাণ",
+    Deceased: "মৃত ব্যক্তি",
+    "Case No": "মামলা নম্বর",
+    Amount: "পরিমাণ (টাকা)",
+    Name: "নাম",
+    Signature: "স্বাক্ষর",
+    "Document type": "দলিলের ধরন",
+    "Pages read": "পঠিত পৃষ্ঠা",
+  },
+
+  pages: {
+
+    disputes: {
+      description: "আপনার দাখিল করা প্রতিটি মামলা, বর্তমান পর্যায় ও সর্বশেষ হালনাগাদসহ।",
+      file: "বিরোধ দাখিল করুন",
+      emptyTitle: "কোনো বিরোধ দাখিল করা হয়নি",
+      emptyBody:
+        "সীমানা, মালিকানা বা উত্তরাধিকার নিয়ে সমস্যা হলে এখানে দাখিল করে মামলা শুরু করুন।",
+    },
+
+    cases: {
+      description: "শুনানি, বিবেচনা ও রায়ের জন্য আপনার কাছে পাঠানো বিরোধসমূহ।",
+      emptyTitle: "কোনো মামলা বরাদ্দ হয়নি",
+      emptyBody: "মধ্যস্থতায় পাঠানো বিরোধগুলো এখানে দেখা যাবে।",
+      partySeparator: " বনাম ",
+      hearingAt: (when: string) => `শুনানি ${when}`,
+      sessions: (count: number) => `${n(count)}টি অধিবেশন`,
+      ruling: "রায়",
+      viewDispute: "বিরোধের রেকর্ড দেখুন",
+    },
+
+    visits: {
+      description:
+        "আপনার সরেজমিন জরিপ। ঘটনাস্থলে জিপিএস পয়েন্ট, ছবি ও নোট সংগ্রহ করুন।",
+      emptyTitle: "কোনো পরিদর্শন বরাদ্দ হয়নি",
+      emptyBody: "ভূমি অফিস থেকে নতুন জরিপের দায়িত্ব এলে এখানে দেখা যাবে।",
+      gpsCount: (count: number) => `${n(count)}টি জিপিএস`,
+      photoCount: (count: number) => `${n(count)}টি ছবি`,
+      openCapture: "সংগ্রহ শুরু করুন",
+      captureToastTitle: "সংগ্রহের স্ক্রিন এখনো যুক্ত হয়নি",
+      captureToastBody:
+        "মোবাইল সংগ্রহ প্রবাহ (জিপিএস + ছবি + নোট) মাঠকর্মী ট্র্যাকের পরবর্তী কাজ।",
+      submitted: (when: string) => `জমা ${when}`,
+    },
+
+    policies: {
+      description: "ফি, আপত্তির সময়সীমা ও জালিয়াতি স্কোরের সীমা নির্ধারণ করুন।",
+      buildNote: "React Hook Form + Zod দিয়ে এখানে সেটিংস ফর্ম তৈরি করুন।",
+    },
+
+    users: {
+      description: "সব পোর্টাল ও এখতিয়ারে PlotGuard ব্যবহারের অনুমতি আছে যাঁদের।",
+      emptyTitle: "কোনো ব্যবহারকারী পাওয়া যায়নি",
+      colName: "নাম",
+      colRole: "ভূমিকা",
+      colJurisdiction: "এখতিয়ার",
+      colStatus: "অবস্থা",
+    },
+
+    documents: {
+      description:
+        "আপনার জমা দেওয়া দলিল, হলফনামা ও রসিদ — ওসিআর ও যাচাইয়ের অবস্থাসহ।",
+      upload: "দলিল আপলোড করুন",
+      reading: (count: number) =>
+        `${n(count)}টি দলিল পড়া হচ্ছে — এই পাতা নিজে থেকেই হালনাগাদ হবে।`,
+      emptyTitle: "এখনো কোনো দলিল নেই",
+      emptyBody: "শুরু করতে একটি মূল দলিল বা হলফনামা আপলোড করুন।",
+      colDocument: "দলিল",
+      colType: "ধরন",
+      colOcr: "ওসিআর",
+      colVerification: "যাচাই",
+      colUploaded: "আপলোড",
+      pages: (count: number) => `${n(count)} পৃষ্ঠা`,
+    },
+
+    records: {
+      description: "আপনার এখতিয়ারের দাগ রেজিস্টার খুঁজুন ও রক্ষণাবেক্ষণ করুন।",
+      searchPlaceholder: "দাগ নম্বর, শিরোনাম বা মালিক দিয়ে খুঁজুন…",
+      emptyTitle: "মিলে যায় এমন কোনো রেকর্ড নেই",
+      emptyBody: "অন্য দাগ নম্বর, মালিকের নাম বা অবস্থার ছাঁকনি দিয়ে দেখুন।",
+      colDagKhatian: "দাগ / খতিয়ান",
+      colTitle: "শিরোনাম",
+      colOwner: "মালিক",
+      colLandUse: "জমির ব্যবহার",
+      colArea: "পরিমাণ",
+      colStatus: "অবস্থা",
+      colDisputes: "বিরোধ",
+    },
+
+    audit: {
+      description:
+        "প্রতিটি রেকর্ড পরিবর্তন কেবল-যোগযোগ্য SHA-256 হ্যাশ-চেইন লেজারে লেখা হয়। কোনো একটি এন্ট্রি বদলালেই চেইন ভেঙে যায় — গঠনগতভাবেই কারচুপি ধরা পড়ে।",
+      verify: "অখণ্ডতা যাচাই করুন",
+      chainIntact: "চেইন অক্ষত",
+      chainBroken: "চেইন ভেঙেছে",
+      verifiedCount: (count: number) => `${n(count)}টি ঘটনা যাচাই হয়েছে · কোনো কারচুপি ধরা পড়েনি`,
+      brokenAt: (index: number) => `${d(index)} নম্বর ঘটনায় যাচাই ব্যর্থ হয়েছে`,
+      prevGenesis: "সূচনা",
+      genesisTitle: "সূচনা ব্লক",
+      prevLabel: "পূর্ব",
+      hashLabel: "হ্যাশ",
+    },
+
+    dashboard: {
+      welcome: "স্বাগতম",
+      welcomeNamed: (firstName: string) => `স্বাগতম, ${firstName}`,
+      description: "আপনার ভূমি রেকর্ড, বিরোধ ও আবেদন — সবকিছু এক জায়গায়।",
+      uploadDocument: "দলিল আপলোড করুন",
+      fileDispute: "বিরোধ দাখিল করুন",
+      statParcels: "আমার দাগ",
+      statOpenDisputes: "চলমান বিরোধ",
+      statDocsToAction: "ব্যবস্থা নেওয়ার দলিল",
+      statUnread: "অপঠিত বার্তা",
+      yourParcels: "আপনার দাগসমূহ",
+      searchAll: "সব খুঁজুন",
+      noParcelsTitle: "এখনো কোনো দাগ যুক্ত হয়নি",
+      noParcelsBody: "আপনার নামে নিবন্ধিত দাগ খুঁজে দাবি করতে রেজিস্টারে অনুসন্ধান করুন।",
+      searchRecords: "রেকর্ড খুঁজুন",
+      activeDisputes: "চলমান বিরোধ",
+      allDisputes: "সব বিরোধ",
+      noDisputesTitle: "কোনো চলমান বিরোধ নেই",
+      noDisputesBody:
+        "সীমানা, মালিকানা বা উত্তরাধিকার নিয়ে সমস্যা হলে এখানে দাখিল করতে পারেন।",
+      recentActivity: "সাম্প্রতিক কার্যক্রম",
+      noActivity: "এখনো কোনো কার্যক্রম নেই।",
+    },
+
+    parcel: {
+      notFoundTitle: "দাগ পাওয়া যায়নি",
+      notFoundBody: "রেকর্ডটি সরানো হয়ে থাকতে পারে, অথবা লিংকটি ভুল।",
+      backToSearch: "অনুসন্ধানে ফিরে যান",
+      khatian: (khatianNo: string) => `খতিয়ান ${khatianNo}`,
+      subtitle: (landUse: string, ownershipType: string) =>
+        `${landUse} জমি · ${ownershipType} মালিকানা`,
+      area: "পরিমাণ",
+      marketValue: "বাজারমূল্য",
+      registered: "নিবন্ধন",
+      centroid: "কেন্দ্রবিন্দু",
+      owner: "মালিক",
+      chainOfTitle: "মালিকানার ধারাবাহিকতা",
+      present: "বর্তমান",
+      current: "বর্তমান মালিক",
+      noOwnershipHistory: "মালিকানার কোনো ইতিহাস রেকর্ডে নেই।",
+      documents: "দলিলপত্র",
+      noDocuments: "কোনো দলিল যুক্ত নেই।",
+      disputes: "বিরোধ",
+      noDisputes: "এই দাগে কোনো বিরোধ নেই।",
+    },
+
+    dispute: {
+      notFoundTitle: "বিরোধ পাওয়া যায়নি",
+      notFoundBody: "মামলাটি প্রত্যাহার হয়ে থাকতে পারে, অথবা লিংকটি ভুল।",
+      backToDisputes: "বিরোধের তালিকায় ফিরে যান",
+      heading: (type: string) => `${type} সংক্রান্ত বিরোধ`,
+      timeline: "মামলার অগ্রগতি",
+      noEvents: "এখনো কোনো ঘটনা লিপিবদ্ধ হয়নি।",
+      details: "বিবরণ",
+      filedBy: "দাখিলকারী",
+      filed: "দাখিলের তারিখ",
+      lastUpdate: "সর্বশেষ হালনাগাদ",
+      hearing: "শুনানি",
+      parties: "পক্ষসমূহ",
+      evidence: "প্রমাণ",
+    },
+
+    search: {
+      description:
+        "দাগ নম্বর, খতিয়ান, মালিক বা স্থান দিয়ে রেজিস্টারের যেকোনো দাগ খুঁজে নিন।",
+      quickSearch: "দ্রুত অনুসন্ধান",
+      byDagKhatian: "দাগ / খতিয়ান দিয়ে",
+      quickPlaceholder: "দাগ নম্বর, খতিয়ান, মালিক বা স্থান…",
+      quickAria: "রেজিস্টারে খুঁজুন",
+      dagLabel: "দাগ নম্বর",
+      dagPlaceholder: "যেমন CS-142/3",
+      khatianLabel: "খতিয়ান নম্বর",
+      khatianPlaceholder: "যেমন 512",
+      searching: "রেজিস্টারে খোঁজা হচ্ছে…",
+      matched: (count: string) => `${count} মিলেছে`,
+      inRegister: (count: string) => `রেজিস্টারে ${count} আছে`,
+      parcelCount: (count: number) => `${n(count)}টি দাগ`,
+      updating: " · হালনাগাদ হচ্ছে",
+      clearSearch: "অনুসন্ধান মুছুন",
+      emptyTitle: "মিলে যায় এমন কোনো দাগ নেই",
+      emptyBody:
+        "দাগ নম্বরের জরিপ উপসর্গ (CS, RS, BS) মিলিয়ে দেখুন, অথবা মালিকের নাম দিয়ে খুঁজুন।",
+      loadMore: "আরও দেখুন",
+      whereThese: "এগুলো কোথায়",
+    },
+
+    upload: {
+      title: "দলিল আপলোড করুন",
+      description:
+        "দলিল, হলফনামা বা রসিদ যোগ করুন। আমরা স্বয়ংক্রিয়ভাবে লেখা পড়ে যাচাইয়ের জন্য পাঠাব।",
+      dropHere: "এখানে ফাইল ছাড়ুন, বা বেছে নিন",
+      constraints: "পিডিএফ বা ছবি, সর্বোচ্চ ২০ এমবি",
+      removeFile: "ফাইল সরান",
+      tooLargeTitle: "ফাইলটি অনেক বড়",
+      tooLargeBody: "২০ এমবি-র কম আকারের ফাইল আপলোড করুন।",
+      documentType: "দলিলের ধরন",
+      selectType: "ধরন বেছে নিন",
+      linkParcel: "একটি দাগের সঙ্গে যুক্ত করুন",
+      notLinked: "যুক্ত নয়",
+      upload: "আপলোড",
+      receivedTitle: "আপলোড গৃহীত হয়েছে",
+      receivedBody: (fileName: string) =>
+        `${fileName} পড়া হচ্ছে। প্রক্রিয়া শেষ হলে আপনাকে জানানো হবে।`,
+      failedTitle: "আপলোড ব্যর্থ হয়েছে",
+      failedBody: "ফাইলটি দেখে আবার চেষ্টা করুন।",
+      types: {
+        "title-deed": "খতিয়ান / মূল দলিল",
+        "sale-deed": "দলিল / সাফ-কবলা",
+        "inheritance-affidavit": "ওয়ারিশান হলফনামা",
+        "tax-receipt": "খাজনার দাখিলা",
+        "id-proof": "এনআইডি / পরিচয়পত্র",
+        "court-order": "আদালতের আদেশ",
+        "survey-report": "জরিপ প্রতিবেদন",
+        photo: "ছবি",
+      },
+    },
+
+    inheritance: {
+      title: "উত্তরাধিকার হিসাব",
+      description:
+        "ফরায়েজ (ইসলামি) বা হিন্দু আইনে উত্তরাধিকারের অংশ হিসাব করুন, তারপর উত্তরাধিকার নামজারি শুরু করুন।",
+      successionLaw: "উত্তরাধিকার আইন",
+      estateValue: "সম্পত্তির মূল্য",
+      currencySymbol: "৳",
+      survivingHeirs: "জীবিত ওয়ারিশ",
+      calculate: "অংশ হিসাব করুন",
+      distribution: "বণ্টন",
+      emptyResult: "ওয়ারিশ যোগ করে হিসাব করলে বণ্টন দেখা যাবে।",
+      decrease: (label: string) => `${label} কমান`,
+      increase: (label: string) => `${label} বাড়ান`,
+      times: (count: number) => ` × ${n(count)}`,
+      heirs: {
+        husband: { label: "স্বামী", hint: "সর্বোচ্চ ১" },
+        wife: { label: "স্ত্রী", hint: "সর্বোচ্চ ৪" },
+        son: { label: "পুত্র", hint: "" },
+        daughter: { label: "কন্যা", hint: "" },
+        father: { label: "পিতা", hint: "সর্বোচ্চ ১" },
+        mother: { label: "মাতা", hint: "সর্বোচ্চ ১" },
+      },
+      errors: {
+        spouseBoth: "একজন মৃত ব্যক্তির স্বামী বা স্ত্রী — যেকোনো একজনই থাকতে পারেন, দুজন নয়।",
+        noHeirs: "অন্তত একজন জীবিত ওয়ারিশ যোগ করুন।",
+      },
+      notes: {
+        "faraiz-scope": "সরলীকৃত ফরায়েজ: কেবল স্বামী/স্ত্রী, পিতা-মাতা, পুত্র ও কন্যা।",
+        "faraiz-omissions": "নাতি-নাতনি, ভাই-বোন, আউল/রদ্দ বা ওসিয়ত এখানে ধরা হয়নি।",
+        "faraiz-residue": "অবশিষ্ট অংশ বণ্টন করা হয়নি (এই সরল মডেলে রদ্দ প্রয়োগ করা হয় না)।",
+        "hindu-scope": "সরলীকৃত হিন্দু উত্তরাধিকার: শ্রেণি-১ ওয়ারিশগণ মাথাপিছু সমান অংশ পান।",
+        "hindu-omissions":
+          "বিধবা/বিপত্নীক, মাতা, পুত্র ও কন্যা অন্তর্ভুক্ত; দূরবর্তী ওয়ারিশ বাদ দেওয়া হয়েছে।",
+      },
+    },
+
+    mutations: {
+      description:
+        "সিদ্ধান্তের অপেক্ষায় থাকা মালিকানা হস্তান্তরের আবেদন। আপত্তির সময়সীমা শেষ হলে এবং সব আপত্তি নিষ্পত্তি হলেই কেবল হস্তান্তর অনুমোদন করা যায়।",
+      allInJurisdiction: "এখতিয়ারের সব",
+      assignedToMe: "আমার দায়িত্বে",
+      loadingQueue: "সারি লোড হচ্ছে…",
+      requestCount: (count: number) => `${n(count)}টি আবেদন`,
+      emptyFilteredTitle: "এই ছাঁকনিতে কিছু নেই",
+      emptyFilteredBody:
+        "এই পরিসর ও অবস্থার সঙ্গে কোনো হস্তান্তরের আবেদন মেলেনি। ছাঁকনি আরও প্রসারিত করে দেখুন।",
+      emptyTitle: "কোনো নামজারি অপেক্ষমাণ নেই",
+      emptyBody: "নাগরিকেরা নতুন নামজারির আবেদন করলে সেগুলো এখানে আসবে।",
+      transfersTo: "হস্তান্তরিত হচ্ছে",
+      requested: (when: string) => `আবেদন ${when}`,
+      documentCount: (count: number) => `${n(count)}টি দলিল`,
+      fee: (amount: string) => `ফি ${amount}`,
+      decided: (when: string) => `সিদ্ধান্ত ${when}`,
+      windowCloses: (ago: string, on: string) =>
+        `আপত্তির সময়সীমা শেষ হবে ${ago} — ${on} তারিখে`,
+      windowClosed: (on: string) => `আপত্তির সময়সীমা ${on} তারিখে শেষ হয়েছে`,
+      objectionsOnRecord: (count: number) => `${n(count)}টি আপত্তি রেকর্ডে আছে`,
+      hold: {
+        objections: (count: number) =>
+          `এই হস্তান্তর অনুমোদনের আগে ${n(count)}টি আপত্তি নিষ্পত্তি করতে হবে।`,
+        objectionWindow: (days: number) =>
+          `আইনি আপত্তির সময়সীমা এখনো খোলা — আর ${n(days)} দিন পর শেষ হবে।`,
+      },
+      closed: "এই নামজারি নিষ্পন্ন এবং নিরীক্ষা লেজারে লিপিবদ্ধ।",
+      viewParcel: "দাগ দেখুন",
+      confirmApprove: (owner: string, dagNo: string) =>
+        `${dagNo} দাগের মালিক হিসেবে ${owner}-কে লিপিবদ্ধ করবেন?`,
+      confirmReject: (mutationNumber: string) => `${mutationNumber} প্রত্যাখ্যান করবেন?`,
+      yesApprove: "হ্যাঁ, অনুমোদন করুন",
+      yesReject: "হ্যাঁ, প্রত্যাখ্যান করুন",
+      approve: "নামজারি অনুমোদন",
+      reject: "প্রত্যাখ্যান",
+      approvedTitle: "নামজারি অনুমোদিত",
+      approvedBody: (mutationNumber: string, dagNo: string, owner: string) =>
+        `${mutationNumber} — ${dagNo} দাগের মালিক এখন ${owner}।`,
+      rejectedTitle: "নামজারি প্রত্যাখ্যাত",
+      rejectedBody: (mutationNumber: string) =>
+        `${mutationNumber} প্রত্যাখ্যান করা হয়েছে। আবেদনকারীকে জানানো হবে।`,
+      failedTitle: "সিদ্ধান্ত ব্যর্থ হয়েছে",
+      failedBody: "অনুগ্রহ করে আবার চেষ্টা করুন।",
+    },
+
+    newDispute: {
+      title: "বিরোধ দাখিল করুন",
+      description:
+        "সীমানা, মালিকানা, উত্তরাধিকার বা জালিয়াতির অভিযোগ ভূমি অফিসের পর্যালোচনার জন্য উত্থাপন করুন।",
+      steps: { parcel: "দাগ", details: "বিবরণ", review: "পর্যালোচনা" },
+      whichParcel: "এটি কোন দাগ সম্পর্কে?",
+      noParcels: "আপনার অ্যাকাউন্টে কোনো দাগ যুক্ত নেই",
+      typeOfDispute: "বিরোধের ধরন",
+      priority: "অগ্রাধিকার",
+      whatHappened: "কী ঘটেছে?",
+      descriptionPlaceholder:
+        "সমস্যাটি বর্ণনা করুন — জমির কোন অংশে, কবে থেকে শুরু, এবং অফিসের কাছে আপনি কী চান।",
+      otherParty: "প্রতিপক্ষ",
+      otherPartyPlaceholder: "যাঁর বা যে প্রতিষ্ঠানের সঙ্গে বিরোধ, তাঁর নাম",
+      reviewAndSubmit: "পর্যালোচনা করে জমা দিন",
+      rowParcel: "দাগ",
+      rowType: "ধরন",
+      rowPriority: "অগ্রাধিকার",
+      rowOtherParty: "প্রতিপক্ষ",
+      rowDescription: "বিবরণ",
+      notSpecified: "উল্লেখ করা হয়নি",
+      filedAs: (name: string) =>
+        `${name} হিসেবে দাখিল · মামলা তৈরি হওয়ার পর প্রমাণের দলিল যোগ করতে পারবেন।`,
+      you: "আপনি",
+      continue: "এগিয়ে যান",
+      filing: "দাখিল হচ্ছে…",
+      file: "বিরোধ দাখিল করুন",
+      filedTitle: "বিরোধ দাখিল হয়েছে",
+      filedBody: (caseNumber: string) => `${caseNumber} জমা দেওয়া হয়েছে।`,
+      failedTitle: "বিরোধ দাখিল করা যায়নি",
+      failedBody: "অনুগ্রহ করে আবার চেষ্টা করুন।",
+      blurbs: {
+        boundary: "দুই দাগের মধ্যে সীমানা অস্পষ্ট।",
+        ownership: "জমির মালিক কে, তা নিয়ে পাল্টাপাল্টি দাবি।",
+        inheritance: "ফরায়েজ বা উত্তরাধিকারের অংশ নিয়ে মতভেদ।",
+        encroachment: "কেউ আপনার জমি দখল করেছে বা সেখানে নির্মাণ করছে।",
+        fraud: "জাল দলিল, একই জমি দুবার বিক্রি, বা রেকর্ড কারচুপি।",
+        easement: "চলাচলের পথ বা প্রবেশাধিকার নিয়ে বিরোধ।",
+      },
+      errors: {
+        parcelRequired: "এই বিরোধ যে দাগ নিয়ে, সেটি বেছে নিন।",
+        descriptionShort: "অনুগ্রহ করে অন্তত ২০ অক্ষরে সমস্যাটি বর্ণনা করুন।",
+        descriptionLong: "বিবরণ ১০০০ অক্ষরের মধ্যে রাখুন।",
+      },
+    },
+
+    fraudReview: {
+      description:
+        "স্বয়ংক্রিয় স্কোরিংয়ে চিহ্নিত দলিল — ছবি বিশ্লেষণ, সিল যাচাই ও তথ্যের অমিল। আসল হিসেবে ছাড়পত্র দিন অথবা প্রত্যাখ্যান করুন।",
+      emptyTitle: "সারি খালি",
+      emptyBody:
+        "এই মুহূর্তে কোনো দলিল চিহ্নিত নেই। জালিয়াতি স্কোরার নতুন কিছু চিহ্নিত করলে এখানে দেখা যাবে।",
+      fraudScore: "জালিয়াতির স্কোর",
+      notScored: "স্কোর করা হয়নি · কর্মকর্তা চিহ্নিত করেছেন",
+      scoreLine: (percent: string, risk: string) => `${percent} · ${risk}`,
+      risk: { high: "উচ্চ ঝুঁকি", suspicious: "সন্দেহজনক", low: "কম ঝুঁকি" },
+      uploaded: (when: string) => `আপলোড ${when}`,
+      clear: "আসল হিসেবে ছাড়পত্র",
+      reject: "দলিল প্রত্যাখ্যান",
+      rerun: "আবার বিশ্লেষণ করুন",
+      clearedTitle: "দলিল ছাড়পত্র পেয়েছে",
+      clearedBody: (fileName: string) => `${fileName} এখন যাচাইকৃত হিসেবে চিহ্নিত।`,
+      rejectedTitle: "দলিল প্রত্যাখ্যাত",
+      rejectedBody: (fileName: string) =>
+        `${fileName} প্রত্যাখ্যান করা হয়েছে এবং আপলোডকারীকে জানানো হবে।`,
+      failedTitle: "সিদ্ধান্ত ব্যর্থ হয়েছে",
+      failedBody: "অনুগ্রহ করে আবার চেষ্টা করুন।",
+      requeuedTitle: "বিশ্লেষণের জন্য ফেরত পাঠানো হয়েছে",
+      requeuedBody: (fileName: string) => `${fileName} ওসিআর ও জালিয়াতি স্কোরিংয়ের সারিতে ফেরত গেছে।`,
+      requeueFailedTitle: "সারিতে ফেরত পাঠানো যায়নি",
+    },
+
+    ocrQueue: {
+      description:
+        "লেখা উদ্ধারের প্রক্রিয়ায় থাকা স্ক্যান। প্রতিটি আবশ্যক তথ্য সংগ্রহ না হলে এবং কাগজের কোনো তথ্য রেকর্ডের সঙ্গে না মিললে উদ্ধারকৃত তথ্য রেজিস্টারে ওঠে না।",
+      stages: {
+        ready: { label: "যাচাইয়ের জন্য প্রস্তুত", hint: "কর্মকর্তার অপেক্ষায়" },
+        failed: { label: "পড়া যায়নি", hint: "আবার চেষ্টা দরকার" },
+        processing: { label: "পড়া হচ্ছে", hint: "উদ্ধার চলছে" },
+        pending: { label: "সারিতে", hint: "রিডারের অপেক্ষায়" },
+      },
+      stageTileAria: (stage: string, count: number) => `${stage}: ${n(count)}টি দলিল`,
+      loadingQueue: "সারি লোড হচ্ছে…",
+      countInStage: (count: number, stage: string) => `${stage}-এ ${n(count)}টি দলিল`,
+      countInQueue: (count: number) => `সারিতে ${n(count)}টি দলিল`,
+      waitingOnYou: (count: number) => ` · ${n(count)}টি আপনার অপেক্ষায়`,
+      showAllStages: "সব পর্যায় দেখুন",
+      emptyStageTitle: "এই পর্যায়ে কিছু নেই",
+      emptyStageBody:
+        "এই মুহূর্তে এখানে কোনো দলিল নেই। বাকি প্রক্রিয়া দেখতে ছাঁকনি সরিয়ে দিন।",
+      emptyTitle: "সারি খালি",
+      emptyBody: "সব স্ক্যান পড়া ও যাচাই হয়ে গেছে। নতুন আপলোড আপনা-আপনি এখানে আসবে।",
+      uploaded: (when: string) => `আপলোড ${when}`,
+      queuedNotice: "পরবর্তী খালি রিডারের জন্য সারিতে — এই কার্ড নিজে থেকেই হালনাগাদ হবে।",
+      readingNotice: "স্ক্যান পড়া হচ্ছে — এই কার্ড নিজে থেকেই হালনাগাদ হবে।",
+      requiredFields: "আবশ্যক তথ্য",
+      captured: (found: number, total: number) => `${n(total)}-এর মধ্যে ${n(found)} সংগৃহীত`,
+      noRegisterFields: "এই ধরনের দলিলে রেজিস্টারের কোনো তথ্য থাকে না।",
+      keyInPlaceholder: "স্ক্যান দেখে লিখুন",
+      keyInAria: (field: string) => `${field} — রিডার খুঁজে পায়নি`,
+      doesNotMatch: "রেকর্ডের সঙ্গে মিলছে না",
+      accept: "রেকর্ডে অন্তর্ভুক্ত করুন",
+      escalate: "জালিয়াতি পর্যালোচনায় পাঠান",
+      rerun: "আবার উদ্ধার করুন",
+      retry: "আবার উদ্ধারের চেষ্টা",
+      returnToUploader: "আপলোডকারীকে ফেরত",
+      nothingToDo: "রিডারের কাজ শেষ না হওয়া পর্যন্ত কিছু করার নেই।",
+      hold: {
+        inFlight: "রিডার এখনো এই স্ক্যানটি নিয়ে কাজ করছে।",
+        failed:
+          "রিডার এই স্ক্যান থেকে লেখা উদ্ধার করতে পারেনি। আবার চেষ্টা করুন, অথবা কাগজটির নতুন স্ক্যান চান।",
+        mismatch: (fields: string) =>
+          `স্ক্যানের ${fields} রেকর্ডের সঙ্গে মিলছে না। এটি গ্রহণ না করে জালিয়াতি পর্যালোচনায় পাঠান।`,
+        missing: (count: number) =>
+          `${n(count)}টি আবশ্যক তথ্য এখনো নেই — এই উদ্ধার গ্রহণ করতে স্ক্যান দেখে সেগুলো লিখুন।`,
+      },
+      fieldJoiner: " ও ",
+      mismatchDetail: (field: string, scanned: string, registered: string) =>
+        `স্ক্যানে ${field} আছে ${scanned}; রেকর্ডে এই দাগের জন্য আছে ${registered}।`,
+      acceptedTitle: "উদ্ধারকৃত তথ্য গৃহীত",
+      acceptedBody: (fileName: string, target: string) =>
+        `${fileName} ${target}-এর বিপরীতে লিপিবদ্ধ হয়েছে।`,
+      theRegister: "রেজিস্টার",
+      acceptFailedTitle: "গ্রহণ করা যায়নি",
+      escalatedTitle: "জালিয়াতি পর্যালোচনায় পাঠানো হয়েছে",
+      escalatedBody: (fileName: string) => `${fileName} এখন জালিয়াতি পর্যালোচনার সারিতে।`,
+      escalateFailedTitle: "পাঠানো যায়নি",
+      returnedTitle: "দলিল ফেরত পাঠানো হয়েছে",
+      returnedBody: (fileName: string) =>
+        `${fileName} প্রত্যাখ্যান করা হয়েছে এবং আপলোডকারীকে জানানো হবে।`,
+      rejectFailedTitle: "প্রত্যাখ্যান করা যায়নি",
+      requeuedTitle: "উদ্ধারের সারিতে ফেরত",
+      requeuedBody: (fileName: string) => `${fileName} আবার রিডারের কাছে যাচ্ছে।`,
+      requeueFailedTitle: "সারিতে ফেরত পাঠানো যায়নি",
+      tryAgain: "অনুগ্রহ করে আবার চেষ্টা করুন।",
+    },
+
+    agents: {
+      description:
+        "যেসব মামলায় সরেজমিন যাওয়া দরকার সেগুলোর জরিপ নির্ধারণ করুন, আর দেখুন কার কতটা কাজ আছে। মাঠকর্মীকে সংশ্লিষ্ট দাগের এখতিয়ার আওতাভুক্ত হতে হয় — এখতিয়ারের বাইরে পাঠাতে হলে আলাদা করে অনুমোদন দিতে হয়।",
+      roster: "কর্মরত মাঠকর্মী",
+      rosterTileAria: (name: string, load: number) => `${name}, ${n(load)}টি চলমান পরিদর্শন`,
+      openVisits: () => "চলমান পরিদর্শন",
+      heavy: " · বেশি চাপ",
+      heavyLoad: " · কাজের চাপ বেশি",
+      openVisitCount: (count: number) => `${n(count)}টি চলমান পরিদর্শন`,
+      needsAgent: "মাঠকর্মী প্রয়োজন",
+      loading: "লোড হচ্ছে…",
+      openCases: (count: number) => `${n(count)}টি চলমান মামলায় কেউ নির্ধারিত নেই`,
+      allBookedTitle: "প্রতিটি চলমান মামলার জন্য পরিদর্শন নির্ধারিত আছে",
+      allBookedBody: "নতুন বিরোধ দাখিল হওয়ামাত্র এখানে দেখা যাবে।",
+      inTheField: "মাঠে",
+      showEveryAgent: "সব মাঠকর্মী দেখুন",
+      noneForAgentTitle: "এই মাঠকর্মীর কোনো চলমান কাজ নেই",
+      noneForAgentBody: "তাঁর সারি খালি। বাকিদের দেখতে ছাঁকনি সরিয়ে দিন।",
+      noVisitsTitle: "চলমান কোনো পরিদর্শন নেই",
+      noVisitsBody: "আপনার নির্ধারিত জরিপগুলো প্রতিবেদন জমা না হওয়া পর্যন্ত এখানে থাকবে।",
+      disputeHeading: (type: string) => `${type} সংক্রান্ত বিরোধ`,
+      filedBy: (name: string) => `দাখিল করেছেন ${name}`,
+      callsFor: (survey: string) => `প্রয়োজন: ${survey}`,
+      assign: "মাঠকর্মী নির্ধারণ করুন",
+      viewCase: "মামলা দেখুন",
+      surveyType: "জরিপের ধরন",
+      scheduledFor: "নির্ধারিত সময়",
+      fieldAgent: "মাঠকর্মী",
+      agentGroupAria: (caseNumber: string) => `${caseNumber}-এর জন্য মাঠকর্মী`,
+      allowOutside: "এই এখতিয়ারের বাইরের মাঠকর্মীদেরও অনুমতি দিন।",
+      noneCoverArea:
+        "এই এলাকা কোনো মাঠকর্মীর আওতায় নেই। তবুও এখতিয়ারের বাইরে থেকে কাউকে নির্ধারণ করতে টিক দিন।",
+      book: "পরিদর্শন নির্ধারণ করুন",
+      outsideArea: (firstName: string) => `${firstName}-এর এলাকার বাইরে`,
+      assignedTitle: "জরিপ নির্ধারিত হয়েছে",
+      assignedBody: (agent: string, dagNo: string, when: string, caseNumber: string) =>
+        `${when} তারিখে ${dagNo}-এর জন্য ${agent} নির্ধারিত হয়েছেন। ${caseNumber} এখন পরিদর্শনের অপেক্ষায়।`,
+      failedTitle: "নির্ধারণ করা যায়নি",
+      failedBody: "অনুগ্রহ করে আবার চেষ্টা করুন।",
+      blocker: {
+        inactive: (status: string) =>
+          `অ্যাকাউন্টটি ${status} — কাজ দেওয়ার আগে সেটি সক্রিয় করুন।`,
+        outsideArea: (agentArea: string, parcelArea: string) =>
+          `${agentArea} তাঁর আওতাভুক্ত; এই দাগ ${parcelArea}-এ।`,
+      },
+      note: {
+        heavyLoad: (openVisits: number) => `ইতিমধ্যে ${n(openVisits)}টি চলমান পরিদর্শন আছে।`,
+        sameParcel: "এই দাগে আগে থেকেই যাচ্ছেন — এক যাত্রাতেই দুটি কাজ হবে।",
+        outsideArea: (agentArea: string, parcelArea: string) =>
+          `তাঁর এলাকার বাইরে। ${agentArea} তাঁর আওতাভুক্ত; এই দাগ ${parcelArea}-এ।`,
+      },
+    },
+
+    jurisdictions: {
+      description:
+        "প্রতিটি দাগ, ব্যবহারকারী ও জরিপের দায়িত্ব যে প্রশাসনিক কাঠামোর সঙ্গে যুক্ত। প্রতিটি স্তর তার ঊর্ধ্বতনের ঠিক এক ধাপ নিচে বসে, আর কোনো রেকর্ড যুক্ত থাকা অবস্থায় কিছু মুছে ফেলা যায় না।",
+      newJurisdiction: "নতুন এখতিয়ার",
+      hierarchy: "কাঠামো",
+      empty: "খালি",
+      levelCount: (count: number, singular: string) => `${n(count)}টি ${singular}`,
+      emptyTreeTitle: "এখনো কোনো এখতিয়ার নেই",
+      emptyTreeBody: "একটি বিভাগ দিয়ে শুরু করুন — প্রতিটি জেলা, উপজেলা ও মৌজা এর সঙ্গেই যুক্ত হয়।",
+      addDivision: "একটি বিভাগ যোগ করুন",
+      unreachableTitle: "কোনো মূল স্তর থেকে পৌঁছানো যাচ্ছে না",
+      unreachableBody:
+        "এগুলোর ঊর্ধ্বতন স্তর নেই, অথবা সংযোগগুলো চক্রাকারে আটকে গেছে। প্রতিটির জন্য একটি বৈধ ঊর্ধ্বতন স্তর দিন।",
+      expand: (name: string) => `${name} খুলুন`,
+      collapse: (name: string) => `${name} বন্ধ করুন`,
+      parcelsHereTitle: (count: number) => `এখানে ${n(count)}টি দাগ নিবন্ধিত`,
+      usersHereTitle: (count: number) => `এখানে ${n(count)}জন ব্যবহারকারী নিযুক্ত`,
+      addChildAria: (level: string, parent: string) => `${parent}-এর অধীনে ${level} যোগ করুন`,
+      addChildTitle: (level: string) => `${level} যোগ করুন`,
+      addChild: (level: string) => `${level} যোগ করুন`,
+      newLevel: (level: string) => `নতুন ${level}`,
+      under: (parent: string) => `${parent}-এর অধীনে।`,
+      atTop: "কাঠামোর একেবারে উপরে।",
+      ancestry: "ঊর্ধ্বতন স্তর",
+      childrenLabel: "অধীনস্থ",
+      parcelsHere: () => "দাগ এখানে",
+      usersHere: () => "ব্যবহারকারী এখানে",
+      inSubtree: (count: number) => `অধীনস্থ শাখায় ${n(count)}টি`,
+      withSubtree: (count: number) => `অধীনস্থ শাখাসহ ${n(count)}টি`,
+      bottomOfLadder: "মৌজা কাঠামোর সর্বনিম্ন স্তর — এর নিচে আর কিছু বসে না।",
+      pickTitle: "একটি এখতিয়ার বেছে নিন",
+      pickBody:
+        "কাঠামো থেকে একটি বেছে নিলে দেখা যাবে এর অধীনে কী নিবন্ধিত আছে; নাম বদলানো, স্থানান্তর করা বা নিচের স্তর যোগ করা যাবে।",
+      name: "নাম",
+      namePlaceholder: "Debidwar Upazila",
+      nameBn: "বাংলা নাম",
+      nameBnHint: "ঐচ্ছিক — রেকর্ডে যেভাবে লেখা আছে।",
+      nameBnPlaceholder: "দেবিদ্বার উপজেলা",
+      code: "কোড",
+      codeHint: "বড় হাতের অক্ষর, হাইফেন দিয়ে আলাদা।",
+      codePlaceholder: "CTG-CUM-DEB",
+      level: "স্তর",
+      sitsUnder: "যার অধীনে",
+      divisionIsTop: "বিভাগ কাঠামোর সর্বোচ্চ স্তর।",
+      noParentYet: (level: string) => `এখনো কোনো ${level} নেই — আগে একটি যোগ করুন।`,
+      nothingToSitUnder: "অধীনে বসার মতো কিছু নেই",
+      topOfTree: "কাঠামোর শীর্ষে",
+      movingWarning: (parcels: number, users: number) =>
+        `এটি সরালে সঙ্গে ${n(parcels)}টি দাগ ও ${n(users)}জন ব্যবহারকারীও সরে যাবে। মাঠকর্মীর এখতিয়ার এই কাঠামো থেকেই নির্ধারিত হয়, তাই কে কোথায় যেতে পারবেন তাও বদলে যাবে।`,
+      saveChanges: "পরিবর্তন সংরক্ষণ করুন",
+      addToTree: "কাঠামোয় যোগ করুন",
+      discard: "বাতিল করুন",
+      updatedTitle: "এখতিয়ার হালনাগাদ হয়েছে",
+      addedTitle: "এখতিয়ার যোগ হয়েছে",
+      savedBody: (name: string, code: string, editing: boolean) =>
+        editing ? `${name} (${code}) সংরক্ষিত হয়েছে।` : `${name} (${code}) কাঠামোয় যুক্ত হয়েছে।`,
+      stillInUse: "এখনো ব্যবহৃত হচ্ছে — এখনই মুছে ফেলা যাবে না",
+      remove: (name: string) => `${name} সরান`,
+      confirmRemove: (name: string) =>
+        `${name} সরিয়ে ফেলবেন? এর সঙ্গে কিছু যুক্ত নেই, তাই এটি নিরাপদ — তবে কাজটি ফেরানো যাবে না।`,
+      removeIt: "সরিয়ে ফেলুন",
+      keepIt: "থাক",
+      removedTitle: "এখতিয়ার সরানো হয়েছে",
+      removedBody: (name: string) => `${name} কাঠামো থেকে সরানো হয়েছে।`,
+      error: {
+        nameRequired: "একটি নাম দিন।",
+        codeRequired: "একটি কোড দিন।",
+        codePattern: "শুধু বড় হাতের অক্ষর, অঙ্ক ও হাইফেন — যেমন CTG-CUM-DEB।",
+        codeTaken: (holderName: string, holderCode: string) =>
+          `${holderCode} কোডটি ইতিমধ্যে ${holderName} ব্যবহার করছে।`,
+        divisionHasNoParent: "বিভাগ কাঠামোর শীর্ষে বসে — এর কোনো ঊর্ধ্বতন স্তর নেই।",
+        parentRequired: (needs: string, level: string) =>
+          `এই ${level} কোন ${needs}-এর অন্তর্ভুক্ত, তা বেছে নিন।`,
+        parentMissing: "সেই ঊর্ধ্বতন স্তরটি আর নেই।",
+        parentWrongLevel: (
+          level: string,
+          needs: string,
+          parentName: string,
+          parentLevel: string,
+        ) => `${level} বসে ${needs}-এর অধীনে, কিন্তু ${parentName} একটি ${parentLevel}।`,
+        selfParent: "এটি নিজেই নিজের ঊর্ধ্বতন হতে পারে না।",
+        cycle: (parentName: string, currentName: string) =>
+          `${parentName} ইতিমধ্যে ${currentName}-এর অধীনে আছে — সেখানে সরালে চক্র তৈরি হবে।`,
+        thisOne: "এটি",
+        childrenStranded: (
+          count: number,
+          exampleName: string,
+          exampleLevel: string,
+          wants: string | null,
+        ) =>
+          `${n(count)}টি অধীনস্থ স্তর ভুল ধাপে পড়ে যাবে — ${exampleName} একটি ${exampleLevel}, যা ${wants ?? "কিছুই"}-এর অধীনে বসতে হয়।`,
+      },
+      warning: {
+        codePrefix: (parentCode: string) =>
+          `এখানে কোড ঊর্ধ্বতন স্তরের কোড ধরে বাড়ে। ${parentCode}- দিয়ে শুরু করলে উপসর্গ দিয়ে খুঁজে পাওয়া সহজ হয়।`,
+        staleDescendantCodes: (count: number, currentCode: string) =>
+          `এর অধীনের ${n(count)}টি কোড এখনো ${currentCode} দিয়ে শুরু হয়।`,
+        siblingName: (name: string) =>
+          `একই ঊর্ধ্বতন স্তরের অধীনে ${name} নামে আরেকটি এখতিয়ার ইতিমধ্যে আছে।`,
+      },
+      blocker: {
+        missing: { label: "এটি আর নেই", fix: "পাতাটি আবার লোড করুন।" },
+        children: (count: number, level: string | null) => ({
+          label: `এর অধীনে ${n(count)}টি ${level ?? "এখতিয়ার"}`,
+          fix: "আগে নিচের স্তরটি সরান বা অন্য ঊর্ধ্বতনের অধীনে নিন।",
+        }),
+        parcels: (count: number) => ({
+          label: `এখানে ${n(count)}টি দাগ নিবন্ধিত`,
+          fix: "আগে অন্য এখতিয়ারের অধীনে পুনঃনিবন্ধন করুন।",
+        }),
+        users: (count: number) => ({
+          label: `এখানে ${n(count)}জন ব্যবহারকারী নিযুক্ত`,
+          fix: "আগে ব্যবহারকারী স্ক্রিন থেকে তাঁদের অন্যত্র নিযুক্ত করুন।",
+        }),
+      },
+    },
+    // <<PAGES-END>>
+  },
+
+  components: {
+    parcelCard: {
+      registeredIn: (year: number) => `নিবন্ধন ${d(year)}`,
+      openDisputes: (count: number) => `${n(count)}টি চলমান`,
+    },
+    disputeListItem: {
+      dag: (dagNo: string) => `দাগ ${dagNo}`,
+      updated: (ago: string) => `হালনাগাদ ${ago}`,
+    },
+    comingSoon: {
+      readyToBuild: "তৈরির জন্য প্রস্তুত",
+      defaultNote:
+        "এই রুটটি প্রস্তুত করা আছে। শেয়ার্ড UI কিট আর hooks/queries.ts-এর টাইপড কোয়েরি হুক দিয়ে স্ক্রিনটি বানানো যাবে।",
+    },
+  },
+};

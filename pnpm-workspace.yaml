@@ -1,0 +1,8 @@
+# Packages allowed to run install/build scripts (pnpm blocks these by default).
+# - sharp: native image optimization used by Next.js
+# - unrs-resolver: native resolver used by eslint-plugin-import
+allowBuilds:
+  # msw's worker is placed manually via `msw init public/`, no build script needed
+  msw: false
+  sharp: true
+  unrs-resolver: true

@@ -1,0 +1,254 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  PlotGuard — "Cadastre" design system
+  Grounded in the world of land surveying & civic land records:
+  deep pine (land/officialdom) · surveyor's amber (markers) · stamp red (flags)
+  Fonts: Public Sans (UI) · Space Grotesk (display) · Space Mono (parcel IDs / coordinates)
+         Noto Sans Bengali sits last in every stack — the browser falls back per
+         glyph, so Bangla renders in it wherever it appears without any wrapper.
+*/
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --font-sans: var(--font-public-sans), var(--font-noto-bengali);
+  --font-heading: var(--font-space-grotesk), var(--font-noto-bengali);
+  /* Bengali has no monospace companion, so an ID carrying Bangla loses the grid
+     but stays legible — better than tofu. Dag/khatian numbers are Latin anyway. */
+  --font-mono: var(--font-space-mono), var(--font-noto-bengali);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* Brand accents */
+  --color-marker: var(--marker);
+  --color-marker-foreground: var(--marker-foreground);
+  --color-seal: var(--seal);
+
+  /* Record-status semantic colors (used by StatusBadge) */
+  --color-verified: var(--verified);
+  --color-verified-soft: var(--verified-soft);
+  --color-pending: var(--pending);
+  --color-pending-soft: var(--pending-soft);
+  --color-flagged: var(--flagged);
+  --color-flagged-soft: var(--flagged-soft);
+  --color-disputed: var(--disputed);
+  --color-disputed-soft: var(--disputed-soft);
+  --color-review: var(--review);
+  --color-review-soft: var(--review-soft);
+  --color-draft: var(--draft);
+  --color-draft-soft: var(--draft-soft);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.85);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.6);
+  --radius-4xl: calc(var(--radius) * 3.2);
+}
+
+:root {
+  --radius: 0.375rem;
+
+  /* Surfaces — warm drafting-paper neutrals, crisp white "document" cards */
+  --background: #f6f4ee;
+  --foreground: #17241e;
+  --card: #ffffff;
+  --card-foreground: #17241e;
+  --popover: #ffffff;
+  --popover-foreground: #17241e;
+
+  /* Deep pine — land, agriculture, officialdom, trust */
+  --primary: #1c4d3c;
+  --primary-foreground: #f4f8f2;
+
+  --secondary: #e7ece2;
+  --secondary-foreground: #24382e;
+  --muted: #eceae1;
+  --muted-foreground: #5c6b60;
+  --accent: #e3e9dd;
+  --accent-foreground: #1c4d3c;
+
+  /* Stamp red — flags, fraud, destructive */
+  --destructive: #a83a2b;
+
+  --border: #e0dbce;
+  --input: #d6d0c1;
+  --ring: #2e7d5b;
+
+  /* Surveyor's amber — the signature accent, used sparingly */
+  --marker: #c46a12;
+  --marker-foreground: #ffffff;
+  --seal: #a83a2b;
+
+  /* Record statuses: paired solid text color + soft background */
+  --verified: #14683f;
+  --verified-soft: #dceee1;
+  --pending: #8a5410;
+  --pending-soft: #f6ecd6;
+  --flagged: #9a3323;
+  --flagged-soft: #f6dfda;
+  --disputed: #97451a;
+  --disputed-soft: #f5e4d3;
+  --review: #3d5266;
+  --review-soft: #e1e8ef;
+  --draft: #5c6b60;
+  --draft-soft: #ecebe2;
+
+  /* Cadastral chart palette */
+  --chart-1: #1c4d3c;
+  --chart-2: #2e7d5b;
+  --chart-3: #c46a12;
+  --chart-4: #a83a2b;
+  --chart-5: #4e6a80;
+
+  /* Deep pine sidebar with amber active-state (the authoritative anchor) */
+  --sidebar: #163227;
+  --sidebar-foreground: #c9d6cd;
+  --sidebar-primary: #da8a2e;
+  --sidebar-primary-foreground: #14261e;
+  --sidebar-accent: #1f4032;
+  --sidebar-accent-foreground: #f1f5ee;
+  --sidebar-border: #244a3a;
+  --sidebar-ring: #da8a2e;
+}
+
+.dark {
+  /* Deep pine-black canvas */
+  --background: #0e1512;
+  --foreground: #e8ece4;
+  --card: #16201b;
+  --card-foreground: #e8ece4;
+  --popover: #16201b;
+  --popover-foreground: #e8ece4;
+
+  --primary: #4fa87e;
+  --primary-foreground: #08110d;
+
+  --secondary: #1e2c25;
+  --secondary-foreground: #e8ece4;
+  --muted: #1c2822;
+  --muted-foreground: #9db0a4;
+  --accent: #24332b;
+  --accent-foreground: #e8ece4;
+
+  --destructive: #d0654f;
+
+  --border: #28352e;
+  --input: #303e37;
+  --ring: #4fa87e;
+
+  --marker: #e0913c;
+  --marker-foreground: #0e1512;
+  --seal: #d0654f;
+
+  --verified: #7cc79b;
+  --verified-soft: #16301f;
+  --pending: #e0b46a;
+  --pending-soft: #322512;
+  --flagged: #e79a86;
+  --flagged-soft: #331c17;
+  --disputed: #e0a06a;
+  --disputed-soft: #302016;
+  --review: #a9bed2;
+  --review-soft: #1a2530;
+  --draft: #9db0a4;
+  --draft-soft: #1c2822;
+
+  --chart-1: #4fa87e;
+  --chart-2: #7cc79b;
+  --chart-3: #e0913c;
+  --chart-4: #d0654f;
+  --chart-5: #7f9bb3;
+
+  --sidebar: #0b120f;
+  --sidebar-foreground: #c9d6cd;
+  --sidebar-primary: #e0913c;
+  --sidebar-primary-foreground: #0b120f;
+  --sidebar-accent: #18231d;
+  --sidebar-accent-foreground: #eaf0e6;
+  --sidebar-border: #1e2a23;
+  --sidebar-ring: #e0913c;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv05" 1, "ss01" 1;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+    letter-spacing: -0.011em;
+  }
+}
+
+@layer utilities {
+  /* Signature 1 — faint cadastral survey grid, for shells & hero underlays */
+  .cadastral-grid {
+    background-image:
+      linear-gradient(
+        to right,
+        var(--cadastral-line, color-mix(in oklab, var(--foreground) 5%, transparent)) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        var(--cadastral-line, color-mix(in oklab, var(--foreground) 5%, transparent)) 1px,
+        transparent 1px
+      );
+    background-size: 28px 28px;
+  }
+  /* Light grid lines for use on dark (pine) surfaces */
+  .cadastral-grid-light {
+    --cadastral-line: color-mix(in oklab, white 7%, transparent);
+  }
+
+  /* Monospace numeric/ID treatment — parcel IDs, coordinates, case numbers */
+  .tabular {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum" 1;
+    letter-spacing: -0.01em;
+  }
+}

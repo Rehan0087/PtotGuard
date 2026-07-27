@@ -1,0 +1,438 @@
+"use client";
+
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
+import { api, qs } from "@/lib/api-client";
+import { useSessionStore } from "@/store/session";
+import type {
+  Paginated,
+  Parcel,
+  OwnershipRecord,
+  Dispute,
+  Mutation as LandMutation,
+  LandDocument,
+  FieldReport,
+  Hearing,
+  AppNotification,
+  User,
+  Jurisdiction,
+  AuthMe,
+  ParcelDetail,
+  DisputeDetail,
+  MutationDetail,
+  FieldReportDetail,
+  HearingDetail,
+  InheritanceInput,
+  InheritanceResult,
+  AuditEvent,
+  AuditVerifyResult,
+} from "@/lib/types";
+
+/** The active role scopes every query key so switching roles refetches. */
+export function useRole() {
+  return useSessionStore((s) => s.role);
+}
+
+type ListParams = Record<string, string | number | boolean | undefined | null>;
+
+// --- Session / auth --------------------------------------------------------
+export function useSession() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["auth-me", role],
+    queryFn: () => api.get<AuthMe>("/auth/me"),
+  });
+}
+
+export function useJurisdictions() {
+  return useQuery({
+    queryKey: ["jurisdictions"],
+    queryFn: () => api.get<Jurisdiction[]>("/jurisdictions"),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Editing the tree moves more than the tree: agent coverage is read from it
+ * (lib/assignment.ts) and the signed-in user carries their own node, so both
+ * are invalidated alongside it.
+ */
+function useJurisdictionWrite<TData, TVariables>(
+  mutationFn: (vars: TVariables) => Promise<TData>,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["jurisdictions"] });
+      qc.invalidateQueries({ queryKey: ["auth-me"] });
+    },
+  });
+}
+
+export function useCreateJurisdiction() {
+  return useJurisdictionWrite((body: Omit<Jurisdiction, "id">) =>
+    api.post<Jurisdiction>("/jurisdictions", body),
+  );
+}
+
+export function useUpdateJurisdiction() {
+  return useJurisdictionWrite(({ id, ...body }: Partial<Jurisdiction> & { id: string }) =>
+    api.patch<Jurisdiction>(`/jurisdictions/${id}`, body),
+  );
+}
+
+export function useDeleteJurisdiction() {
+  return useJurisdictionWrite((id: string) => api.del<void>(`/jurisdictions/${id}`));
+}
+
+// --- Parcels ---------------------------------------------------------------
+export function useParcels(params: ListParams = {}) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["parcels", role, params],
+    queryFn: () => api.get<Paginated<Parcel>>(`/parcels${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useParcel(id: string | undefined) {
+  return useQuery({
+    queryKey: ["parcel", id],
+    queryFn: () => api.get<ParcelDetail>(`/parcels/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useParcelNeighbours(id: string | undefined) {
+  return useQuery({
+    queryKey: ["parcel-neighbours", id],
+    queryFn: () => api.get<Parcel[]>(`/parcels/${id}/neighbours`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useParcelHistory(id: string | undefined) {
+  return useQuery({
+    queryKey: ["parcel-history", id],
+    queryFn: () => api.get<OwnershipRecord[]>(`/parcels/${id}/history`),
+    enabled: Boolean(id),
+  });
+}
+
+// --- Disputes --------------------------------------------------------------
+export function useDisputes(params: ListParams = {}) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["disputes", role, params],
+    queryFn: () => api.get<Paginated<Dispute>>(`/disputes${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useDispute(id: string | undefined) {
+  return useQuery({
+    queryKey: ["dispute", id],
+    queryFn: () => api.get<DisputeDetail>(`/disputes/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useFileDispute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<Dispute> & { respondentName?: string }) =>
+      api.post<Dispute>("/disputes", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["disputes"] }),
+  });
+}
+
+export function useUpdateDisputeStatus(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (status: string) => api.patch<Dispute>(`/disputes/${id}/status`, { status }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dispute", id] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+export function useAssignAgent(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (agentId: string) => api.post<Dispute>(`/disputes/${id}/assign-agent`, { agentId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dispute", id] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+// --- Mutations (namjari) ---------------------------------------------------
+export function useMutations(params: ListParams = {}) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["mutations", role, params],
+    queryFn: () => api.get<Paginated<LandMutation>>(`/mutations${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useMutationById(id: string | undefined) {
+  return useQuery({
+    queryKey: ["mutation", id],
+    queryFn: () => api.get<MutationDetail>(`/mutations/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCreateMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<LandMutation>) => api.post<LandMutation>("/mutations", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["mutations"] }),
+  });
+}
+
+export function useMutationDecision(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (decision: "approve" | "reject") =>
+      api.patch<LandMutation>(`/mutations/${id}/decision`, { decision }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["mutation", id] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+    },
+  });
+}
+
+// --- Documents -------------------------------------------------------------
+export function useDocuments(params: ListParams = {}) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["documents", role, params],
+    queryFn: () => api.get<Paginated<LandDocument>>(`/documents${qs(params)}`),
+    placeholderData: keepPreviousData,
+    // Poll while the OCR/fraud worker still has anything in flight, so
+    // processing → extracted lands in the UI without a manual refresh.
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      const working = items.some(
+        (d) => d.ocrStatus === "processing" || d.ocrStatus === "pending",
+      );
+      return working ? 2500 : false;
+    },
+  });
+}
+
+export function useDocument(id: string | undefined) {
+  return useQuery({
+    queryKey: ["document", id],
+    queryFn: () => api.get<LandDocument>(`/documents/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useUploadDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<LandDocument>) => api.post<LandDocument>("/documents", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+/** `flag` hands the document from the OCR queue to the fraud-review queue. */
+export function useDocumentDecision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      decision,
+    }: {
+      id: string;
+      decision: "verify" | "reject" | "flag";
+    }) => api.patch<LandDocument>(`/documents/${id}/decision`, { decision }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+/** Fields an officer keyed in by hand where the reader came up short. */
+export function useSaveExtractedFields() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, fields }: { id: string; fields: Record<string, string> }) =>
+      api.patch<LandDocument>(`/documents/${id}/fields`, { fields }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+export function useReprocessDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<LandDocument>(`/documents/${id}/reprocess`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+// --- Field reports ---------------------------------------------------------
+/** The signed-in agent's assigned reports (GET /field-reports/assigned). */
+export function useAssignedFieldReports() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["field-reports-assigned", role],
+    queryFn: () => api.get<FieldReport[]>("/field-reports/assigned"),
+  });
+}
+
+export function useFieldReports(params: ListParams = {}) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["field-reports", role, params],
+    queryFn: () => api.get<Paginated<FieldReport>>(`/field-reports${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** The land office booking a survey: creates the visit and moves the dispute. */
+export function useAssignFieldSurvey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      parcelId: string;
+      parcelDagNo: string;
+      disputeId?: string;
+      purpose: string;
+      assignedAgentId: string;
+      scheduledFor: string;
+      addressHint?: string;
+    }) => api.post<FieldReport>("/field-reports", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+export function useFieldReport(id: string | undefined) {
+  return useQuery({
+    queryKey: ["field-report", id],
+    queryFn: () => api.get<FieldReportDetail>(`/field-reports/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useAddFieldReportMedia(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      photo?: { url: string; caption?: string };
+      gps?: { lat: number; lng: number; accuracyMeters: number; label?: string };
+    }) => api.post<FieldReport>(`/field-reports/${id}/media`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+    },
+  });
+}
+
+// --- Hearings --------------------------------------------------------------
+export function useHearings(params: ListParams = {}) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["hearings", role, params],
+    queryFn: () => api.get<Paginated<Hearing>>(`/hearings${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useHearing(id: string | undefined) {
+  return useQuery({
+    queryKey: ["hearing", id],
+    queryFn: () => api.get<HearingDetail>(`/hearings/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useHearingRuling(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ruling: string) => api.patch<Hearing>(`/hearings/${id}/ruling`, { ruling }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearing", id] });
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+    },
+  });
+}
+
+// --- Inheritance -----------------------------------------------------------
+export function useCalculateInheritance() {
+  return useMutation({
+    mutationFn: (input: InheritanceInput) =>
+      api.post<InheritanceResult>("/inheritance/calculate", input),
+  });
+}
+
+// --- Audit -----------------------------------------------------------------
+export function useAuditLedger() {
+  return useQuery({
+    queryKey: ["audit-ledger"],
+    queryFn: () => api.get<AuditEvent[]>("/audit"),
+  });
+}
+
+export function useAuditTrail(entityType: string | undefined, id: string | undefined) {
+  return useQuery({
+    queryKey: ["audit", entityType, id],
+    queryFn: () => api.get<AuditEvent[]>(`/audit/${entityType}/${id}`),
+    enabled: Boolean(entityType && id),
+  });
+}
+
+export function useVerifyAudit() {
+  return useMutation({
+    mutationFn: () => api.get<AuditVerifyResult>("/audit/verify"),
+  });
+}
+
+// --- Notifications ---------------------------------------------------------
+export function useNotifications() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["notifications", role],
+    queryFn: () => api.get<AppNotification[]>("/notifications"),
+    // The bell picks up server-pushed alerts (e.g. "document processed") without
+    // a reload. Swap for a websocket/SSE subscription when the backend has one.
+    refetchInterval: 15_000,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/notifications/${id}/read`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post("/notifications/read-all"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
+
+// --- Users (admin) ---------------------------------------------------------
+export function useUsers(params: ListParams = {}) {
+  return useQuery({
+    queryKey: ["users", params],
+    queryFn: () => api.get<Paginated<User>>(`/users${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}

@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "readOverride": {
+    "ignore": [
+      "node_modules",
+      ".next",
+      ".git",
+      "pnpm-lock.yaml",
+      "dist",
+      "build",
+      ".turbo",
+      "coverage"
+    ],
+    "maxFileSize": 50000
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm)",
+      "Bash(pnpm)",
+      "Bash(git)"
+    ]
+  }
+}
