@@ -127,14 +127,21 @@ pnpm test
 ```
 
 `lib/*.test.ts`, run by Vitest against the default node environment — no DOM, no React, no
-fixtures beyond a builder per record type. They are written as statements about the domain
-("counts attendance across sittings, not within one", "a son takes twice a daughter's portion",
-"a standing objection outranks a closed window") so that a reimplementation can be checked
-against them, and so a change in behaviour has to be argued for rather than merely committed.
+fixtures beyond a builder per record type. **All seven modules are covered**, 191 tests. They are
+written as statements about the domain ("counts attendance across sittings, not within one", "a
+son takes twice a daughter's portion", "a standing objection outranks a closed window") so that a
+reimplementation can be checked against them, and so a change in behaviour has to be argued for
+rather than merely committed.
 
 Faraiz has the most coverage, because it divides land: every worked estate asserts that the
 shares sum to the whole, and the one combination the simplified heir set cannot place is
 asserted to *report* its residue rather than quietly lose it.
+
+Two guards in `lib/jurisdictions.ts` are unreachable by construction rather than merely
+untested, and the tests say so instead of implying coverage: every node carries exactly one
+`parentId`, so a node inside a cycle can never also have a root ancestor. `buildTree`'s `visited`
+filter and `reviewDraft`'s cycle branch are both defence in depth for data that is *already*
+malformed, and the tests that reach them supply exactly that.
 
 ### Mock → real backend
 
