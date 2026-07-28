@@ -6,6 +6,7 @@
  */
 import { http, HttpResponse, delay } from "msw";
 import type {
+  Dispute,
   DisputeStatus,
   FieldReportStatus,
   Jurisdiction,
@@ -102,6 +103,16 @@ function changedFields<T extends Record<string, unknown>>(
  */
 function isClosed(status: DisputeStatus) {
   return status === "resolved" || status === "rejected" || status === "withdrawn";
+}
+
+/**
+ * Everyone with an account who should hear about a change to this case: the
+ * person who filed it and any party matched to a user. Deduped, and never the
+ * actor — telling someone what they just did themselves is noise.
+ */
+function disputeAudience(dispute: Dispute, actorId: string): string[] {
+  const ids = [dispute.filedById, ...dispute.parties.map((p) => p.userId)];
+  return [...new Set(ids.filter((id): id is string => Boolean(id) && id !== actorId))];
 }
 
 function distance(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -892,7 +903,6 @@ export const handlers = [
     // hearing hanging off it.
     const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
     if (dispute && !isClosed(dispute.status)) {
-      const me = currentUser(request);
       dispute.status = "resolved";
       // The ruling text is the resolution — record content, stored as typed.
       dispute.resolution = ruling;
@@ -905,9 +915,26 @@ export const handlers = [
         title: "Ruling issued",
         content: { code: "ruled" },
         description: ruling,
-        actorId: me.id,
-        actorName: me.name,
+        actorId: actor.id,
+        actorName: actor.name,
       });
+
+      // The people whose land it is find out from the app, not from the
+      // mediator's own screen. The ruling text is deliberately not in the
+      // notification: it is record content, and the case is where it is read.
+      for (const userId of disputeAudience(dispute, actor.id)) {
+        db.notifications.unshift({
+          id: `n-${Date.now()}-${userId}`,
+          userId,
+          at: now,
+          severity: "info",
+          title: "Ruling issued",
+          body: `A ruling has been issued on case ${dispute.caseNumber}.`,
+          content: { code: "dispute-ruled", caseNumber: dispute.caseNumber },
+          read: false,
+          href: `/disputes/${dispute.id}`,
+        });
+      }
     }
 
     return HttpResponse.json(hearing);
@@ -1011,6 +1038,51 @@ export const handlers = [
       sessions: [],
     };
     db.hearings.unshift(hearing);
+
+    const now = new Date().toISOString();
+    await appendAudit({
+      entityType: "hearing",
+      entityId: hearing.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { caseNumber: hearing.caseNumber, parcelDagNo: hearing.parcelDagNo },
+      createdAt: now,
+    });
+
+    // Convening a hearing moves the case, the same way booking a survey does.
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute && !isClosed(dispute.status)) {
+      dispute.assignedMediatorId = me.id;
+      dispute.status = "hearing-scheduled";
+      dispute.hearingDate = hearing.hearingDate;
+      dispute.updatedAt = now;
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "hearing",
+        title: "Hearing scheduled",
+        content: { code: "status-change", status: "hearing-scheduled" },
+        actorId: me.id,
+        actorName: me.name,
+      });
+
+      for (const userId of disputeAudience(dispute, me.id)) {
+        db.notifications.unshift({
+          id: `n-${Date.now()}-${userId}`,
+          userId,
+          at: now,
+          severity: "info",
+          title: "Hearing scheduled",
+          body: `Case ${dispute.caseNumber} has been listed for hearing by the mediator.`,
+          content: { code: "hearing-scheduled", caseNumber: dispute.caseNumber },
+          read: false,
+          href: `/disputes/${dispute.id}`,
+        });
+      }
+    }
+
     return HttpResponse.json(hearing, { status: 201 });
   }),
 

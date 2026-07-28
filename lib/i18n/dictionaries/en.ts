@@ -212,6 +212,14 @@ export const en = {
       title: "New dispute assigned",
       body: `${caseNumber} requires review.`,
     }),
+    "dispute-ruled": (caseNumber: string) => ({
+      title: "Ruling issued",
+      body: `A ruling has been issued on case ${caseNumber}. Open the case to read it.`,
+    }),
+    "hearing-scheduled": (caseNumber: string) => ({
+      title: "Hearing scheduled",
+      body: `Case ${caseNumber} has been listed for hearing by the mediator.`,
+    }),
     "document-verified": (dagNo: string) => ({
       title: "Document verified",
       body: `Your khatian for dag ${dagNo} passed verification.`,

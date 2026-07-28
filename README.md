@@ -459,11 +459,17 @@ client copy explains a refusal while the server copy is what actually refuses. R
 sitting on a decided case is refused the same way — the screen hides the form, and this is what
 makes that true of the record rather than only of the UI.
 
-**Both writes move the dispute**, the way booking a survey does (see
-[Assigning field surveys](#assigning-field-surveys)). A sitting puts the case `in-mediation` and
-writes a `hearing-held` entry on the tracking timeline; a ruling resolves it, stores the ruling
-text as the dispute's `resolution`, and writes a `ruled` entry. Both skip a dispute that is
-already `resolved`, `rejected`, or `withdrawn` — a decided case is not reopened by a late write.
+**Every write moves the dispute**, the way booking a survey does (see
+[Assigning field surveys](#assigning-field-surveys)). Convening a hearing lists the case as
+`hearing-scheduled` and assigns the mediator; a sitting puts it `in-mediation` and writes a
+`hearing-held` entry on the tracking timeline; a ruling resolves it, stores the ruling text as
+the dispute's `resolution`, and writes a `ruled` entry. All skip a dispute that is already
+`resolved`, `rejected`, or `withdrawn` — a decided case is not reopened by a late write.
+
+**The parties are told.** Listing a case and ruling on it both notify everyone on the dispute
+with an account — whoever filed it, plus any party matched to a user — deduped, and never the
+mediator who just acted. The ruling text is deliberately *not* in the notification: it is record
+content, and the case is where it is read.
 
 ### The jurisdiction tree
 

@@ -192,6 +192,14 @@ export const bn: Dictionary = {
       title: "নতুন বিরোধ বরাদ্দ হয়েছে",
       body: `${caseNumber} পর্যালোচনা করা প্রয়োজন।`,
     }),
+    "dispute-ruled": (caseNumber: string) => ({
+      title: "রায় দেওয়া হয়েছে",
+      body: `${caseNumber} মামলায় রায় দেওয়া হয়েছে। পড়তে মামলাটি খুলুন।`,
+    }),
+    "hearing-scheduled": (caseNumber: string) => ({
+      title: "শুনানি নির্ধারিত হয়েছে",
+      body: `মধ্যস্থতাকারী ${caseNumber} মামলার শুনানির দিন ধার্য করেছেন।`,
+    }),
     "document-verified": (dagNo: string) => ({
       title: "দলিল যাচাই হয়েছে",
       body: `${dagNo} দাগের খতিয়ান যাচাইয়ে উত্তীর্ণ হয়েছে।`,
