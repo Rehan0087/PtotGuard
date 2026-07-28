@@ -387,6 +387,24 @@ export function useHearingRuling(id: string) {
   });
 }
 
+/** Listing a referred case for hearing. Also moves the dispute and notifies its parties. */
+export function useCreateHearing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      disputeId: string;
+      parcelDagNo: string;
+      parties: string[];
+      hearingDate: string;
+    }) => api.post<Hearing>("/hearings", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}
+
 /** Recording a sitting. The ruling gate reads these, so this is what unblocks a decision. */
 export function useRecordHearingSession(id: string) {
   const qc = useQueryClient();

@@ -416,6 +416,17 @@ export const en = {
       ruling: "Ruling",
       viewDispute: "View dispute record",
       openCase: "Open case",
+
+      // Cases referred to mediation with no hearing listed yet.
+      toConvene: "Awaiting a hearing date",
+      toConveneBody: "Referred to mediation. Set a date to list the case.",
+      noneToConvene: "Every referred case has a hearing listed.",
+      hearingDate: "Hearing date",
+      convene: "List for hearing",
+      convening: "Listing…",
+      convened: (caseNumber: string) => `${caseNumber} is listed for hearing.`,
+      partiesLabel: "Parties",
+      listed: "Listed cases",
     },
 
     hearing: {

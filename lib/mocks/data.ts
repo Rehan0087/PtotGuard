@@ -235,6 +235,16 @@ export const disputes: Dispute[] = [
     parties: [{ name: "Md. Karim Uddin", role: "claimant", userId: "usr-karim" }, { name: "Sohel Rana", role: "respondent" }],
     assignedMediatorId: "usr-mediator", evidenceDocumentIds: ["d-6", "d-11"],
   },
+  // Referred to mediation but not yet listed for hearing — this is what fills
+  // the mediator's "to convene" board.
+  {
+    id: "ds-381", caseNumber: "DSP-2026-00381", parcelId: "p-092", parcelDagNo: "RS-92/4",
+    type: "easement", status: "in-mediation", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
+    filedAt: "2026-06-18T07:20:00Z", updatedAt: "2026-07-16T10:05:00Z",
+    description: "Right of way across the northern strip of dag RS-92/4 blocked after the neighbouring owner raised a boundary wall. Referred for mediation.",
+    parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Sohel Rana", role: "respondent" }],
+    assignedMediatorId: "usr-mediator", evidenceDocumentIds: [],
+  },
   {
     id: "ds-370", caseNumber: "DSP-2026-00370", parcelId: "p-311", parcelDagNo: "RS-311/2",
     type: "ownership", status: "resolved", priority: "low", filedById: "usr-karim", filedByName: "Md. Karim Uddin",

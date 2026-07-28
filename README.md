@@ -432,6 +432,16 @@ that moved on in the meantime is left where it is.
 
 ### Hearing a case, and ruling on it
 
+`/cases` opens with **what has been referred but not yet listed** — the same board shape as
+`/agents`, filled by `disputesNeedingHearing()`. Referral is the officer's decision, so it only
+picks up disputes already moved to `in-mediation`; a case still under review belongs to the land
+office however obviously contested it looks. Listing one takes a date and nothing else: the
+parties come off the dispute rather than being retyped, because the hearing is over that record
+and a name keyed in twice is a name that can differ.
+
+The board is computed against **every** hearing, not just the signed-in mediator's — a case a
+colleague has listed has been listed, and must not sit on anyone's board as pending.
+
 `/cases/[id]` is the mediator's working surface: the sittings held so far, who was present at
 each, and the ruling. Recording a sitting is the write that moves the case — a case with a
 sitting on record is `in-hearing`, not merely `scheduled`, so the mediator never sets a status

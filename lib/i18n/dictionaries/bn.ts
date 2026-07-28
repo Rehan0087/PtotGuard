@@ -388,6 +388,16 @@ export const bn: Dictionary = {
       ruling: "রায়",
       viewDispute: "বিরোধের রেকর্ড দেখুন",
       openCase: "মামলা খুলুন",
+
+      toConvene: "শুনানির দিন ধার্য হয়নি",
+      toConveneBody: "মধ্যস্থতায় পাঠানো হয়েছে। মামলা তালিকাভুক্ত করতে দিন ধার্য করুন।",
+      noneToConvene: "পাঠানো প্রতিটি মামলার শুনানির দিন ধার্য আছে।",
+      hearingDate: "শুনানির দিন",
+      convene: "শুনানির জন্য তালিকাভুক্ত করুন",
+      convening: "তালিকাভুক্ত হচ্ছে…",
+      convened: (caseNumber: string) => `${caseNumber} শুনানির জন্য তালিকাভুক্ত হয়েছে।`,
+      partiesLabel: "পক্ষগণ",
+      listed: "তালিকাভুক্ত মামলা",
     },
 
     hearing: {
