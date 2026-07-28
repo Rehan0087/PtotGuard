@@ -7,11 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "pnpm --filter @plotguard/rules test",
+    "test:watch": "pnpm --filter @plotguard/rules test:watch"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
+    "@plotguard/rules": "workspace:*",
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-query-devtools": "^5.101.4",
@@ -39,8 +40,7 @@
     "eslint-config-next": "16.2.11",
     "msw": "^2.15.0",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "vitest": "^4.1.10"
+    "typescript": "^5"
   },
   "msw": {
     "workerDirectory": [

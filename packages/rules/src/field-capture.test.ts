@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EVIDENCE_REQUIRED, filingReview } from "./field-capture";
-import type { FieldPhoto, FieldReport, FieldReportPurpose, GpsCapture } from "@/lib/types";
+import type { FieldPhoto, FieldReport, FieldReportPurpose, GpsCapture } from "./types";
 
 function gps(n: number): GpsCapture[] {
   return Array.from({ length: n }, (_, i) => ({

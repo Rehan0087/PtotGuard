@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { disputesNeedingHearing, rulingGate } from "./hearings";
-import type { Dispute, Hearing, HearingSession } from "@/lib/types";
+import type { Dispute, Hearing, HearingSession } from "./types";
 
 function session(attendees: string[]): HearingSession {
   return { id: `s-${attendees.join("-")}`, at: "2026-07-01T05:30:00Z", summary: "…", attendees };

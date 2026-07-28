@@ -1,3 +1,6 @@
+packages:
+  - "packages/*"
+
 # Packages allowed to run install/build scripts (pnpm blocks these by default).
 # - sharp: native image optimization used by Next.js
 # - unrs-resolver: native resolver used by eslint-plugin-import

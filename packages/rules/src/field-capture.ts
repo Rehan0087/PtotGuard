@@ -10,7 +10,7 @@
  * encroachment needs a picture of it — so the requirement is per purpose, not
  * one blanket rule.
  */
-import type { FieldReport, FieldReportPurpose } from "@/lib/types";
+import type { FieldReport, FieldReportPurpose } from "./types";
 
 /**
  * What each survey has to come back with. `gps` is a count because a line needs

@@ -22,7 +22,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMutations, useMutationDecision } from "@/hooks/queries";
 import { mutationStatusTone } from "@/lib/status";
-import { approvalGate, type MutationHold } from "@/lib/mutations";
+import { approvalGate, type MutationHold } from "@plotguard/rules";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";

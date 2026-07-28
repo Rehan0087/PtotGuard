@@ -32,7 +32,7 @@ import {
   useAddFieldReportMedia,
   useUpdateFieldReport,
 } from "@/hooks/queries";
-import { filingReview, type FilingBlocker } from "@/lib/field-capture";
+import { filingReview, type FilingBlocker } from "@plotguard/rules";
 import { formatCoord } from "@/lib/format";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";

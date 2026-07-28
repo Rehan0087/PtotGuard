@@ -10,7 +10,7 @@
  * they like, but until every named party has sat in one of them, there is no
  * ruling to enter — only a decision taken in someone's absence.
  */
-import type { Dispute, Hearing } from "@/lib/types";
+import type { Dispute, Hearing } from "./types";
 
 /**
  * Cases referred to mediation that nobody has listed for hearing yet — the

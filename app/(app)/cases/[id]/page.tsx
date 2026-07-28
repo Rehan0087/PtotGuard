@@ -21,7 +21,7 @@ import {
   useHearingRuling,
   useRecordHearingSession,
 } from "@/hooks/queries";
-import { rulingGate, type RulingBlocker } from "@/lib/hearings";
+import { rulingGate, type RulingBlocker } from "@plotguard/rules";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";

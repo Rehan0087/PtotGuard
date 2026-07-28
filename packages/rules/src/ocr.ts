@@ -5,7 +5,7 @@
  * candidate. The OCR queue uses it to explain a hold, never as the only thing
  * standing between a scan and the record.
  */
-import type { DocumentType, LandDocument, Parcel } from "@/lib/types";
+import type { DocumentType, LandDocument, Parcel } from "./types";
 
 /**
  * What a usable extraction of each document type has to yield. These are the

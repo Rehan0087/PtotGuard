@@ -31,7 +31,7 @@ import {
   useReprocessDocument,
   useSaveExtractedFields,
 } from "@/hooks/queries";
-import { extractionReview, REQUIRED_FIELDS, type ExtractionHold } from "@/lib/ocr";
+import { extractionReview, REQUIRED_FIELDS, type ExtractionHold } from "@plotguard/rules";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";

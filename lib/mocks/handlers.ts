@@ -17,10 +17,13 @@ import type {
   User,
 } from "@/lib/types";
 import { ROLES } from "@/lib/types";
-import { calcInheritance } from "@/lib/inheritance";
-import { filingReview } from "@/lib/field-capture";
-import { rulingGate } from "@/lib/hearings";
-import { deletionGate, reviewDraft } from "@/lib/jurisdictions";
+import {
+  calcInheritance,
+  deletionGate,
+  filingReview,
+  reviewDraft,
+  rulingGate,
+} from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 

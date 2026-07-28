@@ -47,8 +47,8 @@ import {
   rankCandidates,
   COMFORTABLE_LOAD,
   PURPOSE_FOR_DISPUTE,
-} from "@/lib/assignment";
-import type { CandidateBlocker, CandidateNote } from "@/lib/assignment";
+} from "@plotguard/rules";
+import type { CandidateBlocker, CandidateNote } from "@plotguard/rules";
 import { initials } from "@/lib/format";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";

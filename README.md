@@ -80,17 +80,22 @@ hooks/
   queries.ts           # All TanStack Query hooks — the data API for screens
   use-debounced-value.ts  # Keeps keystroke-driven queries off every keypress
   use-theme.ts         # Tiny SSR-safe light/dark theme
+packages/
+  rules/               # ★ @plotguard/rules — the shared contract (see below)
+    src/
+      types/           # The domain model — single source of truth
+      inheritance.ts   # Pure Faraiz + Hindu succession calc
+      mutations.ts     # Pure namjari approval gate (objection window + objections)
+      ocr.ts           # Pure extraction gate (required fields + register mismatch)
+      field-capture.ts # Pure survey filing gate (evidence required per purpose)
+      hearings.ts      # Pure ruling gate (a party never heard is never ruled against)
+      assignment.ts    # Pure survey-assignment rules (jurisdiction tree + agent load)
+      jurisdictions.ts # Pure hierarchy rules (level ladder, cycles, referential deletes)
+      *.test.ts        # The specification — 191 tests, next to what they specify
 lib/
-  types/               # ★ The domain model — single source of truth
+  types/               # Re-export of @plotguard/rules/types, so `@/lib/types` still works
   i18n/                # ★ Every user-facing string — en + bn dictionaries, hooks
   mocks/               # MSW handlers (the frozen API contract) + seed data + audit-chain
-  inheritance.ts       # Pure Faraiz + Hindu succession calc (shared-package candidate)
-  mutations.ts         # Pure namjari approval gate (objection window + objections)
-  ocr.ts               # Pure extraction gate (required fields + register mismatch)
-  field-capture.ts     # Pure survey filing gate (evidence required per purpose)
-  hearings.ts          # Pure ruling gate (a party never heard is never ruled against)
-  assignment.ts        # Pure survey-assignment rules (jurisdiction tree + agent load)
-  jurisdictions.ts     # Pure hierarchy rules (level ladder, cycles, referential deletes)
   api-client.ts        # The one fetch wrapper (mock ↔ real swap point)
   status.ts            # Domain status → color tone (labels live in the dictionaries)
   format.ts            # Locale-aware date / area / money / coordinate formatting
@@ -106,7 +111,7 @@ store/
 **Data flow:** screen → `hooks/queries.ts` (TanStack Query) → `lib/api-client.ts` →
 MSW handler (`lib/mocks/handlers.ts`) → seed data (`lib/mocks/data.ts`).
 
-- **`lib/types/` is the contract.** Every mock response and every eventual backend DTO
+- **`@plotguard/rules/types` is the contract.** Every mock response and every eventual backend DTO
   conforms to these interfaces. Start here when adding a feature.
 - **`lib/api-client.ts` is the only place that talks to the network.** It attaches the
   active role as a header (stand-in for auth) and is the single swap point for the real API.
@@ -115,19 +120,32 @@ MSW handler (`lib/mocks/handlers.ts`) → seed data (`lib/mocks/data.ts`).
 - **`lib/i18n/dictionaries/` is the string contract.** No user-facing text is written inline in
   a component; `en.ts` defines the shape and `bn.ts` must satisfy it (see [Languages](#languages)).
 
-### The rule modules are the spec
+### `@plotguard/rules` — the shared contract
 
-`lib/inheritance.ts`, `lib/mutations.ts`, `lib/ocr.ts`, `lib/assignment.ts`,
-`lib/jurisdictions.ts`, `lib/field-capture.ts` and `lib/hearings.ts` are pure, have no I/O, and
-encode rules the **backend must enforce server-side**. Prose in a README is not a specification
-you can hand someone, so the sharpest of them are pinned by tests:
+The domain model and every pure rule live in `packages/rules`, a workspace package the frontend
+consumes today and **the backend is meant to consume rather than reimplement**. Nothing in it
+does I/O, touches a framework, or contains a user-facing string: rules return codes plus the
+values their sentence needs, so the same check explains itself per locale in the client and is
+enforced verbatim on the server.
+
+It ships TypeScript source rather than a build artifact, so both sides compile the same files and
+neither can drift onto a stale `dist` — Next is told to transpile it via `transpilePackages`. A
+consumer that wants compiled output has `pnpm --filter @plotguard/rules build`, which emits JS
+plus declarations to `dist`.
+
+`@/lib/types` still resolves: it is now a re-export of `@plotguard/rules/types`, because an
+import path is not worth churning across fifty files to say the same thing.
+
+Prose in a README is not a specification you can hand someone, so the rules are pinned by tests
+that travel with the package:
 
 ```bash
 pnpm test
 ```
 
-`lib/*.test.ts`, run by Vitest against the default node environment — no DOM, no React, no
-fixtures beyond a builder per record type. **All seven modules are covered**, 191 tests. They are
+`packages/rules/src/*.test.ts`, run by Vitest against the default node environment — no DOM, no
+React, no fixtures beyond a builder per record type. **All seven modules are covered**, 191
+tests, and `pnpm test` at the repo root runs them. They are
 written as statements about the domain ("counts attendance across sittings, not within one", "a
 son takes twice a daughter's portion", "a standing objection outranks a closed window") so that a
 reimplementation can be checked against them, and so a change in behaviour has to be argued for
@@ -137,7 +155,7 @@ Faraiz has the most coverage, because it divides land: every worked estate asser
 shares sum to the whole, and the one combination the simplified heir set cannot place is
 asserted to *report* its residue rather than quietly lose it.
 
-Two guards in `lib/jurisdictions.ts` are unreachable by construction rather than merely
+Two guards in `jurisdictions.ts` are unreachable by construction rather than merely
 untested, and the tests say so instead of implying coverage: every node carries exactly one
 `parentId`, so a node inside a cycle can never also have a root ancestor. `buildTree`'s `visited`
 filter and `reviewDraft`'s cycle branch are both defence in depth for data that is *already*
@@ -166,7 +184,7 @@ backend builds against. Endpoint groups: `auth` (`/auth/login`, `/refresh`, `/me
 `inheritance/calculate`, and `audit` (`/:entityType/:id`, `/verify`).
 
 Two are worth noting: `inheritance/calculate` runs the real (simplified) calculator in
-`lib/inheritance.ts`, and `audit/verify` walks a genuine SHA-256 hash chain
+`inheritance.ts`, and `audit/verify` walks a genuine SHA-256 hash chain
 (`lib/mocks/audit-chain.ts`) — the same tamper-evidence guarantee the DB enforces in prod.
 
 **The ledger is live, not a fixture.** Decisions taken in the app are appended to it as they
@@ -186,8 +204,8 @@ before/after object.
 | --- | --- |
 | `PATCH /documents/:id/decision` | Officer clears (`verify`) or rejects a flagged document — fraud review queue. Mirrors the `/mutations/:id/decision` verb. |
 | `GET /audit` | Full ledger for the admin audit page (the spec froze only per-entity + `/verify`). |
-| `POST /jurisdictions` · `PATCH /jurisdictions/:id` · `DELETE /jurisdictions/:id` | Editing the administrative tree (the spec froze only the `GET`). `422` when the body breaks a rule in `lib/jurisdictions.ts`, `409` when other records still point at the node. |
-| `PATCH /field-reports/:id` | The agent's own edits to a survey they are carrying out — status along the ladder, notes, and filing. `status: "completed"` is the filing and `422`s with a code from `lib/field-capture.ts` when the evidence that purpose requires is missing. |
+| `POST /jurisdictions` · `PATCH /jurisdictions/:id` · `DELETE /jurisdictions/:id` | Editing the administrative tree (the spec froze only the `GET`). `422` when the body breaks a rule in `jurisdictions.ts`, `409` when other records still point at the node. |
+| `PATCH /field-reports/:id` | The agent's own edits to a survey they are carrying out — status along the ladder, notes, and filing. `status: "completed"` is the filing and `422`s with a code from `field-capture.ts` when the evidence that purpose requires is missing. |
 | `PATCH /policies` | Admin edits to fees, the objection window, and the fraud threshold (the spec froze only the `GET`). |
 | `POST /hearings/:id/sessions` | Recording a sitting. The ruling gate reads these, so this is the write that unblocks a decision. `422` when the summary is empty. |
 
@@ -256,12 +274,12 @@ so there is no static shell worth keeping.
 
 ### Rules explain themselves in both languages
 
-`lib/mutations.ts`, `lib/ocr.ts`, `lib/jurisdictions.ts`, `lib/assignment.ts` and
-`lib/inheritance.ts` used to return English sentences. They now return **codes plus the values
+`mutations.ts`, `ocr.ts`, `jurisdictions.ts`, `assignment.ts` and
+`inheritance.ts` used to return English sentences. They now return **codes plus the values
 the sentence needs**:
 
 ```ts
-// lib/mutations.ts
+// mutations.ts
 hold: { code: "objection-window", days: 3 }
 // the screen: t.pages.mutations.hold.objectionWindow(3)
 ```
@@ -356,7 +374,7 @@ to a parcel.
 
 ### Mutations and the approval gate
 
-A namjari can't be approved just because an officer clicks approve. `lib/mutations.ts`
+A namjari can't be approved just because an officer clicks approve. `mutations.ts`
 (`approvalGate`) is the pure rule: a **standing objection** blocks approval outright, and an
 **open statutory objection window** blocks it until the window closes. Rejection stays
 available in both cases — an officer can turn down a bad application without waiting out the
@@ -366,7 +384,7 @@ The screen renders the *reason* for a hold, not just a disabled button, and the 
 takes an inline confirmation naming the incoming owner, since the transfer is what actually
 moves the record.
 
-Treat `approvalGate` the way you treat `lib/inheritance.ts` — the backend must enforce the
+Treat `approvalGate` the way you treat `inheritance.ts` — the backend must enforce the
 same rule server-side; this copy exists so the UI can explain itself.
 
 The gate returns a **code**, not a sentence (`{ code: "objections", count: 2 }`), and the screen
@@ -380,7 +398,7 @@ Unreadable / Reading / Queued**) double as the filter, so the pipeline and the w
 same control. A document leaves the queue once an officer has accepted, returned, or escalated
 it — the queue holds work, not history.
 
-`lib/ocr.ts` (`extractionReview`) is the pure rule, and it is stricter than "did the reader
+`ocr.ts` (`extractionReview`) is the pure rule, and it is stricter than "did the reader
 finish":
 
 - **`REQUIRED_FIELDS`** says what each document type has to yield (a title deed needs Dag No,
@@ -406,7 +424,7 @@ existing `/decision` verb.
 and what each agent is carrying, and the visits already in flight. The roster tiles double as
 the filter for the visit list.
 
-`lib/assignment.ts` is the pure rule set:
+`assignment.ts` is the pure rule set:
 
 - **`covers()`** walks the jurisdiction tree, so a district survey officer covers every upazila
   and mouza beneath them while a mouza-level amin does not. Sending someone outside their area
@@ -432,7 +450,7 @@ detail screen reflects the booking without any extra call.
 standing on the land. It moves the visit along its status ladder (assigned → en route → on
 site), collects GPS points and photos, and takes the findings that the case will actually read.
 
-`lib/field-capture.ts` (`filingReview`) is the pure rule, and it is a rule about *evidence*:
+`field-capture.ts` (`filingReview`) is the pure rule, and it is a rule about *evidence*:
 
 - **`EVIDENCE_REQUIRED` is per purpose, not one blanket minimum.** A boundary survey needs two
   GPS points because a line needs two ends; a possession check needs a photograph, because what
@@ -477,7 +495,7 @@ each, and the ruling. Recording a sitting is the write that moves the case — a
 sitting on record is `in-hearing`, not merely `scheduled`, so the mediator never sets a status
 by hand.
 
-`lib/hearings.ts` (`rulingGate`) is the pure rule, and the rule that matters is older than the
+`hearings.ts` (`rulingGate`) is the pure rule, and the rule that matters is older than the
 software: **a case is not decided against someone who was never heard.**
 
 - **Attendance is aggregated across sittings, not per sitting.** A party who came to the first
@@ -517,7 +535,7 @@ content, and the case is where it is read.
 `covers()`) who may be sent to survey what. The tree is the primary control: selecting a node
 opens an inspector with what is registered under it, the edit form, and the delete gate.
 
-`lib/jurisdictions.ts` is the pure rule set. Three of its rules are easy to miss and each one
+`jurisdictions.ts` is the pure rule set. Three of its rules are easy to miss and each one
 corrupts the tree:
 
 - **The ladder is strict** — Division › District › Upazila › Mouza, one rung at a time. A mouza
@@ -544,7 +562,7 @@ save, alongside the sibling-name and stale-descendant-prefix warnings. Uniquenes
 a deleted row, or a cycle. The screen renders those in their own block, because a jurisdiction
 nobody can see is one nobody can fix.
 
-Treat this module the way you treat `lib/inheritance.ts` and `lib/mutations.ts`: the backend must
+Treat this module the way you treat `inheritance.ts` and `mutations.ts`: the backend must
 enforce the same rules server-side. The mock already does — `handlers.ts` runs `reviewDraft` and
 `deletionGate` on every write and answers `422` / `409`, so the client copy explains a refusal
 while the server copy is what actually refuses.

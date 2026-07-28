@@ -5,7 +5,7 @@
  * sent to a parcel, and every parcel and user hangs off a node in it. A shared-
  * package candidate alongside lib/inheritance.ts, lib/mutations.ts, lib/ocr.ts.
  */
-import type { Jurisdiction, JurisdictionLevel, Parcel, User } from "@/lib/types";
+import type { Jurisdiction, JurisdictionLevel, Parcel, User } from "./types";
 
 /** The ladder, top down. A node's parent sits exactly one rung above it. */
 export const LEVELS: JurisdictionLevel[] = ["division", "district", "upazila", "mouza"];

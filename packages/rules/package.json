@@ -1,0 +1,23 @@
+{
+  "name": "@plotguard/rules",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PlotGuard's domain model and the pure rules that govern it. No I/O, no framework — the same checks the frontend explains and the backend enforces.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}

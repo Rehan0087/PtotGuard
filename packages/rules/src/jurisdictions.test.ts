@@ -13,7 +13,7 @@ import {
   usageOf,
   type JurisdictionDraft,
 } from "./jurisdictions";
-import type { Jurisdiction, Parcel, User } from "@/lib/types";
+import type { Jurisdiction, Parcel, User } from "./types";
 
 /**
  * Cumilla, one branch deep on every rung:

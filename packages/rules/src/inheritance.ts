@@ -16,7 +16,7 @@ import type {
   HeirShare,
   Heir,
   HeirRelation,
-} from "@/lib/types";
+} from "./types";
 
 function count(heirs: Heir[], rel: HeirRelation): number {
   return heirs.filter((h) => h.relation === rel).reduce((s, h) => s + h.count, 0);

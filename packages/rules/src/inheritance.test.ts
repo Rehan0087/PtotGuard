@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calcInheritance } from "./inheritance";
-import type { Heir, HeirRelation, InheritanceResult } from "@/lib/types";
+import type { Heir, HeirRelation, InheritanceResult } from "./types";
 
 /** `{ wife: 1, son: 2 }` reads closer to the worked examples than a Heir[] does. */
 function heirs(spec: Partial<Record<HeirRelation, number>>): Heir[] {

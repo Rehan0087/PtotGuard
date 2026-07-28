@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { REQUIRED_FIELDS, extractionReview } from "./ocr";
-import type { DocumentType, LandDocument, OcrStatus, Parcel } from "@/lib/types";
+import type { DocumentType, LandDocument, OcrStatus, Parcel } from "./types";
 
 function doc(over: Partial<LandDocument> = {}): LandDocument {
   return {

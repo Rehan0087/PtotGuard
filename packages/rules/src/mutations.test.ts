@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { approvalGate } from "./mutations";
-import type { Mutation, MutationObjection } from "@/lib/types";
+import type { Mutation, MutationObjection } from "./types";
 
 const NOW = new Date("2026-07-20T10:00:00Z");
 

@@ -17,7 +17,7 @@ import type {
   Parcel,
   User,
   UserStatus,
-} from "@/lib/types";
+} from "./types";
 
 /** Chattogram › Cumilla › Debidwar › {Rajamehar, Payalgacha}, plus a second upazila. */
 const JURISDICTIONS: Jurisdiction[] = [

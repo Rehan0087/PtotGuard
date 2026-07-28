@@ -53,7 +53,7 @@ import {
   type JurisdictionNode,
   type JurisdictionUsage,
   type JurisdictionWarning,
-} from "@/lib/jurisdictions";
+} from "@plotguard/rules";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import type { Dictionary } from "@/lib/i18n";

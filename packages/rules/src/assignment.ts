@@ -14,7 +14,7 @@ import type {
   Parcel,
   User,
   UserStatus,
-} from "@/lib/types";
+} from "./types";
 
 /** A visit that has been given out but not yet closed. */
 export const OPEN_VISIT_STATUSES: FieldReportStatus[] = [

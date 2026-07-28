@@ -4,7 +4,7 @@
  * lib/inheritance.ts. The UI uses it to explain a hold, never as the only
  * thing standing between a request and an approval.
  */
-import type { Mutation } from "@/lib/types";
+import type { Mutation } from "./types";
 
 const DAY_MS = 86_400_000;
 
