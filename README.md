@@ -38,6 +38,8 @@ Open <http://localhost:3000>. The app starts on the **Citizen** portal; use the
 | `pnpm build` | Production build |
 | `pnpm start` | Serve the production build |
 | `pnpm lint` | ESLint |
+| `pnpm test` | Unit tests for the rule modules (Vitest) |
+| `pnpm test:watch` | The same, in watch mode |
 | `pnpm exec tsc --noEmit` | Type-check |
 
 ---
@@ -112,6 +114,27 @@ MSW handler (`lib/mocks/handlers.ts`) → seed data (`lib/mocks/data.ts`).
   switching roles refetches automatically.
 - **`lib/i18n/dictionaries/` is the string contract.** No user-facing text is written inline in
   a component; `en.ts` defines the shape and `bn.ts` must satisfy it (see [Languages](#languages)).
+
+### The rule modules are the spec
+
+`lib/inheritance.ts`, `lib/mutations.ts`, `lib/ocr.ts`, `lib/assignment.ts`,
+`lib/jurisdictions.ts`, `lib/field-capture.ts` and `lib/hearings.ts` are pure, have no I/O, and
+encode rules the **backend must enforce server-side**. Prose in a README is not a specification
+you can hand someone, so the sharpest of them are pinned by tests:
+
+```bash
+pnpm test
+```
+
+`lib/*.test.ts`, run by Vitest against the default node environment — no DOM, no React, no
+fixtures beyond a builder per record type. They are written as statements about the domain
+("counts attendance across sittings, not within one", "a son takes twice a daughter's portion",
+"a standing objection outranks a closed window") so that a reimplementation can be checked
+against them, and so a change in behaviour has to be argued for rather than merely committed.
+
+Faraiz has the most coverage, because it divides land: every worked estate asserts that the
+shares sum to the whole, and the one combination the simplified heir set cannot place is
+asserted to *report* its residue rather than quietly lose it.
 
 ### Mock → real backend
 
