@@ -6,9 +6,14 @@ packages:
 # - sharp: native image optimization used by Next.js
 # - unrs-resolver: native resolver used by eslint-plugin-import
 # - @swc/core: native transformer; Vitest uses it to compile the API's decorators
+# - @prisma/engines, prisma: postinstall fetches the native query-engine binary
+# - esbuild: postinstall fetches its native binary; used by tsx to run the seed script
 allowBuilds:
   # msw's worker is placed manually via `msw init public/`, no build script needed
+  '@prisma/engines': true
   '@swc/core': true
+  esbuild: true
   msw: false
+  prisma: true
   sharp: true
   unrs-resolver: true

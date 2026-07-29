@@ -1,0 +1,550 @@
+// PlotGuard Core API — schema.
+//
+// Mirrors packages/rules/src/types/ exactly: every enum here is a union type
+// there, so a value the domain model cannot represent is a value Postgres
+// refuses to store, not just one the frontend refuses to render.
+//
+// What is a real table vs. a Json column follows one rule: does the row have
+// identity independent of its parent? A DisputeParty has no id in the domain
+// model and is never addressed on its own — it is Json. An OwnershipRecord has
+// an id, is queried on its own (parcel history), and outlives any single
+// write — it is a table. The same split explains every choice below.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// The connection string lives in prisma.config.ts, not here — Prisma 7 moved
+// it to the driver adapter so Migrate and the runtime client share one
+// definition of "how to connect" instead of two.
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Enums, one per domain union type ---------------------------------------
+
+enum Role {
+  citizen
+  land_office @map("land-office")
+  field_agent @map("field-agent")
+  mediator
+  admin
+}
+
+enum JurisdictionLevel {
+  division
+  district
+  upazila
+  mouza
+}
+
+enum UserStatus {
+  active
+  suspended
+  invited
+}
+
+enum LandUse {
+  agricultural
+  residential
+  commercial
+  industrial
+  mixed
+  vacant
+}
+
+enum OwnershipType {
+  sole
+  joint
+  inherited
+  corporate
+  government
+}
+
+enum RegistryStatus {
+  verified
+  pending
+  disputed
+  flagged
+  under_mutation @map("under-mutation")
+}
+
+enum AcquisitionType {
+  purchase
+  inheritance
+  gift
+  grant
+  partition
+  court_order @map("court-order")
+}
+
+enum DocumentType {
+  title_deed            @map("title-deed")
+  sale_deed              @map("sale-deed")
+  mutation_order          @map("mutation-order")
+  survey_report            @map("survey-report")
+  id_proof                  @map("id-proof")
+  tax_receipt                @map("tax-receipt")
+  inheritance_affidavit        @map("inheritance-affidavit")
+  court_order                    @map("court-order")
+  photo
+}
+
+enum OcrStatus {
+  pending
+  processing
+  extracted
+  failed
+}
+
+enum VerificationStatus {
+  unverified
+  verified
+  flagged
+  rejected
+}
+
+enum DisputeType {
+  boundary
+  ownership
+  inheritance
+  encroachment
+  fraud
+  easement
+}
+
+enum DisputeStatus {
+  submitted
+  under_review           @map("under-review")
+  field_visit_scheduled    @map("field-visit-scheduled")
+  in_mediation               @map("in-mediation")
+  hearing_scheduled            @map("hearing-scheduled")
+  resolved
+  rejected
+  withdrawn
+}
+
+enum Priority {
+  low
+  medium
+  high
+}
+
+enum DisputeEventType {
+  filed
+  assigned
+  comment
+  status_change   @map("status-change")
+  field_visit       @map("field-visit")
+  document_added      @map("document-added")
+  hearing
+  resolved
+}
+
+enum MutationType {
+  sale
+  inheritance
+  gift
+  partition
+  correction
+}
+
+enum MutationStatus {
+  submitted
+  verification
+  objection_period @map("objection-period")
+  approved
+  rejected
+}
+
+enum FieldReportPurpose {
+  boundary_survey    @map("boundary-survey")
+  encroachment_check   @map("encroachment-check")
+  possession_verify      @map("possession-verify")
+  measurement
+}
+
+enum FieldReportStatus {
+  assigned
+  en_route    @map("en-route")
+  in_progress   @map("in-progress")
+  completed
+  cancelled
+}
+
+enum HearingStatus {
+  scheduled
+  in_hearing    @map("in-hearing")
+  deliberation
+  ruled
+  appealed
+}
+
+enum NotificationSeverity {
+  info
+  success
+  warning
+  critical
+}
+
+enum AuditAction {
+  create
+  update
+  status_change @map("status-change")
+  approve
+  reject
+  assign
+  ruling
+  upload
+  delete
+}
+
+// --- Jurisdiction -------------------------------------------------------
+
+model Jurisdiction {
+  id       String            @id
+  code     String            @unique
+  name     String
+  nameBn   String?
+  level    JurisdictionLevel
+  parentId String?
+  parent   Jurisdiction?     @relation("JurisdictionTree", fields: [parentId], references: [id])
+  children Jurisdiction[]    @relation("JurisdictionTree")
+
+  users   User[]
+  parcels Parcel[]
+
+  @@index([parentId])
+  @@map("jurisdictions")
+}
+
+// --- User -----------------------------------------------------------------
+
+model User {
+  id             String     @id
+  name           String
+  email          String     @unique
+  phone          String?
+  role           Role
+  jurisdictionId String
+  jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id])
+  /// Masked in every response the frontend already sees — see LandDocument note.
+  nationalId     String?
+  avatarUrl      String?
+  status         UserStatus @default(active)
+  title          String?
+  /// Only present once real auth lands (Phase 4). Never selected by default.
+  passwordHash   String?
+  createdAt      DateTime   @default(now())
+
+  parcelsOwned         Parcel[]              @relation("ParcelOwner")
+  ownershipRecords     OwnershipRecord[]
+  documentsOwned       LandDocument[]        @relation("DocumentOwner")
+  documentsUploaded    LandDocument[]        @relation("DocumentUploader")
+  disputesFiled        Dispute[]             @relation("DisputeFiledBy")
+  disputesAsOfficer    Dispute[]             @relation("DisputeOfficer")
+  disputesAsAgent      Dispute[]             @relation("DisputeAgent")
+  disputesAsMediator   Dispute[]             @relation("DisputeMediator")
+  disputeEvents        DisputeEvent[]
+  mutationsRequested   Mutation[]            @relation("MutationRequestedBy")
+  mutationsAsOfficer   Mutation[]            @relation("MutationOfficer")
+  fieldReportsAssigned FieldReport[]
+  hearingsAsMediator   Hearing[]
+  notifications        AppNotification[]
+  auditActions         AuditEvent[]
+
+  @@index([jurisdictionId])
+  @@map("users")
+}
+
+// --- Parcel -----------------------------------------------------------------
+
+model Parcel {
+  id             String         @id
+  dagNo          String
+  khatianNo      String
+  title          String
+  jurisdictionId String
+  jurisdiction   Jurisdiction   @relation(fields: [jurisdictionId], references: [id])
+  landUse        LandUse
+  /// { value: number, unit: AreaUnit } — see packages/rules/src/types/common.ts.
+  area           Json
+  ownerId        String
+  owner          User           @relation("ParcelOwner", fields: [ownerId], references: [id])
+  ownershipType  OwnershipType
+  registryStatus RegistryStatus
+  /// { lat, lng }
+  centroid       Json
+  /// GeoJSON Polygon, optional — see GeoPolygon.
+  boundary       Json?
+  /// { amount, currency }, optional
+  marketValue    Json?
+  registeredAt   DateTime
+  lastMutationAt DateTime?
+
+  ownershipRecords OwnershipRecord[]
+  documents        LandDocument[]
+  disputes         Dispute[]
+  mutations        Mutation[]
+  fieldReports     FieldReport[]
+
+  @@unique([dagNo, khatianNo])
+  @@index([jurisdictionId])
+  @@index([ownerId])
+  @@map("parcels")
+}
+
+model OwnershipRecord {
+  id              String          @id
+  parcelId        String
+  parcel          Parcel          @relation(fields: [parcelId], references: [id])
+  ownerId         String
+  owner           User            @relation(fields: [ownerId], references: [id])
+  ownerName       String
+  acquisitionType AcquisitionType
+  fromDate        DateTime
+  /// null = current owner — see OwnershipRecord in the domain model.
+  toDate          DateTime?
+  documentId      String?
+
+  @@index([parcelId])
+  @@map("ownership_records")
+}
+
+// --- Documents ----------------------------------------------------------
+
+model LandDocument {
+  id                 String              @id
+  parcelId           String?
+  parcel             Parcel?             @relation(fields: [parcelId], references: [id])
+  ownerId            String?
+  owner              User?               @relation("DocumentOwner", fields: [ownerId], references: [id])
+  type               DocumentType
+  fileName           String
+  mimeType           String
+  sizeBytes          Int
+  pageCount          Int?
+  uploadedAt         DateTime            @default(now())
+  uploadedById       String
+  uploadedBy         User                @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  ocrStatus          OcrStatus           @default(pending)
+  verificationStatus VerificationStatus  @default(unverified)
+  /// 0..1 — see LandDocument.fraudScore.
+  fraudScore         Float?
+  /// Record<string, string> pulled by OCR — see LandDocument.extractedFields.
+  extractedFields    Json?
+  thumbnailUrl       String?
+
+  @@index([parcelId])
+  @@index([ownerId])
+  @@map("documents")
+}
+
+// --- Disputes -------------------------------------------------------------
+
+model Dispute {
+  id                 String        @id
+  caseNumber         String        @unique
+  parcelId           String
+  parcel             Parcel        @relation(fields: [parcelId], references: [id])
+  parcelDagNo        String
+  type               DisputeType
+  status             DisputeStatus @default(submitted)
+  priority           Priority      @default(medium)
+  filedById          String
+  filedBy            User          @relation("DisputeFiledBy", fields: [filedById], references: [id])
+  filedByName        String
+  filedAt            DateTime      @default(now())
+  description        String
+  /// DisputeParty[] — { name, role, userId? }. No independent id in the
+  /// domain model, so it travels with its parent rather than its own table.
+  parties            Json
+  assignedOfficerId  String?
+  assignedOfficer    User?         @relation("DisputeOfficer", fields: [assignedOfficerId], references: [id])
+  assignedAgentId    String?
+  assignedAgent      User?         @relation("DisputeAgent", fields: [assignedAgentId], references: [id])
+  assignedMediatorId String?
+  assignedMediator   User?         @relation("DisputeMediator", fields: [assignedMediatorId], references: [id])
+  /// Document ids as evidence — kept as an id array (not a join table) because
+  /// order is meaningful (filed order) and rows are never queried from this side.
+  evidenceDocumentIds String[]
+  hearingDate        DateTime?
+  resolution         String?
+  updatedAt          DateTime      @updatedAt
+
+  events   DisputeEvent[]
+  hearings Hearing[]
+  fieldReports FieldReport[]
+
+  @@index([parcelId])
+  @@index([status])
+  @@index([assignedOfficerId])
+  @@index([assignedAgentId])
+  @@index([assignedMediatorId])
+  @@map("disputes")
+}
+
+model DisputeEvent {
+  id          String           @id
+  disputeId   String
+  dispute     Dispute          @relation(fields: [disputeId], references: [id])
+  at          DateTime         @default(now())
+  type        DisputeEventType
+  title       String
+  /// DisputeEventContent — see the domain model for why this is preferred
+  /// over `title` when present.
+  content     Json?
+  description String?
+  actorId     String?
+  actor       User?            @relation(fields: [actorId], references: [id])
+  actorName   String?
+
+  @@index([disputeId])
+  @@map("dispute_events")
+}
+
+// --- Mutations (namjari) -----------------------------------------------
+
+model Mutation {
+  id                    String         @id
+  mutationNumber        String         @unique
+  parcelId              String
+  parcel                Parcel         @relation(fields: [parcelId], references: [id])
+  parcelDagNo           String
+  type                  MutationType
+  status                MutationStatus @default(submitted)
+  fromOwnerName         String
+  toOwnerName           String
+  requestedById         String
+  requestedBy           User           @relation("MutationRequestedBy", fields: [requestedById], references: [id])
+  requestedAt           DateTime       @default(now())
+  assignedOfficerId     String?
+  assignedOfficer       User?          @relation("MutationOfficer", fields: [assignedOfficerId], references: [id])
+  documentIds           String[]
+  /// MutationObjection[] — { id, by, at, reason }. The frozen spec has no
+  /// route to address one independently (no POST .../objections), so it
+  /// stays Json rather than becoming a table with no way to reach a row.
+  objections            Json           @default("[]")
+  /// { amount, currency }, optional
+  fee                   Json?
+  objectionWindowEndsAt DateTime?
+  decidedAt             DateTime?
+
+  fieldReports FieldReport[]
+
+  @@index([parcelId])
+  @@index([status])
+  @@map("mutations")
+}
+
+// --- Field reports ----------------------------------------------------------
+
+model FieldReport {
+  id              String             @id
+  parcelId        String
+  parcel          Parcel             @relation(fields: [parcelId], references: [id])
+  parcelDagNo     String
+  disputeId       String?
+  dispute         Dispute?           @relation(fields: [disputeId], references: [id])
+  mutationId      String?
+  mutation        Mutation?          @relation(fields: [mutationId], references: [id])
+  purpose         FieldReportPurpose
+  status          FieldReportStatus  @default(assigned)
+  assignedAgentId String
+  assignedAgent   User               @relation(fields: [assignedAgentId], references: [id])
+  scheduledFor    DateTime
+  addressHint     String?
+  /// GpsCapture[] — accumulate via POST .../media, never addressed singly.
+  gpsCaptures     Json               @default("[]")
+  /// FieldPhoto[] — same reasoning as gpsCaptures.
+  photos          Json               @default("[]")
+  notes           String?
+  submittedAt     DateTime?
+
+  @@index([parcelId])
+  @@index([disputeId])
+  @@index([assignedAgentId])
+  @@index([status])
+  @@map("field_reports")
+}
+
+// --- Hearings ---------------------------------------------------------------
+
+model Hearing {
+  id          String        @id
+  caseNumber  String        @unique
+  disputeId   String
+  dispute     Dispute       @relation(fields: [disputeId], references: [id])
+  parcelDagNo String
+  mediatorId  String
+  mediator    User          @relation(fields: [mediatorId], references: [id])
+  status      HearingStatus @default(scheduled)
+  /// string[] of party names — see rulingGate() in @plotguard/rules, which
+  /// matches attendance against these by normalised name, not by user id.
+  parties     Json
+  hearingDate DateTime?
+  /// HearingSession[] — appended by POST .../sessions, never addressed singly.
+  sessions    Json          @default("[]")
+  ruling      String?
+  ruledAt     DateTime?
+
+  @@index([disputeId])
+  @@index([mediatorId])
+  @@map("hearings")
+}
+
+// --- Notifications ------------------------------------------------------
+
+model AppNotification {
+  id       String               @id
+  userId   String
+  user     User                 @relation(fields: [userId], references: [id])
+  at       DateTime             @default(now())
+  severity NotificationSeverity @default(info)
+  title    String
+  body     String
+  /// NotificationContent — preferred over title/body when present.
+  content  Json?
+  read     Boolean              @default(false)
+  href     String?
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// --- Policy (system configuration; one row) --------------------------------
+
+model Policy {
+  /// Fixed to "singleton" — one row, upserted, never created a second time.
+  id                   String @id @default("singleton")
+  mutationFeeBdt       Int
+  objectionWindowDays  Int
+  fraudScoreThreshold  Float
+
+  @@map("policies")
+}
+
+// --- Audit ledger -------------------------------------------------------
+
+model AuditEvent {
+  id         String       @id
+  entityType String
+  entityId   String
+  action     AuditAction
+  actorId    String
+  actor      User         @relation(fields: [actorId], references: [id])
+  actorName  String?
+  /// Hashed as canonicalised (sorted-key) JSON — see AuditService. Storing it
+  /// as jsonb (rather than the exact bytes hashed) is safe only because both
+  /// the writer and the verifier canonicalise the same way; Prisma/Postgres
+  /// are free to reorder keys on the way in.
+  payload    Json
+  createdAt  DateTime     @default(now())
+  /// "" for the genesis event.
+  prevHash   String
+  hash       String       @unique
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_events")
+}
