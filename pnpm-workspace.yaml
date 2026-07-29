@@ -1,11 +1,14 @@
 packages:
   - "packages/*"
+  - "apps/*"
 
 # Packages allowed to run install/build scripts (pnpm blocks these by default).
 # - sharp: native image optimization used by Next.js
 # - unrs-resolver: native resolver used by eslint-plugin-import
+# - @swc/core: native transformer; Vitest uses it to compile the API's decorators
 allowBuilds:
   # msw's worker is placed manually via `msw init public/`, no build script needed
+  '@swc/core': true
   msw: false
   sharp: true
   unrs-resolver: true

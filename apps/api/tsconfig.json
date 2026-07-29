@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "strictNullChecks": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "declaration": false,
+    "incremental": true,
+    // Inside dist on purpose: nest-cli's `deleteOutDir` wipes dist, and a build
+    // info file that outlives it reports outputs as current that no longer
+    // exist — the build then "succeeds" and emits nothing.
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    // Nest resolves constructor dependencies from emitted parameter types.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  // Specs are included here so `typecheck` covers them; `tsconfig.build.json`
+  // is what drops them from the emitted output.
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

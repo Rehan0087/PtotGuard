@@ -1,6 +1,13 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    // Emitted as CommonJS: the API is a NestJS app compiled to CJS and cannot
+    // `require()` an ESM package. Next consumes CJS without noticing, so one
+    // build artifact serves both rather than a dual-format setup nobody needs.
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    // Incompatible with rewriting ESM syntax to CJS on emit.
+    "verbatimModuleSyntax": false,
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,

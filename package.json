@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "pnpm --filter @plotguard/rules build && next dev",
+    "build": "pnpm --filter @plotguard/rules build && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "pnpm --filter @plotguard/rules test",

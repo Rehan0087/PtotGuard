@@ -1,0 +1,36 @@
+{
+  "name": "@plotguard/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PlotGuard Core API — the real backend behind the frozen spec the frontend already codes against.",
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@plotguard/rules": "workspace:*",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/testing": "^11.0.0",
+    "@swc/core": "^1.10.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^20",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "typescript": "^5",
+    "unplugin-swc": "^1.5.1",
+    "vitest": "^4.1.10"
+  }
+}
