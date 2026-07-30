@@ -18,6 +18,7 @@ import type {
 } from "@/lib/types";
 import { ROLES } from "@/lib/types";
 import {
+  approvalGate,
   calcInheritance,
   deletionGate,
   filingReview,
@@ -477,11 +478,24 @@ export const handlers = [
   }),
 
   // Mutations (namjari) ----------------------------------------------------
+  // approvalGate() used to run client-side only (the button disables, but
+  // nothing here checked it) — exactly the gap this file's own header says
+  // this project avoids: a UI that explains a hold is not a server that
+  // enforces one. A request that bypassed the disabled button would have
+  // gone straight through.
   http.patch(`${API}/mutations/:id/decision`, async ({ params, request }) => {
     await latency();
     const mutation = db.mutations.find((m) => m.id === params.id);
     if (!mutation) return notFound("Mutation not found");
     const { decision } = (await request.json()) as { decision: "approve" | "reject" };
+
+    if (mutation.status === "approved" || mutation.status === "rejected") {
+      return conflict("This mutation has already been decided.");
+    }
+    const gate = approvalGate(mutation);
+    const allowed = decision === "approve" ? gate.canApprove : gate.canReject;
+    if (!allowed) return unprocessable({ decision: gate.hold ?? undefined });
+
     mutation.status = decision === "approve" ? "approved" : "rejected";
     mutation.decidedAt = new Date().toISOString();
 
