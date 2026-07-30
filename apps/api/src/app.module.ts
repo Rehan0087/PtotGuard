@@ -5,13 +5,25 @@ import { HealthController } from "./health/health.controller";
 import { PrismaModule } from "./prisma/prisma.module";
 import { JurisdictionsModule } from "./jurisdictions/jurisdictions.module";
 import { ParcelsModule } from "./parcels/parcels.module";
+import { UsersModule } from "./users/users.module";
+import { DocumentsModule } from "./documents/documents.module";
+import { DisputesModule } from "./disputes/disputes.module";
+import { PoliciesModule } from "./policies/policies.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
  * here as they are built; each one wraps the matching group of the frozen spec.
  */
 @Module({
-  imports: [PrismaModule, JurisdictionsModule, ParcelsModule],
+  imports: [
+    PrismaModule,
+    JurisdictionsModule,
+    ParcelsModule,
+    UsersModule,
+    DocumentsModule,
+    DisputesModule,
+    PoliciesModule,
+  ],
   controllers: [HealthController],
   providers: [
     // Registered here rather than in main.ts so it is also active in tests that

@@ -4,15 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { currentUserId } from "../auth/dev-current-user";
 import { NotFoundError } from "../common/domain-exceptions";
 import { pageParams, paginated } from "../common/pagination";
-
-/** Mirrors CLOSED_DISPUTE_STATUSES in @plotguard/rules' assignment.ts (unexported). */
-const CLOSED_DISPUTE_STATUSES = ["resolved", "rejected", "withdrawn"];
-
-type GeoPoint = { lat: number; lng: number };
-
-function distance(a: GeoPoint, b: GeoPoint): number {
-  return Math.hypot(a.lat - b.lat, a.lng - b.lng);
-}
+import { type GeoPoint, distance, openDisputeCounts, toParcel } from "./parcel-view";
 
 @Controller("parcels")
 export class ParcelsController {
@@ -59,8 +51,8 @@ export class ParcelsController {
         })
       : rows;
 
-    const openCounts = await this.openDisputeCounts(filtered.map((p) => p.id));
-    const items = filtered.map((p) => this.toParcel(p, openCounts.get(p.id) ?? 0));
+    const counts = await openDisputeCounts(this.prisma, filtered.map((p) => p.id));
+    const items = filtered.map((p) => toParcel(p, counts.get(p.id) ?? 0));
 
     const params = pageParams(query);
     const page = items.slice(params.skip, params.skip + params.take);
@@ -80,9 +72,9 @@ export class ParcelsController {
       this.prisma.landDocument.findMany({ where: { parcelId: id } }),
       this.prisma.dispute.findMany({ where: { parcelId: id } }),
     ]);
-    const openCount = disputes.filter((d) => !CLOSED_DISPUTE_STATUSES.includes(d.status)).length;
+    const counts = await openDisputeCounts(this.prisma, [id]);
 
-    return { parcel: this.toParcel(parcel, openCount), ownership, documents, disputes };
+    return { parcel: toParcel(parcel, counts.get(id) ?? 0), ownership, documents, disputes };
   }
 
   @Get(":id/history")
@@ -103,33 +95,11 @@ export class ParcelsController {
       include: { owner: { select: { name: true } } },
     });
     const origin = target.centroid as GeoPoint;
-    const openCounts = await this.openDisputeCounts(others.map((p) => p.id));
+    const counts = await openDisputeCounts(this.prisma, others.map((p) => p.id));
 
     return others
       .sort((a, b) => distance(a.centroid as GeoPoint, origin) - distance(b.centroid as GeoPoint, origin))
       .slice(0, 4)
-      .map((p) => this.toParcel(p, openCounts.get(p.id) ?? 0));
-  }
-
-  /** One grouped query for however many parcel ids, not one count query each. */
-  private async openDisputeCounts(parcelIds: string[]): Promise<Map<string, number>> {
-    if (parcelIds.length === 0) return new Map();
-    const groups = await this.prisma.dispute.groupBy({
-      by: ["parcelId"],
-      where: { parcelId: { in: parcelIds }, status: { notIn: CLOSED_DISPUTE_STATUSES } },
-      _count: true,
-    });
-    return new Map(groups.map((g) => [g.parcelId, g._count]));
-  }
-
-  /** ownerName and openDisputeCount are denormalised in the domain model
-   * (packages/rules/src/types/parcel.ts) for a flat in-memory mock; here they
-   * come from a real relation and a live count instead, so nothing goes stale. */
-  private toParcel(
-    row: { owner: { name: string } } & Record<string, unknown>,
-    openDisputeCount: number,
-  ) {
-    const { owner, ...rest } = row;
-    return { ...rest, ownerName: owner.name, openDisputeCount };
+      .map((p) => toParcel(p, counts.get(p.id) ?? 0));
   }
 }
