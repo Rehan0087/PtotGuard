@@ -9,6 +9,10 @@ import { UsersModule } from "./users/users.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { DisputesModule } from "./disputes/disputes.module";
 import { PoliciesModule } from "./policies/policies.module";
+import { MutationsModule } from "./mutations/mutations.module";
+import { FieldReportsModule } from "./field-reports/field-reports.module";
+import { HearingsModule } from "./hearings/hearings.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
@@ -23,6 +27,10 @@ import { PoliciesModule } from "./policies/policies.module";
     DocumentsModule,
     DisputesModule,
     PoliciesModule,
+    MutationsModule,
+    FieldReportsModule,
+    HearingsModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   providers: [
