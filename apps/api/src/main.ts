@@ -1,3 +1,11 @@
+// Before anything reads process.env — PrismaService's constructor does, at
+// Nest's dependency-injection time, well before this file's own code runs
+// again, but after the module graph resolves. Without this, DATABASE_URL is
+// undefined for the real server (prisma.config.ts loads it separately, only
+// for the CLI), the pg pool connects against nothing, $connect() "succeeds"
+// anyway because pool construction doesn't touch the network, and the first
+// real query is what actually fails.
+import "dotenv/config";
 import "reflect-metadata";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";

@@ -3,13 +3,15 @@ import { APP_FILTER } from "@nestjs/core";
 import { HttpExceptionFilter } from "./common/http-exception.filter";
 import { HealthController } from "./health/health.controller";
 import { PrismaModule } from "./prisma/prisma.module";
+import { JurisdictionsModule } from "./jurisdictions/jurisdictions.module";
+import { ParcelsModule } from "./parcels/parcels.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
  * here as they are built; each one wraps the matching group of the frozen spec.
  */
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, JurisdictionsModule, ParcelsModule],
   controllers: [HealthController],
   providers: [
     // Registered here rather than in main.ts so it is also active in tests that
