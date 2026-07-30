@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalize, computeHash, hashInput } from "./audit-hash";
+import { canonicalize, computeHash, hashInput, verifyChain, type StoredAuditEvent } from "./audit-hash";
 
 const EVENT = {
   entityType: "dispute",
@@ -9,6 +9,48 @@ const EVENT = {
   payload: { from: "submitted", to: "under-review" },
   createdAt: "2026-07-21T09:00:00.000Z",
 };
+
+/** A short, genuinely-chained ledger, the way appending it would build one. */
+function chainOf(events: Omit<StoredAuditEvent, "prevHash" | "hash">[]): StoredAuditEvent[] {
+  const chain: StoredAuditEvent[] = [];
+  let prevHash = "";
+  for (const e of events) {
+    const hash = computeHash(prevHash, { ...e, createdAt: e.createdAt.toISOString() });
+    chain.push({ ...e, prevHash, hash });
+    prevHash = hash;
+  }
+  return chain;
+}
+
+const RAW_EVENTS: Omit<StoredAuditEvent, "prevHash" | "hash">[] = [
+  {
+    id: "au-1",
+    entityType: "parcel",
+    entityId: "p-142",
+    action: "create",
+    actorId: "usr-officer",
+    payload: { dagNo: "CS-142/3" },
+    createdAt: new Date("2026-07-15T10:30:00.000Z"),
+  },
+  {
+    id: "au-2",
+    entityType: "dispute",
+    entityId: "ds-417",
+    action: "status-change",
+    actorId: "usr-officer",
+    payload: { from: "submitted", to: "under-review" },
+    createdAt: new Date("2026-07-21T09:00:00.000Z"),
+  },
+  {
+    id: "au-3",
+    entityType: "mutation",
+    entityId: "m-1180",
+    action: "approve",
+    actorId: "usr-officer",
+    payload: { toOwnerName: "Iqbal Enterprise" },
+    createdAt: new Date("2026-06-30T10:00:00.000Z"),
+  },
+];
 
 describe("canonicalize", () => {
   it("sorts object keys recursively", () => {
@@ -63,5 +105,49 @@ describe("hashInput / computeHash", () => {
     // would hash the same as entityId "a" + action "bc". The separator, not
     // just the field values, is part of what is signed.
     expect(hashInput("", EVENT).split("|")).toHaveLength(7);
+  });
+});
+
+describe("verifyChain", () => {
+  it("passes a genuinely chained ledger", () => {
+    const result = verifyChain(chainOf(RAW_EVENTS));
+
+    expect(result).toEqual({ ok: true, checkedCount: 3 });
+  });
+
+  it("passes an empty ledger — nothing to break", () => {
+    expect(verifyChain([])).toEqual({ ok: true, checkedCount: 0 });
+  });
+
+  it("catches a payload edited after the fact, naming which row and its position", () => {
+    const chain = chainOf(RAW_EVENTS);
+    chain[1] = { ...chain[1], payload: { from: "submitted", to: "resolved" } };
+
+    expect(verifyChain(chain)).toEqual({ ok: false, checkedCount: 2, brokenAt: { id: "au-2", index: 1 } });
+  });
+
+  it("catches a row deleted from the middle — the next link's prevHash no longer matches", () => {
+    const chain = chainOf(RAW_EVENTS);
+    chain.splice(1, 1);
+
+    expect(verifyChain(chain).ok).toBe(false);
+    expect(verifyChain(chain).brokenAt?.id).toBe("au-3");
+  });
+
+  it("catches two rows swapped, even though every individual row is untouched", () => {
+    // Same three events, wrong order — prevHash no longer lines up.
+    const chain = chainOf(RAW_EVENTS);
+    [chain[0], chain[1]] = [chain[1], chain[0]];
+
+    expect(verifyChain(chain).ok).toBe(false);
+  });
+
+  it("stops at the first break rather than reporting every downstream row", () => {
+    // Everything after a broken link necessarily fails too — checkedCount
+    // reports where verification stopped, not how many rows disagree.
+    const chain = chainOf(RAW_EVENTS);
+    chain[0] = { ...chain[0], hash: "tampered" };
+
+    expect(verifyChain(chain).checkedCount).toBe(1);
   });
 });

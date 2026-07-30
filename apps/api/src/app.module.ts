@@ -13,6 +13,8 @@ import { MutationsModule } from "./mutations/mutations.module";
 import { FieldReportsModule } from "./field-reports/field-reports.module";
 import { HearingsModule } from "./hearings/hearings.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { AuditModule } from "./audit/audit.module";
+import { AuthModule } from "./auth/auth.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
@@ -31,6 +33,8 @@ import { NotificationsModule } from "./notifications/notifications.module";
     FieldReportsModule,
     HearingsModule,
     NotificationsModule,
+    AuditModule,
+    AuthModule,
   ],
   controllers: [HealthController],
   providers: [

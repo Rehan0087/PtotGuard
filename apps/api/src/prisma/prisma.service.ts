@@ -13,7 +13,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    super({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+    super({
+      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+      // Global, not per-query: a controller that forgets to select around
+      // passwordHash would otherwise serialise it straight into a JSON
+      // response the moment Phase 4 gives it a real value. One place makes
+      // every current and future User query safe by construction.
+      omit: { user: { passwordHash: true } },
+    });
   }
 
   async onModuleInit(): Promise<void> {

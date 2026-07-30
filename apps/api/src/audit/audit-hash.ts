@@ -58,3 +58,48 @@ export function sha256Hex(input: string): string {
 export function computeHash(prevHash: string, event: AuditLinkInput): string {
   return sha256Hex(hashInput(prevHash, event));
 }
+
+/** A ledger row as Prisma returns it — `createdAt` is a Date, not yet a string. */
+export interface StoredAuditEvent {
+  id: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  actorId: string;
+  payload: unknown;
+  createdAt: Date;
+  prevHash: string;
+  hash: string;
+}
+
+export interface AuditVerifyResult {
+  ok: boolean;
+  checkedCount: number;
+  /** The first event whose recomputed hash didn't match, if any. */
+  brokenAt?: { id: string; index: number };
+}
+
+/**
+ * Recompute every link and report the first break, if any. `events` must
+ * already be in chain order (oldest first) — the same order they were
+ * appended in, which is also createdAt ascending.
+ */
+export function verifyChain(events: StoredAuditEvent[]): AuditVerifyResult {
+  let prevHash = "";
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    const expected = computeHash(prevHash, {
+      entityType: e.entityType,
+      entityId: e.entityId,
+      action: e.action,
+      actorId: e.actorId,
+      payload: e.payload,
+      createdAt: e.createdAt.toISOString(),
+    });
+    if (e.prevHash !== prevHash || e.hash !== expected) {
+      return { ok: false, checkedCount: i + 1, brokenAt: { id: e.id, index: i } };
+    }
+    prevHash = e.hash;
+  }
+  return { ok: true, checkedCount: events.length };
+}
