@@ -1,73 +1,10 @@
--- CreateEnum
-CREATE TYPE "Role" AS ENUM ('citizen', 'land-office', 'field-agent', 'mediator', 'admin');
-
--- CreateEnum
-CREATE TYPE "JurisdictionLevel" AS ENUM ('division', 'district', 'upazila', 'mouza');
-
--- CreateEnum
-CREATE TYPE "UserStatus" AS ENUM ('active', 'suspended', 'invited');
-
--- CreateEnum
-CREATE TYPE "LandUse" AS ENUM ('agricultural', 'residential', 'commercial', 'industrial', 'mixed', 'vacant');
-
--- CreateEnum
-CREATE TYPE "OwnershipType" AS ENUM ('sole', 'joint', 'inherited', 'corporate', 'government');
-
--- CreateEnum
-CREATE TYPE "RegistryStatus" AS ENUM ('verified', 'pending', 'disputed', 'flagged', 'under-mutation');
-
--- CreateEnum
-CREATE TYPE "AcquisitionType" AS ENUM ('purchase', 'inheritance', 'gift', 'grant', 'partition', 'court-order');
-
--- CreateEnum
-CREATE TYPE "DocumentType" AS ENUM ('title-deed', 'sale-deed', 'mutation-order', 'survey-report', 'id-proof', 'tax-receipt', 'inheritance-affidavit', 'court-order', 'photo');
-
--- CreateEnum
-CREATE TYPE "OcrStatus" AS ENUM ('pending', 'processing', 'extracted', 'failed');
-
--- CreateEnum
-CREATE TYPE "VerificationStatus" AS ENUM ('unverified', 'verified', 'flagged', 'rejected');
-
--- CreateEnum
-CREATE TYPE "DisputeType" AS ENUM ('boundary', 'ownership', 'inheritance', 'encroachment', 'fraud', 'easement');
-
--- CreateEnum
-CREATE TYPE "DisputeStatus" AS ENUM ('submitted', 'under-review', 'field-visit-scheduled', 'in-mediation', 'hearing-scheduled', 'resolved', 'rejected', 'withdrawn');
-
--- CreateEnum
-CREATE TYPE "Priority" AS ENUM ('low', 'medium', 'high');
-
--- CreateEnum
-CREATE TYPE "DisputeEventType" AS ENUM ('filed', 'assigned', 'comment', 'status-change', 'field-visit', 'document-added', 'hearing', 'resolved');
-
--- CreateEnum
-CREATE TYPE "MutationType" AS ENUM ('sale', 'inheritance', 'gift', 'partition', 'correction');
-
--- CreateEnum
-CREATE TYPE "MutationStatus" AS ENUM ('submitted', 'verification', 'objection-period', 'approved', 'rejected');
-
--- CreateEnum
-CREATE TYPE "FieldReportPurpose" AS ENUM ('boundary-survey', 'encroachment-check', 'possession-verify', 'measurement');
-
--- CreateEnum
-CREATE TYPE "FieldReportStatus" AS ENUM ('assigned', 'en-route', 'in-progress', 'completed', 'cancelled');
-
--- CreateEnum
-CREATE TYPE "HearingStatus" AS ENUM ('scheduled', 'in-hearing', 'deliberation', 'ruled', 'appealed');
-
--- CreateEnum
-CREATE TYPE "NotificationSeverity" AS ENUM ('info', 'success', 'warning', 'critical');
-
--- CreateEnum
-CREATE TYPE "AuditAction" AS ENUM ('create', 'update', 'status-change', 'approve', 'reject', 'assign', 'ruling', 'upload', 'delete');
-
 -- CreateTable
 CREATE TABLE "jurisdictions" (
     "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "nameBn" TEXT,
-    "level" "JurisdictionLevel" NOT NULL,
+    "level" TEXT NOT NULL,
     "parentId" TEXT,
 
     CONSTRAINT "jurisdictions_pkey" PRIMARY KEY ("id")
@@ -79,11 +16,11 @@ CREATE TABLE "users" (
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "phone" TEXT,
-    "role" "Role" NOT NULL,
+    "role" TEXT NOT NULL,
     "jurisdictionId" TEXT NOT NULL,
     "nationalId" TEXT,
     "avatarUrl" TEXT,
-    "status" "UserStatus" NOT NULL DEFAULT 'active',
+    "status" TEXT NOT NULL DEFAULT 'active',
     "title" TEXT,
     "passwordHash" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -98,11 +35,11 @@ CREATE TABLE "parcels" (
     "khatianNo" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "jurisdictionId" TEXT NOT NULL,
-    "landUse" "LandUse" NOT NULL,
+    "landUse" TEXT NOT NULL,
     "area" JSONB NOT NULL,
     "ownerId" TEXT NOT NULL,
-    "ownershipType" "OwnershipType" NOT NULL,
-    "registryStatus" "RegistryStatus" NOT NULL,
+    "ownershipType" TEXT NOT NULL,
+    "registryStatus" TEXT NOT NULL,
     "centroid" JSONB NOT NULL,
     "boundary" JSONB,
     "marketValue" JSONB,
@@ -118,7 +55,7 @@ CREATE TABLE "ownership_records" (
     "parcelId" TEXT NOT NULL,
     "ownerId" TEXT NOT NULL,
     "ownerName" TEXT NOT NULL,
-    "acquisitionType" "AcquisitionType" NOT NULL,
+    "acquisitionType" TEXT NOT NULL,
     "fromDate" TIMESTAMP(3) NOT NULL,
     "toDate" TIMESTAMP(3),
     "documentId" TEXT,
@@ -131,15 +68,15 @@ CREATE TABLE "documents" (
     "id" TEXT NOT NULL,
     "parcelId" TEXT,
     "ownerId" TEXT,
-    "type" "DocumentType" NOT NULL,
+    "type" TEXT NOT NULL,
     "fileName" TEXT NOT NULL,
     "mimeType" TEXT NOT NULL,
     "sizeBytes" INTEGER NOT NULL,
     "pageCount" INTEGER,
     "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "uploadedById" TEXT NOT NULL,
-    "ocrStatus" "OcrStatus" NOT NULL DEFAULT 'pending',
-    "verificationStatus" "VerificationStatus" NOT NULL DEFAULT 'unverified',
+    "ocrStatus" TEXT NOT NULL DEFAULT 'pending',
+    "verificationStatus" TEXT NOT NULL DEFAULT 'unverified',
     "fraudScore" DOUBLE PRECISION,
     "extractedFields" JSONB,
     "thumbnailUrl" TEXT,
@@ -153,9 +90,9 @@ CREATE TABLE "disputes" (
     "caseNumber" TEXT NOT NULL,
     "parcelId" TEXT NOT NULL,
     "parcelDagNo" TEXT NOT NULL,
-    "type" "DisputeType" NOT NULL,
-    "status" "DisputeStatus" NOT NULL DEFAULT 'submitted',
-    "priority" "Priority" NOT NULL DEFAULT 'medium',
+    "type" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'submitted',
+    "priority" TEXT NOT NULL DEFAULT 'medium',
     "filedById" TEXT NOT NULL,
     "filedByName" TEXT NOT NULL,
     "filedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -177,7 +114,7 @@ CREATE TABLE "dispute_events" (
     "id" TEXT NOT NULL,
     "disputeId" TEXT NOT NULL,
     "at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "type" "DisputeEventType" NOT NULL,
+    "type" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "content" JSONB,
     "description" TEXT,
@@ -193,8 +130,8 @@ CREATE TABLE "mutations" (
     "mutationNumber" TEXT NOT NULL,
     "parcelId" TEXT NOT NULL,
     "parcelDagNo" TEXT NOT NULL,
-    "type" "MutationType" NOT NULL,
-    "status" "MutationStatus" NOT NULL DEFAULT 'submitted',
+    "type" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'submitted',
     "fromOwnerName" TEXT NOT NULL,
     "toOwnerName" TEXT NOT NULL,
     "requestedById" TEXT NOT NULL,
@@ -216,8 +153,8 @@ CREATE TABLE "field_reports" (
     "parcelDagNo" TEXT NOT NULL,
     "disputeId" TEXT,
     "mutationId" TEXT,
-    "purpose" "FieldReportPurpose" NOT NULL,
-    "status" "FieldReportStatus" NOT NULL DEFAULT 'assigned',
+    "purpose" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'assigned',
     "assignedAgentId" TEXT NOT NULL,
     "scheduledFor" TIMESTAMP(3) NOT NULL,
     "addressHint" TEXT,
@@ -236,7 +173,7 @@ CREATE TABLE "hearings" (
     "disputeId" TEXT NOT NULL,
     "parcelDagNo" TEXT NOT NULL,
     "mediatorId" TEXT NOT NULL,
-    "status" "HearingStatus" NOT NULL DEFAULT 'scheduled',
+    "status" TEXT NOT NULL DEFAULT 'scheduled',
     "parties" JSONB NOT NULL,
     "hearingDate" TIMESTAMP(3),
     "sessions" JSONB NOT NULL DEFAULT '[]',
@@ -251,7 +188,7 @@ CREATE TABLE "notifications" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "severity" "NotificationSeverity" NOT NULL DEFAULT 'info',
+    "severity" TEXT NOT NULL DEFAULT 'info',
     "title" TEXT NOT NULL,
     "body" TEXT NOT NULL,
     "content" JSONB,
@@ -276,7 +213,7 @@ CREATE TABLE "audit_events" (
     "id" TEXT NOT NULL,
     "entityType" TEXT NOT NULL,
     "entityId" TEXT NOT NULL,
-    "action" "AuditAction" NOT NULL,
+    "action" TEXT NOT NULL,
     "actorId" TEXT NOT NULL,
     "actorName" TEXT,
     "payload" JSONB NOT NULL,
