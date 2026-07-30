@@ -3,5 +3,5 @@
   // A deployed image has no reason to carry the contract tests, and emitting
   // them would drag supertest into the runtime dependency graph. They are still
   // type-checked — `tsconfig.json` includes them, this only narrows the emit.
-  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

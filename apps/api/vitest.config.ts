@@ -12,7 +12,10 @@ export default defineConfig({
   // actually runs, rather than the two quietly disagreeing about decorators.
   oxc: false,
   test: {
-    include: ["src/**/*.spec.ts"],
+    // .test.ts, not Nest's default .spec.ts — matches packages/rules, the
+    // only other test suite in this monorepo, so there is one convention to
+    // remember rather than one per workspace.
+    include: ["src/**/*.test.ts"],
     // Contract tests boot a real Nest app; give them room over the 5s default.
     testTimeout: 15_000,
   },

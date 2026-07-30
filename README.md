@@ -4,10 +4,12 @@ A civic platform for secure land records, ownership mutations, dispute resolutio
 field surveys. Five role-based portals — **Citizen**, **Land Office**, **Field Agent**,
 **Mediator**, and **Administrator** — over one shared record system.
 
-> **Status: frontend-first.** The UI is built against a mock API (MSW) whose paths and
-> response shapes match the **frozen Core API spec** exactly, so swapping the mock for the
-> real NestJS backend is a config change, not a rewrite (see
-> [Mock → real backend](#mock--real-backend)).
+> **Status: frontend done, backend underway.** The UI (this repo's root) is built against a
+> mock API (MSW) matching the **frozen Core API spec** exactly. `apps/api` is a real
+> NestJS + Postgres implementation of that same spec, growing endpoint by endpoint — see its
+> [status table](apps/api/README.md#endpoint-status). Every `GET` is done; writes are landing
+> gate-by-gate. Swapping the mock for it is a config change, not a rewrite, for whatever part
+> is already live (see [Mock → real backend](#mock--real-backend)).
 >
 > **Setting:** Cumilla District, Bangladesh — dag/khatian records, upazila/mouza hierarchy,
 > namjari (mutation), Faraiz + Hindu succession, BDT.
@@ -80,6 +82,16 @@ hooks/
   queries.ts           # All TanStack Query hooks — the data API for screens
   use-debounced-value.ts  # Keeps keystroke-driven queries off every keypress
   use-theme.ts         # Tiny SSR-safe light/dark theme
+apps/
+  api/                 # ★ @plotguard/api — the real backend (see apps/api/README.md)
+    src/
+      <resource>/      # One folder per REST resource: controller + module (+ dto, +
+                        # a shared helper when another resource reuses its logic)
+      common/          # Error envelope + pagination — every controller's shared floor
+      prisma/          # The one Prisma client, connected once at boot
+    prisma/
+      schema.prisma    # The DB schema — one table per entity with independent identity
+      seed.ts          # Ports lib/mocks/data.ts row for row, so mock and real API agree
 packages/
   rules/               # ★ @plotguard/rules — the shared contract (see below)
     src/
@@ -104,12 +116,25 @@ store/
   session.ts           # Active role (Zustand, persisted)
 ```
 
+**How the three pieces fit together, if you're new here:** `packages/rules` is imported by
+*both* of the other two — it's the one place a domain rule (a share of an estate, a filing
+gate, a deletion check) is written down, so the frontend and the backend can never quietly
+disagree about what one means. The root `app/`/`components/`/`lib/` tree is the Next.js
+frontend, and today it talks to `lib/mocks/handlers.ts`, an in-browser mock of the API —
+not `apps/api` yet, even though that backend is real and growing. Point it there by setting
+`NEXT_PUBLIC_API_MOCKING=disabled`; see [Mock → real backend](#mock--real-backend). If a
+question is about *what a rule allows*, look in `packages/rules`. If it's about *how a
+screen behaves*, look in `app/`. If it's about *what the server actually enforces*, look in
+`apps/api` — and start with [`apps/api/README.md`](apps/api/README.md), not this file.
+
 ---
 
 ## Architecture
 
 **Data flow:** screen → `hooks/queries.ts` (TanStack Query) → `lib/api-client.ts` →
-MSW handler (`lib/mocks/handlers.ts`) → seed data (`lib/mocks/data.ts`).
+MSW handler (`lib/mocks/handlers.ts`) → seed data (`lib/mocks/data.ts`). Once
+`NEXT_PUBLIC_API_MOCKING=disabled`, the last two steps are `apps/api`'s controllers and
+Postgres instead — same shapes, same rules, real persistence.
 
 - **`@plotguard/rules/types` is the contract.** Every mock response and every eventual backend DTO
   conforms to these interfaces. Start here when adding a feature.
@@ -163,29 +188,33 @@ malformed, and the tests that reach them supply exactly that.
 
 ### Mock → real backend
 
-When the backend is ready:
+**The backend exists now** — `apps/api`, a NestJS + Postgres app implementing this same
+spec. It's not fully caught up to the mock yet; see
+[its endpoint status table](apps/api/README.md#endpoint-status) for exactly what's real
+today versus still mock-only. To point the frontend at it instead of the mock:
 
-1. Point the client at it: `NEXT_PUBLIC_API_BASE=https://api.example.com` and
-   `NEXT_PUBLIC_API_MOCKING=disabled`.
-2. Replace the `x-plotguard-role` header in `lib/api-client.ts` with a real auth token.
+1. `NEXT_PUBLIC_API_BASE=http://localhost:3001/api` and `NEXT_PUBLIC_API_MOCKING=disabled`.
+2. Real auth doesn't exist yet either — `apps/api` honors the same `x-plotguard-role` header
+   the mock does, so nothing else changes for now. See apps/api's README for the plan there.
 
-Nothing in the screens or hooks changes, as long as the backend honors the shapes in
-`lib/types/`.
+Nothing in the screens or hooks changes either way, as long as whichever backend is live
+honors the shapes in `lib/types/` (`@plotguard/rules/types`, really — see below).
 
 ### API surface
 
-`lib/mocks/handlers.ts` implements the frozen spec — this file *is* the contract the
-backend builds against. Endpoint groups: `auth` (`/auth/login`, `/refresh`, `/me`),
-`parcels` (+`/neighbours`, `/history`, dag/khatian/bbox search),
-`documents` (+`/reprocess`, `PATCH /:id/decision`, `PATCH /:id/fields`),
-`mutations` (`PATCH /:id/decision`), `disputes` (`PATCH /:id/status`, `POST /:id/assign-agent`),
-`field-reports` (`/assigned`, `/:id/media`, `POST /` to book a survey),
-`hearings` (`PATCH /:id/ruling`),
-`inheritance/calculate`, and `audit` (`/:entityType/:id`, `/verify`).
+`lib/mocks/handlers.ts` implements the frozen spec — this file *is* the contract
+`apps/api` builds against, endpoint for endpoint. Endpoint groups: `auth`
+(`/auth/login`, `/refresh`, `/me`), `parcels` (+`/neighbours`, `/history`, dag/khatian/bbox
+search), `documents` (+`/reprocess`, `PATCH /:id/decision`, `PATCH /:id/fields`), `mutations`
+(`PATCH /:id/decision`), `disputes` (`PATCH /:id/status`, `POST /:id/assign-agent`),
+`field-reports` (`/assigned`, `/:id/media`, `POST /` to book a survey), `hearings`
+(`PATCH /:id/ruling`), `inheritance/calculate`, and `audit` (`/:entityType/:id`, `/verify`).
 
 Two are worth noting: `inheritance/calculate` runs the real (simplified) calculator in
 `inheritance.ts`, and `audit/verify` walks a genuine SHA-256 hash chain
-(`lib/mocks/audit-chain.ts`) — the same tamper-evidence guarantee the DB enforces in prod.
+(`lib/mocks/audit-chain.ts`) — the same tamper-evidence guarantee `apps/api` enforces for
+real, with a Postgres trigger that makes the ledger table physically append-only, not just
+convention.
 
 **The ledger is live, not a fixture.** Decisions taken in the app are appended to it as they
 happen — a document or mutation decision, a dispute filed or moved, a ruling, a filed survey, a
@@ -198,7 +227,8 @@ Payload values are rendered by coercing each to a string, so **every payload is 
 an update records `field.from` / `field.to` for the fields that actually moved, never a nested
 before/after object.
 
-**Additive to the frozen spec** (needed by screens, please implement server-side too):
+**Additive to the frozen spec** (needed by screens; `apps/api` implements these as it reaches
+each resource — check its status table rather than assuming from this list):
 
 | Endpoint | Purpose |
 | --- | --- |
