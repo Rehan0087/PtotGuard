@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, Param, Patch, Query, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { rulingGate, type Hearing } from "@plotguard/rules";
+import { rulingGate, type Hearing, type HearingSession } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -10,6 +10,7 @@ import { currentUserId } from "../auth/dev-current-user";
 import { CLOSED_DISPUTE_STATUSES } from "../parcels/parcel-view";
 import { disputeAudience } from "../disputes/dispute-audience";
 import { IssueRulingDto } from "./issue-ruling.dto";
+import { RecordSessionDto } from "./record-session.dto";
 
 @Controller("hearings")
 export class HearingsController {
@@ -35,6 +36,83 @@ export class HearingsController {
     if (!hearing) throw new NotFoundError("Hearing not found");
     const dispute = await this.prisma.dispute.findUnique({ where: { id: hearing.disputeId } });
     return { hearing, dispute };
+  }
+
+  /**
+   * Additive to the frozen spec: recording what happened in a sitting.
+   * rulingGate() reads these, so this is the write that unblocks a decision —
+   * a case can't be ruled on until at least one sitting exists and every
+   * party has attended one.
+   *
+   * No audit entry, matching the mock: a sitting is a step *toward* a
+   * decision, not a decision. The ruling that follows is what gets recorded
+   * on the ledger, and it carries the sittings with it.
+   */
+  @Post(":id/sessions")
+  @HttpCode(201)
+  async recordSession(
+    @Param("id") id: string,
+    @Body() body: RecordSessionDto,
+    @Req() req: Request,
+  ) {
+    const hearing = await this.prisma.hearing.findUnique({ where: { id } });
+    if (!hearing) throw new NotFoundError("Hearing not found");
+
+    // A decided case takes no further sittings. The screen already hides the
+    // form; this is what makes it true of the record and not just the UI.
+    if (hearing.status === "ruled" || hearing.status === "appealed") {
+      throw new ValidationError({ code: "already-decided" }, "status");
+    }
+
+    const summary = body.summary.trim();
+    if (!summary) throw new ValidationError({ code: "need-summary" }, "summary");
+
+    const actorId = currentUserId(req);
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const sessions = hearing.sessions as unknown as HearingSession[];
+      const session: HearingSession = {
+        id: `s-${randomUUID()}`,
+        at: now.toISOString(),
+        summary,
+        attendees: body.attendees ?? [],
+      };
+
+      const updated = await tx.hearing.update({
+        where: { id },
+        data: {
+          sessions: [...sessions, session] as never,
+          // A case with a sitting on record is being heard, not merely scheduled.
+          ...(hearing.status === "scheduled" ? { status: "in-hearing" } : {}),
+        },
+      });
+
+      // A sitting is a public step in the case, so it belongs on the tracking
+      // timeline the citizen watches — not only in the mediator's own view.
+      const dispute = await tx.dispute.findUnique({ where: { id: hearing.disputeId } });
+      if (dispute && !CLOSED_DISPUTE_STATUSES.includes(dispute.status)) {
+        await tx.dispute.update({
+          where: { id: dispute.id },
+          data: { status: "in-mediation", updatedAt: now },
+        });
+        await tx.disputeEvent.create({
+          data: {
+            id: `de-${randomUUID()}`,
+            disputeId: dispute.id,
+            at: now,
+            type: "hearing",
+            title: "Hearing held",
+            content: { code: "hearing-held", ordinal: sessions.length + 1 },
+            // The mediator's summary is record content — carried across as typed.
+            description: summary,
+            actorId,
+          },
+        });
+      }
+
+      return updated;
+    });
   }
 
   /**

@@ -105,7 +105,7 @@ serve from the mock only.
 | `policies` | ✅ get | ⬜ update |
 | `mutations` | ✅ list, detail | ✅ decision (`approvalGate`) |
 | `field-reports` | ✅ list, detail, assigned | ✅ update/file (`filingReview`) · ⬜ create, media |
-| `hearings` | ✅ list, detail | ✅ ruling (`rulingGate`) · ⬜ create, sessions |
+| `hearings` | ✅ list, detail | ✅ ruling (`rulingGate`), sessions · ⬜ create |
 | `notifications` | ✅ list (own inbox) | ⬜ mark read, mark all read |
 | `audit` | ✅ list, per-entity, verify | — (append-only, written by other endpoints) |
 | `auth` | ✅ me (dev stand-in) | ⬜ login, refresh (real auth — see below) |
