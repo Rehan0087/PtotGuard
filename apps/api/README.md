@@ -102,11 +102,11 @@ serve from the mock only.
 | `users` | ✅ list | — |
 | `documents` | ✅ list, detail | ⬜ create, decision, fields, reprocess |
 | `disputes` | ✅ list, detail | ⬜ create, status, assign-agent |
-| `policies` | ✅ get | ⬜ update |
+| `policies` | ✅ get | ✅ update |
 | `mutations` | ✅ list, detail | ✅ decision (`approvalGate`) |
 | `field-reports` | ✅ list, detail, assigned | ✅ update/file (`filingReview`) · ⬜ create, media |
 | `hearings` | ✅ list, detail | ✅ ruling (`rulingGate`), sessions · ⬜ create |
-| `notifications` | ✅ list (own inbox) | ⬜ mark read, mark all read |
+| `notifications` | ✅ list (own inbox) | ✅ mark read, mark all read |
 | `audit` | ✅ list, per-entity, verify | — (append-only, written by other endpoints) |
 | `auth` | ✅ me (dev stand-in) | ⬜ login, refresh (real auth — see below) |
 
