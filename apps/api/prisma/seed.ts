@@ -9,6 +9,7 @@
 import "dotenv/config";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { ancestryOf, buildUlpin, type Jurisdiction } from "@plotguard/rules";
 import { computeHash } from "../src/audit/audit-hash";
 
 const prisma = new PrismaClient({
@@ -75,7 +76,28 @@ async function main(): Promise<void> {
     { id: "p-311", dagNo: "RS-311/2", khatianNo: "355", title: "Bazar shop plot, Debidwar", jurisdictionId: "j-debidwar", landUse: "commercial", area: { value: 3, unit: "katha" }, ownerId: "usr-karim", ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.551, lng: 90.986 }, boundary: square({ lat: 23.551, lng: 90.986 }, 0.0004), marketValue: { amount: 9500000, currency: "BDT" }, registeredAt: new Date("2019-10-08T00:00:00Z"), lastMutationAt: new Date("2026-06-30T00:00:00Z") },
     { id: "p-176", dagNo: "CS-176", khatianNo: "489", title: "Hillfoot plot, Payalgacha", jurisdictionId: "j-payalgacha", landUse: "vacant", area: { value: 60, unit: "decimal" }, ownerId: "usr-karim", ownershipType: "joint", registryStatus: "flagged", centroid: { lat: 23.359, lng: 91.0365 }, boundary: square({ lat: 23.359, lng: 91.0365 }, 0.0012), marketValue: { amount: 3700000, currency: "BDT" }, registeredAt: new Date("2012-05-22T00:00:00Z"), lastMutationAt: null },
   ] satisfies Prisma.ParcelCreateManyInput[];
-  await prisma.parcel.createMany({ data: parcels });
+
+  // ULPINs are generated, never hand-written, so the seed proves the same
+  // rule the API will use. Sequence runs per upazila — the upazila is already
+  // in the string, so a global counter would waste the range and make two
+  // adjacent plots look unrelated.
+  const jurisdictionRows = await prisma.jurisdiction.findMany();
+  const sequenceByUpazila = new Map<string, number>();
+  const withUlpin = parcels.map((parcel) => {
+    const upazila = ancestryOf(parcel.jurisdictionId, jurisdictionRows as Jurisdiction[]).find(
+      (j) => j.level === "upazila",
+    );
+    const key = upazila?.id ?? "none";
+    const next = (sequenceByUpazila.get(key) ?? 0) + 1;
+    sequenceByUpazila.set(key, next);
+
+    const result = buildUlpin(parcel.jurisdictionId, jurisdictionRows as Jurisdiction[], next);
+    // A parcel whose chain has no upazila gets no ULPIN rather than a
+    // placeholder — the column is nullable for exactly this case.
+    return { ...parcel, ulpin: result.ok ? result.ulpin : null };
+  });
+
+  await prisma.parcel.createMany({ data: withUlpin });
 
   await prisma.ownershipRecord.createMany({
     data: [

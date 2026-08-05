@@ -22,6 +22,7 @@ import {
   calcInheritance,
   deletionGate,
   filingReview,
+  normaliseUlpin,
   reviewDraft,
   rulingGate,
 } from "@plotguard/rules";
@@ -347,11 +348,15 @@ export const handlers = [
     const khatian = url.searchParams.get("khatian")?.toLowerCase();
     const bbox = url.searchParams.get("bbox");
     const q = url.searchParams.get("q")?.toLowerCase();
+    const ulpin = url.searchParams.get("ulpin");
 
     let items = db.parcels.slice();
     if (owner === "me") items = items.filter((p) => p.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((p) => p.ownerId === owner);
     if (status) items = items.filter((p) => p.registryStatus === status);
+    // Exact, not a substring: a ULPIN is an identifier being cited, so a
+    // near-miss returns nothing rather than a plausible wrong plot.
+    if (ulpin) items = items.filter((p) => p.ulpin === normaliseUlpin(ulpin));
     if (dag) items = items.filter((p) => p.dagNo.toLowerCase().includes(dag));
     if (khatian) items = items.filter((p) => p.khatianNo.toLowerCase().includes(khatian));
     if (bbox) {
@@ -370,7 +375,10 @@ export const handlers = [
           p.dagNo.toLowerCase().includes(q) ||
           p.khatianNo.toLowerCase().includes(q) ||
           p.title.toLowerCase().includes(q) ||
-          p.ownerName.toLowerCase().includes(q),
+          p.ownerName.toLowerCase().includes(q) ||
+          // A citizen pasting an identifier into the one search box should land
+          // on it, without knowing which field it belongs to.
+          Boolean(p.ulpin?.toLowerCase().includes(q)),
       );
     return HttpResponse.json(paginate(items, url));
   }),

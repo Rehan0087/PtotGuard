@@ -93,6 +93,11 @@ model User {
 
 model Parcel {
   id             String       @id
+  /// ILR-<district>-<upazila>-<seq> — see buildUlpin() in @plotguard/rules.
+  /// Nullable because a parcel whose jurisdiction lacks a district or upazila
+  /// genuinely cannot be given one, and a placeholder that looks citable but
+  /// resolves to nothing is worse than an absent value.
+  ulpin          String?      @unique
   dagNo          String
   khatianNo      String
   title          String
@@ -123,7 +128,10 @@ model Parcel {
   mutations        Mutation[]
   fieldReports     FieldReport[]
 
-  @@unique([dagNo, khatianNo])
+  /// Scoped to the jurisdiction, not global. A dag number only carries meaning
+  /// within its mouza — two mouzas can each legitimately hold a dag 142 /
+  /// khatian 512, and a global constraint would refuse to store the second.
+  @@unique([jurisdictionId, dagNo, khatianNo])
   @@index([jurisdictionId])
   @@index([ownerId])
   @@map("parcels")

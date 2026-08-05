@@ -636,6 +636,8 @@ export const en = {
       notFoundBody: "This record may have been moved or the link is incorrect.",
       backToSearch: "Back to search",
       khatian: (khatianNo: string) => `Khatian ${khatianNo}`,
+      /** Tooltip on the land ID chip — says what the number is for. */
+      ulpinTitle: "Land ID — quote this to identify the plot",
       subtitle: (landUse: string, ownershipType: string) =>
         `${landUse} land · ${ownershipType} ownership`,
       area: "Area",

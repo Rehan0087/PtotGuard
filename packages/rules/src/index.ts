@@ -19,3 +19,4 @@ export * from "./assignment";
 export * from "./jurisdictions";
 export * from "./field-capture";
 export * from "./hearings";
+export * from "./ulpin";

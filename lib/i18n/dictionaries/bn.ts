@@ -598,6 +598,7 @@ export const bn: Dictionary = {
       notFoundBody: "রেকর্ডটি সরানো হয়ে থাকতে পারে, অথবা লিংকটি ভুল।",
       backToSearch: "অনুসন্ধানে ফিরে যান",
       khatian: (khatianNo: string) => `খতিয়ান ${khatianNo}`,
+      ulpinTitle: "ভূমি আইডি — জমি শনাক্ত করতে এই নম্বরটি উল্লেখ করুন",
       subtitle: (landUse: string, ownershipType: string) =>
         `${landUse} জমি · ${ownershipType} মালিকানা`,
       area: "পরিমাণ",

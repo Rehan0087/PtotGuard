@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
+import { normaliseUlpin } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { currentUserId } from "../auth/dev-current-user";
 import { NotFoundError } from "../common/domain-exceptions";
@@ -23,6 +24,9 @@ export class ParcelsController {
       ...(query.status ? { registryStatus: query.status } : {}),
       ...(dag ? { dagNo: { contains: dag, mode: "insensitive" as const } } : {}),
       ...(khatian ? { khatianNo: { contains: khatian, mode: "insensitive" as const } } : {}),
+      // Exact, not `contains`: a ULPIN is an identifier being cited, so a
+      // near-miss should return nothing rather than a plausible wrong plot.
+      ...(query.ulpin ? { ulpin: normaliseUlpin(query.ulpin) } : {}),
       ...(q
         ? {
             OR: [
@@ -30,6 +34,9 @@ export class ParcelsController {
               { khatianNo: { contains: q, mode: "insensitive" as const } },
               { title: { contains: q, mode: "insensitive" as const } },
               { owner: { name: { contains: q, mode: "insensitive" as const } } },
+              // A citizen pasting an identifier into the one search box should
+              // land on it, without having to know which field it belongs to.
+              { ulpin: { contains: normaliseUlpin(q), mode: "insensitive" as const } },
             ],
           }
         : {}),

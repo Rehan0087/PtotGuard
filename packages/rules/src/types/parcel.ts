@@ -31,6 +31,13 @@ export type RegistryStatus =
 
 export interface Parcel {
   id: ID;
+  /**
+   * Citable unique identifier, e.g. "ILR-CUM-DEB-000142" — see buildUlpin().
+   * Optional: a parcel whose jurisdiction chain lacks a district or upazila
+   * cannot be given one, and a placeholder that looks citable but resolves to
+   * nothing would be worse than its absence.
+   */
+  ulpin?: string;
   /** Dag (plot) number from the cadastral survey, e.g. "CS-142". */
   dagNo: string;
   /** Khatian (record-of-rights) number, e.g. "512". */

@@ -132,42 +132,42 @@ export const CURRENT_USER_BY_ROLE: Record<Role, ID> = {
 // ---------------------------------------------------------------------------
 export const parcels: Parcel[] = [
   {
-    id: "p-142", dagNo: "CS-142/3", khatianNo: "512", title: "Paddy field, Rajamehar", jurisdictionId: "j-rajamehar",
+    id: "p-142", ulpin: "ILR-CUM-DEB-000001", dagNo: "CS-142/3", khatianNo: "512", title: "Paddy field, Rajamehar", jurisdictionId: "j-rajamehar",
     landUse: "agricultural", area: { value: 82, unit: "decimal" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
     ownershipType: "sole", registryStatus: "disputed", centroid: { lat: 23.549, lng: 90.989 },
     boundary: square({ lat: 23.549, lng: 90.989 }), marketValue: { amount: 4800000, currency: "BDT" },
     registeredAt: "2015-07-20T00:00:00Z", lastMutationAt: "2015-07-20T00:00:00Z", openDisputeCount: 1,
   },
   {
-    id: "p-088", dagNo: "RS-88", khatianNo: "217", title: "Homestead plot, Rajamehar", jurisdictionId: "j-rajamehar",
+    id: "p-088", ulpin: "ILR-CUM-DEB-000002", dagNo: "RS-88", khatianNo: "217", title: "Homestead plot, Rajamehar", jurisdictionId: "j-rajamehar",
     landUse: "residential", area: { value: 8, unit: "katha" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
     ownershipType: "inherited", registryStatus: "under-mutation", centroid: { lat: 23.5502, lng: 90.9871 },
     boundary: square({ lat: 23.5502, lng: 90.9871 }, 0.0005), marketValue: { amount: 3200000, currency: "BDT" },
     registeredAt: "1990-04-02T00:00:00Z", openDisputeCount: 0,
   },
   {
-    id: "p-092", dagNo: "RS-92/4", khatianNo: "640", title: "Roadside plot, Rajamehar", jurisdictionId: "j-rajamehar",
+    id: "p-092", ulpin: "ILR-CUM-DEB-000003", dagNo: "RS-92/4", khatianNo: "640", title: "Roadside plot, Rajamehar", jurisdictionId: "j-rajamehar",
     landUse: "residential", area: { value: 5, unit: "katha" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
     ownershipType: "sole", registryStatus: "pending", centroid: { lat: 23.5475, lng: 90.9905 },
     boundary: square({ lat: 23.5475, lng: 90.9905 }, 0.0006), marketValue: { amount: 2600000, currency: "BDT" },
     registeredAt: "2026-07-10T00:00:00Z", openDisputeCount: 0,
   },
   {
-    id: "p-205", dagNo: "BS-205", khatianNo: "1104", title: "Betel-nut orchard, Payalgacha", jurisdictionId: "j-payalgacha",
+    id: "p-205", ulpin: "ILR-CUM-BAR-000001", dagNo: "BS-205", khatianNo: "1104", title: "Betel-nut orchard, Payalgacha", jurisdictionId: "j-payalgacha",
     landUse: "agricultural", area: { value: 120, unit: "decimal" }, ownerId: "usr-shanti", ownerName: "Shanti Rani Das",
     ownershipType: "sole", registryStatus: "disputed", centroid: { lat: 23.3625, lng: 91.033 },
     boundary: square({ lat: 23.3625, lng: 91.033 }, 0.0015), marketValue: { amount: 6900000, currency: "BDT" },
     registeredAt: "2018-01-16T00:00:00Z", lastMutationAt: "2018-01-16T00:00:00Z", openDisputeCount: 2,
   },
   {
-    id: "p-311", dagNo: "RS-311/2", khatianNo: "355", title: "Bazar shop plot, Debidwar", jurisdictionId: "j-debidwar",
+    id: "p-311", ulpin: "ILR-CUM-DEB-000004", dagNo: "RS-311/2", khatianNo: "355", title: "Bazar shop plot, Debidwar", jurisdictionId: "j-debidwar",
     landUse: "commercial", area: { value: 3, unit: "katha" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
     ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.551, lng: 90.986 },
     boundary: square({ lat: 23.551, lng: 90.986 }, 0.0004), marketValue: { amount: 9500000, currency: "BDT" },
     registeredAt: "2019-10-08T00:00:00Z", lastMutationAt: "2026-06-30T00:00:00Z", openDisputeCount: 0,
   },
   {
-    id: "p-176", dagNo: "CS-176", khatianNo: "489", title: "Hillfoot plot, Payalgacha", jurisdictionId: "j-payalgacha",
+    id: "p-176", ulpin: "ILR-CUM-BAR-000002", dagNo: "CS-176", khatianNo: "489", title: "Hillfoot plot, Payalgacha", jurisdictionId: "j-payalgacha",
     landUse: "vacant", area: { value: 60, unit: "decimal" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
     ownershipType: "joint", registryStatus: "flagged", centroid: { lat: 23.359, lng: 91.0365 },
     boundary: square({ lat: 23.359, lng: 91.0365 }, 0.0012), marketValue: { amount: 3700000, currency: "BDT" },

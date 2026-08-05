@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   FileText,
+  Fingerprint,
   MapPin,
   Ruler,
   Landmark,
@@ -90,9 +91,17 @@ export default function ParcelDetailPage() {
 
       <PageHeader
         eyebrow={
-          <span className="flex items-center gap-1.5">
+          <span className="flex flex-wrap items-center gap-1.5">
             <IdChip icon={MapPin}>{parcel.dagNo}</IdChip>
             <IdChip>{t.pages.parcel.khatian(parcel.khatianNo)}</IdChip>
+            {/* The one identifier a citizen can quote on its own — leading, not
+                buried in the fact grid. Absent on records whose jurisdiction
+                chain can't produce one, so it is rendered conditionally. */}
+            {parcel.ulpin ? (
+              <IdChip icon={Fingerprint} title={t.pages.parcel.ulpinTitle}>
+                {parcel.ulpin}
+              </IdChip>
+            ) : null}
           </span>
         }
         title={parcel.title}

@@ -98,7 +98,7 @@ serve from the mock only.
 | Resource | Reads | Writes |
 | --- | --- | --- |
 | `jurisdictions` | ✅ list | ✅ create, update, delete (`reviewDraft`/`deletionGate`) |
-| `parcels` | ✅ list, detail, history, neighbours | — (read-only resource) |
+| `parcels` | ✅ list, detail, history, neighbours, ULPIN lookup | — (read-only resource) |
 | `users` | ✅ list | — |
 | `documents` | ✅ list, detail | ⬜ create, decision, fields, reprocess |
 | `disputes` | ✅ list, detail | ⬜ create, status, assign-agent |
