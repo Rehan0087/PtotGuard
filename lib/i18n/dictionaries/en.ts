@@ -112,6 +112,13 @@ export const en = {
       mediation: "Mediation",
       administration: "Administration",
     },
+    /** Sidebar section headings. Only used where a portal groups its items. */
+    groups: {
+      myLand: "My land",
+      services: "Services",
+      tools: "Tools",
+    },
+    portal: "All services",
     dashboard: "Dashboard",
     searchRecords: "Search records",
     myDocuments: "My documents",
@@ -1131,6 +1138,31 @@ export const en = {
         }),
       },
     },
+    portal: {
+      description:
+        "Every land service in one place. Pick a service to begin, or track something you have already filed.",
+      comingSoon: "Coming soon",
+      openService: "Open",
+      services: {
+        mutation: "Mutation",
+        mutationBody: "Transfer a record after a sale, inheritance, gift, or court order (e-Namjari).",
+        landTax: "Land development tax",
+        landTaxBody: "See what is assessed against your land and pay your yearly khajna.",
+        recordsMaps: "Records & maps",
+        recordsMapsBody: "Look up a plot by dag, khatian, owner, or land ID, and see it on the map.",
+        acquisition: "Acquisition & requisition",
+        acquisitionBody: "Notices affecting your land, compensation awards, and objections.",
+        lease: "Lease & settlement",
+        leaseBody: "Apply for settlement of khas land, agricultural or non-agricultural.",
+        landAdmin: "Land administration",
+        landAdminBody: "Certified copies of records, and corrections to what is on file.",
+        revenueCases: "Revenue cases",
+        revenueCasesBody: "File and follow a case before the revenue court.",
+        infoBank: "Land information bank",
+        infoBankBody: "Browse khas, acquired, and government land on record.",
+      },
+    },
+
     // <<PAGES-END>>
   },
 

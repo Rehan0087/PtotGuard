@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
-import type { NavItem } from "@/lib/nav";
+import { NAV_GROUP_ORDER, type NavItem } from "@/lib/nav";
 
 export function SidebarNav({
   items,
@@ -14,6 +14,48 @@ export function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const t = useT();
+
+  // A portal is grouped only if its items say so. Ungrouped portals (every
+  // role but citizen today) render exactly as before — one flat list, no
+  // headings, no empty group shells.
+  const groups = NAV_GROUP_ORDER.map((key) => ({
+    key,
+    items: items.filter((i) => i.group === key),
+  })).filter((g) => g.items.length > 0);
+
+  const ungrouped = items.filter((i) => !i.group);
+
+  if (groups.length === 0) {
+    return <NavList items={ungrouped} pathname={pathname} onNavigate={onNavigate} />;
+  }
+
+  return (
+    <div className="grid gap-4">
+      {ungrouped.length > 0 ? (
+        <NavList items={ungrouped} pathname={pathname} onNavigate={onNavigate} />
+      ) : null}
+      {groups.map((group) => (
+        <div key={group.key} className="grid gap-0.5">
+          <div className="px-2.5 pb-1 text-[10px] font-medium uppercase tracking-[0.14em] text-sidebar-foreground/40">
+            {t.nav.groups[group.key]}
+          </div>
+          <NavList items={group.items} pathname={pathname} onNavigate={onNavigate} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NavList({
+  items,
+  pathname,
+  onNavigate,
+}: {
+  items: NavItem[];
+  pathname: string;
+  onNavigate?: () => void;
+}) {
   const t = useT();
 
   return (
