@@ -63,6 +63,7 @@ export const NAV: Record<Role, PortalNav> = {
     items: [
       { labelKey: "portal", href: "/portal", icon: LayoutGrid, group: "myLand" },
       { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard, group: "myLand" },
+      { labelKey: "myProperties", href: "/properties", icon: MapPin, group: "myLand" },
       { labelKey: "searchRecords", href: "/search", icon: Search, group: "myLand" },
       { labelKey: "inheritance", href: "/inheritance", icon: GitBranch, group: "tools" },
       { labelKey: "myDocuments", href: "/documents", icon: FileText, group: "tools" },

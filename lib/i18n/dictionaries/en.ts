@@ -120,6 +120,7 @@ export const en = {
     },
     portal: "All services",
     dashboard: "Dashboard",
+    myProperties: "My properties",
     searchRecords: "Search records",
     myDocuments: "My documents",
     disputes: "Disputes",
@@ -1140,6 +1141,17 @@ export const en = {
         }),
       },
     },
+    properties: {
+      description: "Land recorded in your name. Open a plot for its title chain, documents, and disputes.",
+      count: (n: number) => `${d(n)} ${n === 1 ? "plot" : "plots"} on record`,
+      emptyTitle: "No land recorded in your name",
+      emptyBody:
+        "Plots appear here once a record lists you as owner. If you believe a record is missing, search for it and check who it names.",
+      searchRecords: "Search records",
+      /** Sits under the heading — says where these came from, not what to do. */
+      note: "Ownership shown as currently recorded. A pending mutation does not change it until approved.",
+    },
+
     portal: {
       description:
         "Every land service in one place. Pick a service to begin, or track something you have already filed.",
