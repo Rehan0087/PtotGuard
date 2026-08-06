@@ -639,6 +639,11 @@ export const en = {
       khatian: (khatianNo: string) => `Khatian ${khatianNo}`,
       /** Tooltip on the land ID chip — says what the number is for. */
       ulpinTitle: "Land ID — quote this to identify the plot",
+      mapTitle: "Location",
+      mapHint: "This plot in accent, nearby plots alongside. Click a plot to open it.",
+      /** Shown because every boundary in the demo dataset is a synthetic square. */
+      mapApproximate: "Boundaries shown are indicative, not survey-accurate.",
+      neighbours: "Nearby plots",
       subtitle: (landUse: string, ownershipType: string) =>
         `${landUse} land · ${ownershipType} ownership`,
       area: "Area",

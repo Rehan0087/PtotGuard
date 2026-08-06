@@ -600,6 +600,10 @@ export const bn: Dictionary = {
       backToSearch: "অনুসন্ধানে ফিরে যান",
       khatian: (khatianNo: string) => `খতিয়ান ${khatianNo}`,
       ulpinTitle: "ভূমি আইডি — জমি শনাক্ত করতে এই নম্বরটি উল্লেখ করুন",
+      mapTitle: "অবস্থান",
+      mapHint: "এই জমিটি আলাদা রঙে, পাশের জমিগুলো সঙ্গে। কোনো জমিতে ক্লিক করলে সেটি খুলবে।",
+      mapApproximate: "দেখানো সীমানা আনুমানিক, জরিপ-নির্ভুল নয়।",
+      neighbours: "কাছাকাছি জমি",
       subtitle: (landUse: string, ownershipType: string) =>
         `${landUse} জমি · ${ownershipType} মালিকানা`,
       area: "পরিমাণ",

@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -21,11 +23,17 @@ import { SurveyCorners } from "@/components/survey-corners";
 import { DisputeListItem } from "@/components/dispute-list-item";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useParcel } from "@/hooks/queries";
+import { useParcel, useParcelNeighbours } from "@/hooks/queries";
 import { formatCoord } from "@/lib/format";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
+
+// Leaflet reads `window` on evaluation, so the map never renders on the server.
+const ParcelLiveMap = dynamic(
+  () => import("@/components/parcel-live-map").then((m) => m.ParcelLiveMap),
+  { ssr: false, loading: () => <Skeleton className="h-72 w-full rounded-lg" /> },
+);
 
 function Fact({
   icon: Icon,
@@ -53,6 +61,14 @@ export default function ParcelDetailPage() {
   const s = useStatusMeta();
   const { id } = useParams<{ id: string }>();
   const { data, isLoading } = useParcel(id);
+  const { data: neighbours } = useParcelNeighbours(id);
+
+  // This plot first so it wins the focus styling, then whatever is nearby.
+  // Memoised because a fresh array each render would restart the map effect.
+  const mapParcels = useMemo(
+    () => (data ? [data.parcel, ...(neighbours ?? [])] : []),
+    [data, neighbours],
+  );
 
   if (isLoading) {
     return (
@@ -118,6 +134,16 @@ export default function ParcelDetailPage() {
           <Card className="relative gap-0 overflow-hidden p-0">
             <div className="relative h-56 border-b border-border bg-secondary/40 text-primary">
               <ParcelBoundary boundary={parcel.boundary} />
+            </div>
+            {/* Where it is, not just what shape it is — the thumbnail above
+                carries the shape, this carries the location. */}
+            <div className="space-y-2 border-b border-border p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-sm font-medium text-foreground">{t.pages.parcel.mapTitle}</h2>
+                <p className="text-xs text-muted-foreground">{t.pages.parcel.mapHint}</p>
+              </div>
+              <ParcelLiveMap parcels={mapParcels} focusId={parcel.id} />
+              <p className="text-xs text-muted-foreground">{t.pages.parcel.mapApproximate}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-3">
               <Fact icon={Ruler} label={t.pages.parcel.area}>

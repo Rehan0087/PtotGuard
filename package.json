@@ -12,13 +12,14 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
-    "@plotguard/rules": "workspace:*",
     "@hookform/resolvers": "^5.4.0",
+    "@plotguard/rules": "workspace:*",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-query-devtools": "^5.101.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.25.0",
     "next": "16.2.11",
     "react": "19.2.4",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
