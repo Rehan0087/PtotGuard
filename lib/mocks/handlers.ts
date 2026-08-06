@@ -25,6 +25,7 @@ import {
   normaliseUlpin,
   reviewDraft,
   rulingGate,
+  toPublicParcel,
   transferReview,
 } from "@plotguard/rules";
 import * as db from "./data";
@@ -309,6 +310,24 @@ export const handlers = [
   }),
 
   // Parcels ----------------------------------------------------------------
+  // Before `/parcels/:id`: MSW matches in registration order, and this path
+  // would otherwise be read as a parcel id of "public".
+  http.get(`${API}/parcels/public/:ulpin`, async ({ params }) => {
+    await latency();
+    const ulpin = normaliseUlpin(String(params.ulpin));
+    const parcel = db.parcels.find((p) => p.ulpin === ulpin);
+    if (!parcel) return notFound("Parcel not found");
+
+    // Narrowed by the rule, not by picking fields here — the same single
+    // decision about what is public that the real API uses.
+    return HttpResponse.json(
+      toPublicParcel(
+        parcel,
+        db.parcelRestrictions.filter((r) => r.parcelId === parcel.id),
+      ),
+    );
+  }),
+
   http.get(`${API}/parcels/:id/neighbours`, async ({ params }) => {
     await latency();
     const parcel = db.parcels.find((p) => p.id === params.id);

@@ -11,7 +11,7 @@
  * Pure, like every rule here — the same answer on the server that refuses the
  * mutation and on the screen that explains why.
  */
-import type { ParcelRestriction, RestrictionType } from "./types";
+import type { ParcelRestriction, PublicParcelView, RestrictionType } from "./types";
 
 /**
  * `blocks` — nothing can be transferred while it stands.
@@ -77,4 +77,45 @@ export function transferReview(
   const consents = active.filter((r) => restrictionEffect(r.type) === "needs-consent");
 
   return { canTransfer: blockers.length === 0, blockers, consents };
+}
+
+/**
+ * Narrow a plot to what an unauthenticated caller may see.
+ *
+ * One function so the omissions are a single decision with tests behind it,
+ * rather than something every endpoint re-derives and one of them eventually
+ * gets wrong. Note in particular that `note` is dropped: a restriction's
+ * existence is a public fact, but its free text can carry allegations and case
+ * particulars that are not.
+ */
+export function toPublicParcel(
+  parcel: {
+    ulpin?: string | null;
+    dagNo: string;
+    khatianNo: string;
+    landUse: string;
+    area: unknown;
+    ownerName: string;
+    registryStatus: string;
+  },
+  restrictions: ParcelRestriction[],
+  now: Date = new Date(),
+): PublicParcelView {
+  return {
+    ulpin: parcel.ulpin ?? "",
+    dagNo: parcel.dagNo,
+    khatianNo: parcel.khatianNo,
+    landUse: parcel.landUse as PublicParcelView["landUse"],
+    area: parcel.area as PublicParcelView["area"],
+    ownerName: parcel.ownerName,
+    registryStatus: parcel.registryStatus as PublicParcelView["registryStatus"],
+    restrictions: activeRestrictions(restrictions, now).map((r) => ({
+      type: r.type,
+      authority: r.authority,
+      referenceNo: r.referenceNo,
+      fromDate: r.fromDate,
+      toDate: r.toDate,
+    })),
+    canTransfer: transferReview(restrictions, now).canTransfer,
+  };
 }

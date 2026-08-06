@@ -1,6 +1,11 @@
 import { Controller, Get, Param, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { normaliseUlpin, transferReview, type ParcelRestriction } from "@plotguard/rules";
+import {
+  normaliseUlpin,
+  toPublicParcel,
+  transferReview,
+  type ParcelRestriction,
+} from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { currentUserId } from "../auth/dev-current-user";
 import { NotFoundError } from "../common/domain-exceptions";
@@ -64,6 +69,38 @@ export class ParcelsController {
     const params = pageParams(query);
     const page = items.slice(params.skip, params.skip + params.take);
     return paginated(page, bbox ? filtered.length : total, params);
+  }
+
+  /**
+   * The unauthenticated lookup — a land registry is a public record, and this
+   * is the one route that does not assume a signed-in caller.
+   *
+   * Declared before ":id" because Nest matches in registration order and would
+   * otherwise read "public" as a parcel id.
+   *
+   * Looked up by ULPIN, not internal id: the identifier is the thing a member
+   * of the public can be given, and internal ids are enumerable in a way a
+   * public endpoint should not encourage.
+   */
+  @Get("public/:ulpin")
+  async publicView(@Param("ulpin") ulpin: string) {
+    const parcel = await this.prisma.parcel.findUnique({
+      where: { ulpin: normaliseUlpin(ulpin) },
+      include: { owner: { select: { name: true } } },
+    });
+    if (!parcel) throw new NotFoundError("Parcel not found");
+
+    const restrictions = await this.prisma.parcelRestriction.findMany({
+      where: { parcelId: parcel.id },
+      orderBy: { fromDate: "desc" },
+    });
+
+    // Narrowed by the rule, not by picking fields here — one tested decision
+    // about what is public, rather than one per endpoint.
+    return toPublicParcel(
+      { ...parcel, ownerName: parcel.owner.name },
+      restrictions as unknown as ParcelRestriction[],
+    );
   }
 
   @Get(":id")

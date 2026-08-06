@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { activeRestrictions, restrictionEffect, transferReview } from "./restrictions";
+import {
+  activeRestrictions,
+  restrictionEffect,
+  toPublicParcel,
+  transferReview,
+} from "./restrictions";
 import type { ParcelRestriction, RestrictionType } from "./types";
 
 const NOW = new Date("2026-07-01T00:00:00Z");
@@ -147,5 +152,84 @@ describe("transferReview", () => {
     );
 
     expect(review.blockers.map((r) => r.id)).toEqual(["r-1", "r-2"]);
+  });
+});
+
+describe("toPublicParcel", () => {
+  /** A row as the database hands it over — deliberately carrying more than is public. */
+  const row = {
+    ulpin: "ILR-CUM-DEB-000002",
+    dagNo: "RS-88",
+    khatianNo: "217",
+    landUse: "residential",
+    area: { value: 8, unit: "katha" },
+    ownerName: "Ayesha Siddika",
+    registryStatus: "under-mutation",
+    // Everything below must not survive the narrowing.
+    id: "p-088",
+    ownerId: "usr-ayesha",
+    marketValue: { amount: 3_200_000, currency: "BDT" },
+    centroid: { lat: 23.5502, lng: 90.9871 },
+    boundary: { type: "Polygon", coordinates: [] },
+    jurisdictionId: "j-rajamehar",
+  };
+
+  it("carries what a land registry is expected to disclose", () => {
+    const view = toPublicParcel(row, [], NOW);
+
+    expect(view).toMatchObject({
+      ulpin: "ILR-CUM-DEB-000002",
+      dagNo: "RS-88",
+      khatianNo: "217",
+      ownerName: "Ayesha Siddika",
+      canTransfer: true,
+    });
+  });
+
+  it.each([
+    "id",
+    "ownerId",
+    "marketValue",
+    "centroid",
+    "boundary",
+    "jurisdictionId",
+  ])("does not leak %s", (field) => {
+    // The point of a separate shape: these are absent from the payload, not
+    // present and hidden by the screen. Spreading the row would pass every
+    // other assertion here and still fail this one.
+    expect(toPublicParcel(row, [], NOW)).not.toHaveProperty(field);
+  });
+
+  it("discloses that a restriction exists without its free text", () => {
+    // The existence of an injunction is a public fact. Its note can name
+    // allegations and case particulars that are not.
+    const view = toPublicParcel(
+      row,
+      [restriction({ note: "Alleged forgery by the second respondent." })],
+      NOW,
+    );
+
+    expect(view.restrictions).toHaveLength(1);
+    expect(view.restrictions[0]).toMatchObject({
+      type: "injunction",
+      authority: "Cumilla Sadar Court",
+    });
+    expect(view.restrictions[0]).not.toHaveProperty("note");
+    expect(JSON.stringify(view)).not.toContain("Alleged forgery");
+  });
+
+  it("shows only restrictions still in force", () => {
+    const view = toPublicParcel(row, [restriction({ toDate: "2026-06-01T00:00:00Z" })], NOW);
+
+    expect(view.restrictions).toEqual([]);
+  });
+
+  it("reports a blocked plot as such, so due diligence gets a straight answer", () => {
+    expect(toPublicParcel(row, [restriction()], NOW).canTransfer).toBe(false);
+  });
+
+  it("renders a plot with no ULPIN as an empty string, never null", () => {
+    // The field is typed as a string; a null here would print as "null".
+    expect(toPublicParcel({ ...row, ulpin: null }, [], NOW).ulpin).toBe("");
   });
 });
