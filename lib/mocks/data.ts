@@ -13,6 +13,7 @@ import type {
   ID,
   Parcel,
   OwnershipRecord,
+  ParcelRestriction,
   LandDocument,
   Dispute,
   DisputeEvent,
@@ -173,6 +174,16 @@ export const parcels: Parcel[] = [
     boundary: square({ lat: 23.359, lng: 91.0365 }, 0.0012), marketValue: { amount: 3700000, currency: "BDT" },
     registeredAt: "2012-05-22T00:00:00Z", openDisputeCount: 1,
   },
+];
+
+// Encumbrances. Mirrors apps/api/prisma/seed.ts exactly — both effects the
+// rule distinguishes (a releasable mortgage, outright blockers) plus one
+// discharged mortgage so the "expired" path exists in real data too.
+export const parcelRestrictions: ParcelRestriction[] = [
+  { id: "res-1", parcelId: "p-088", type: "mortgage", authority: "Sonali Bank, Debidwar Branch", referenceNo: "SB/MTG/2024/0412", note: "Charged against an agricultural loan.", fromDate: "2024-03-11T00:00:00Z", toDate: null },
+  { id: "res-2", parcelId: "p-176", type: "injunction", authority: "Cumilla Joint District Judge Court", referenceNo: "Title Suit 214/2026", note: "Dealings restrained pending disposal of the forged-deed suit.", fromDate: "2026-07-02T00:00:00Z", toDate: null },
+  { id: "res-3", parcelId: "p-205", type: "acquisition", authority: "Deputy Commissioner, Cumilla", referenceNo: "LA Case 39/2026", note: "Section 4 notice served for the Debidwar–Barura road widening.", fromDate: "2026-06-20T00:00:00Z", toDate: null },
+  { id: "res-4", parcelId: "p-311", type: "mortgage", authority: "Janata Bank, Cumilla", referenceNo: "JB/MTG/2019/1188", note: "Discharged on repayment.", fromDate: "2019-11-02T00:00:00Z", toDate: "2025-01-30T00:00:00Z" },
 ];
 
 export const ownershipRecords: OwnershipRecord[] = [

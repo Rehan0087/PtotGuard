@@ -99,6 +99,20 @@ async function main(): Promise<void> {
 
   await prisma.parcel.createMany({ data: withUlpin });
 
+  // Encumbrances. Chosen to exercise both effects the rule distinguishes: a
+  // mortgage that permits transfer with the lender's release, and blockers on
+  // the two plots already in dispute. One lifted mortgage so the "expired"
+  // path is represented in real data, not only in tests.
+  await prisma.parcelRestriction.createMany({
+    data: [
+      { id: "res-1", parcelId: "p-088", type: "mortgage", authority: "Sonali Bank, Debidwar Branch", referenceNo: "SB/MTG/2024/0412", note: "Charged against an agricultural loan.", fromDate: new Date("2024-03-11T00:00:00Z"), toDate: null },
+      { id: "res-2", parcelId: "p-176", type: "injunction", authority: "Cumilla Joint District Judge Court", referenceNo: "Title Suit 214/2026", note: "Dealings restrained pending disposal of the forged-deed suit.", fromDate: new Date("2026-07-02T00:00:00Z"), toDate: null },
+      { id: "res-3", parcelId: "p-205", type: "acquisition", authority: "Deputy Commissioner, Cumilla", referenceNo: "LA Case 39/2026", note: "Section 4 notice served for the Debidwar–Barura road widening.", fromDate: new Date("2026-06-20T00:00:00Z"), toDate: null },
+      // Discharged — active-restriction filtering must leave this out.
+      { id: "res-4", parcelId: "p-311", type: "mortgage", authority: "Janata Bank, Cumilla", referenceNo: "JB/MTG/2019/1188", note: "Discharged on repayment.", fromDate: new Date("2019-11-02T00:00:00Z"), toDate: new Date("2025-01-30T00:00:00Z") },
+    ] as Prisma.ParcelRestrictionCreateManyInput[],
+  });
+
   await prisma.ownershipRecord.createMany({
     data: [
       { id: "own-1", parcelId: "p-142", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "purchase", fromDate: new Date("2015-07-20T00:00:00Z"), toDate: null, documentId: "d-2" },

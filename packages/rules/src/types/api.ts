@@ -5,6 +5,7 @@
 import type {
   Parcel,
   OwnershipRecord,
+  ParcelRestriction,
   LandDocument,
   Dispute,
   DisputeEvent,
@@ -12,12 +13,18 @@ import type {
   FieldReport,
   Hearing,
 } from ".";
+// A derived shape rather than a stored one, so it comes from the rule that
+// computes it, not from the domain model.
+import type { TransferReview } from "../restrictions";
 
 export interface ParcelDetail {
   parcel: Parcel;
   ownership: OwnershipRecord[];
   documents: LandDocument[];
   disputes: Dispute[];
+  restrictions: ParcelRestriction[];
+  /** Whether the land may change hands — decided server-side, see transferReview(). */
+  transfer: TransferReview;
 }
 
 export interface DisputeDetail {

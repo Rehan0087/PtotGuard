@@ -341,6 +341,13 @@ export const en = {
       partition: "Partition",
       "court-order": "Court order",
     },
+    restrictionType: {
+      mortgage: "Mortgage",
+      injunction: "Court injunction",
+      attachment: "Attachment",
+      acquisition: "Under acquisition",
+      "non-transferable": "Non-transferable",
+    },
     mutationType: {
       sale: "Sale",
       inheritance: "Inheritance",
@@ -644,6 +651,14 @@ export const en = {
       /** Shown because every boundary in the demo dataset is a synthetic square. */
       mapApproximate: "Boundaries shown are indicative, not survey-accurate.",
       neighbours: "Nearby plots",
+      restrictions: "Restrictions",
+      restrictionsNone: "No restrictions on record. This plot is free to transfer.",
+      /** Shown when at least one active restriction bars a transfer outright. */
+      transferBlocked: "This plot cannot be transferred while these stand.",
+      /** Shown when the only active restrictions are releasable ones. */
+      transferConsent: "This plot can be transferred once the holder releases its claim.",
+      restrictionLifted: (date: string) => `Lifted ${date}`,
+      restrictionSince: (date: string) => `In force since ${date}`,
       subtitle: (landUse: string, ownershipType: string) =>
         `${landUse} land · ${ownershipType} ownership`,
       area: "Area",

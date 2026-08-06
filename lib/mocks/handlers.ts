@@ -25,6 +25,7 @@ import {
   normaliseUlpin,
   reviewDraft,
   rulingGate,
+  transferReview,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
@@ -331,11 +332,19 @@ export const handlers = [
     await latency();
     const parcel = db.parcels.find((p) => p.id === params.id);
     if (!parcel) return notFound("Parcel not found");
+    const restrictions = db.parcelRestrictions
+      .filter((r) => r.parcelId === parcel.id)
+      .sort((a, b) => b.fromDate.localeCompare(a.fromDate));
+
     return HttpResponse.json({
       parcel,
       ownership: db.ownershipRecords.filter((o) => o.parcelId === parcel.id),
       documents: db.documents.filter((d) => d.parcelId === parcel.id),
       disputes: db.disputes.filter((d) => d.parcelId === parcel.id),
+      restrictions,
+      // Server-side, same as the real API: whether land may change hands is
+      // not a question the browser answers for itself.
+      transfer: transferReview(restrictions),
     });
   }),
 

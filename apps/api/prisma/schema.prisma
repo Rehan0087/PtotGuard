@@ -123,6 +123,7 @@ model Parcel {
   lastMutationAt DateTime?
 
   ownershipRecords OwnershipRecord[]
+  restrictions     ParcelRestriction[]
   documents        LandDocument[]
   disputes         Dispute[]
   mutations        Mutation[]
@@ -135,6 +136,28 @@ model Parcel {
   @@index([jurisdictionId])
   @@index([ownerId])
   @@map("parcels")
+}
+
+/// An encumbrance limiting what may be done with a plot. A table, not Json on
+/// Parcel: each has its own identity, date range, and issuing authority, and
+/// the public record view queries them without loading the parcel.
+model ParcelRestriction {
+  id       String @id
+  parcelId String
+  parcel   Parcel @relation(fields: [parcelId], references: [id])
+  /// RestrictionType: "mortgage" | "injunction" | "attachment"
+  ///                | "acquisition" | "non-transferable"
+  type     String
+  /// The court, bank, or office that imposed it. Record content, as filed.
+  authority String
+  referenceNo String?
+  note     String?
+  fromDate DateTime
+  /// null = still in force — see activeRestrictions() in @plotguard/rules.
+  toDate   DateTime?
+
+  @@index([parcelId])
+  @@map("parcel_restrictions")
 }
 
 model OwnershipRecord {

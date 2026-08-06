@@ -60,6 +60,38 @@ export interface Parcel {
   openDisputeCount: number;
 }
 
+/**
+ * An encumbrance limiting what may be done with a plot.
+ *
+ * - `mortgage` — বন্ধক. Charged to a lender; transferable only with consent.
+ * - `injunction` — নিষেধাজ্ঞা. A court has restrained dealings in the land.
+ * - `attachment` — ক্রোক. Attached in execution of a decree.
+ * - `acquisition` — অধিগ্রহণ. Under government acquisition or requisition.
+ * - `non-transferable` — barred from transfer by the terms it was granted on
+ *   (khas settlement conditions, protected tenure).
+ */
+export type RestrictionType =
+  | "mortgage"
+  | "injunction"
+  | "attachment"
+  | "acquisition"
+  | "non-transferable";
+
+export interface ParcelRestriction {
+  id: ID;
+  parcelId: ID;
+  type: RestrictionType;
+  /** Who imposed it — a court, a bank, an office. Record content, as filed. */
+  authority: string;
+  /** Case, deed, or memo number the restriction is recorded under. */
+  referenceNo?: string;
+  /** Free text as recorded. Not translated — it is record content. */
+  note?: string;
+  fromDate: ISODateString;
+  /** null = still in force. */
+  toDate: ISODateString | null;
+}
+
 export type AcquisitionType =
   | "purchase"
   | "inheritance"

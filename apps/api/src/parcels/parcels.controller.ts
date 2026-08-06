@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { normaliseUlpin } from "@plotguard/rules";
+import { normaliseUlpin, transferReview, type ParcelRestriction } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { currentUserId } from "../auth/dev-current-user";
 import { NotFoundError } from "../common/domain-exceptions";
@@ -74,14 +74,27 @@ export class ParcelsController {
     });
     if (!parcel) throw new NotFoundError("Parcel not found");
 
-    const [ownership, documents, disputes] = await Promise.all([
+    const [ownership, documents, disputes, restrictions] = await Promise.all([
       this.prisma.ownershipRecord.findMany({ where: { parcelId: id } }),
       this.prisma.landDocument.findMany({ where: { parcelId: id } }),
       this.prisma.dispute.findMany({ where: { parcelId: id } }),
+      this.prisma.parcelRestriction.findMany({
+        where: { parcelId: id },
+        orderBy: { fromDate: "desc" },
+      }),
     ]);
     const counts = await openDisputeCounts(this.prisma, [id]);
 
-    return { parcel: toParcel(parcel, counts.get(id) ?? 0), ownership, documents, disputes };
+    return {
+      parcel: toParcel(parcel, counts.get(id) ?? 0),
+      ownership,
+      documents,
+      disputes,
+      restrictions,
+      // Derived here rather than in the browser: whether land may change hands
+      // is the server's answer, and the same one that will refuse a mutation.
+      transfer: transferReview(restrictions as unknown as ParcelRestriction[]),
+    };
   }
 
   @Get(":id/history")

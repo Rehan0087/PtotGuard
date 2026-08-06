@@ -319,6 +319,13 @@ export const bn: Dictionary = {
       partition: "বণ্টন",
       "court-order": "আদালতের আদেশ",
     },
+    restrictionType: {
+      mortgage: "বন্ধক",
+      injunction: "আদালতের নিষেধাজ্ঞা",
+      attachment: "ক্রোক",
+      acquisition: "অধিগ্রহণাধীন",
+      "non-transferable": "হস্তান্তর-অযোগ্য",
+    },
     mutationType: {
       sale: "বিক্রয়",
       inheritance: "উত্তরাধিকার",
@@ -604,6 +611,12 @@ export const bn: Dictionary = {
       mapHint: "এই জমিটি আলাদা রঙে, পাশের জমিগুলো সঙ্গে। কোনো জমিতে ক্লিক করলে সেটি খুলবে।",
       mapApproximate: "দেখানো সীমানা আনুমানিক, জরিপ-নির্ভুল নয়।",
       neighbours: "কাছাকাছি জমি",
+      restrictions: "বাধানিষেধ",
+      restrictionsNone: "কোনো বাধানিষেধ রেকর্ডে নেই। এই জমি হস্তান্তরযোগ্য।",
+      transferBlocked: "এগুলো বহাল থাকা অবস্থায় এই জমি হস্তান্তর করা যাবে না।",
+      transferConsent: "দাবিদার অবমুক্তি দিলে এই জমি হস্তান্তর করা যাবে।",
+      restrictionLifted: (date: string) => `${date} তারিখে অবমুক্ত`,
+      restrictionSince: (date: string) => `${date} থেকে বহাল`,
       subtitle: (landUse: string, ownershipType: string) =>
         `${landUse} জমি · ${ownershipType} মালিকানা`,
       area: "পরিমাণ",

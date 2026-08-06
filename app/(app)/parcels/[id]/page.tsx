@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   FileText,
   Fingerprint,
+  Lock,
   MapPin,
   Ruler,
   Landmark,
@@ -28,6 +29,7 @@ import { formatCoord } from "@/lib/format";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
+import { cn } from "@/lib/utils";
 
 // Leaflet reads `window` on evaluation, so the map never renders on the server.
 const ParcelLiveMap = dynamic(
@@ -93,7 +95,8 @@ export default function ParcelDetailPage() {
     );
   }
 
-  const { parcel, ownership, documents, disputes } = data;
+  const { parcel, ownership, documents, disputes, restrictions, transfer } = data;
+  const activeIds = new Set([...transfer.blockers, ...transfer.consents].map((r) => r.id));
 
   return (
     <div className="space-y-6">
@@ -167,6 +170,66 @@ export default function ParcelDetailPage() {
             </div>
             <SurveyCorners />
           </Card>
+
+          {/* What limits what may be done with this land. Sits above the title
+              chain because it governs the present, not the past. */}
+          <section>
+            <h2 className="mb-3 flex items-center gap-2 font-heading text-base font-semibold text-foreground">
+              <Lock className="size-4 text-marker" />
+              {t.pages.parcel.restrictions}
+            </h2>
+            <Card className="gap-3 px-4">
+              {restrictions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t.pages.parcel.restrictionsNone}
+                </p>
+              ) : (
+                <>
+                  {/* The transfer verdict comes from the server, not from
+                      counting rows here — same answer that will refuse a
+                      mutation. */}
+                  {transfer.blockers.length > 0 ? (
+                    <p className="rounded-md bg-flagged/10 px-3 py-2 text-sm text-flagged">
+                      {t.pages.parcel.transferBlocked}
+                    </p>
+                  ) : transfer.consents.length > 0 ? (
+                    <p className="rounded-md bg-pending/10 px-3 py-2 text-sm text-pending">
+                      {t.pages.parcel.transferConsent}
+                    </p>
+                  ) : null}
+
+                  <ul className="divide-y divide-border">
+                    {restrictions.map((r) => {
+                      const active = activeIds.has(r.id);
+                      return (
+                        <li
+                          key={r.id}
+                          className={cn("py-2.5 first:pt-0 last:pb-0", !active && "opacity-55")}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-foreground">
+                              {t.domain.restrictionType[r.type]}
+                            </span>
+                            {r.referenceNo ? <IdChip>{r.referenceNo}</IdChip> : null}
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {r.authority} ·{" "}
+                            {r.toDate
+                              ? t.pages.parcel.restrictionLifted(f.date(r.toDate))
+                              : t.pages.parcel.restrictionSince(f.date(r.fromDate))}
+                          </div>
+                          {/* Record content — shown as filed, never translated. */}
+                          {r.note ? (
+                            <p className="mt-1 text-xs text-foreground">{r.note}</p>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              )}
+            </Card>
+          </section>
 
           <section>
             <h2 className="mb-3 flex items-center gap-2 font-heading text-base font-semibold text-foreground">
