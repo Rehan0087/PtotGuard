@@ -15,6 +15,8 @@ import type {
   Dispute,
   DisputeEvent,
   Mutation,
+  ServiceApplication,
+  ServiceApplicationEvent,
   FieldReport,
   Hearing,
 } from ".";
@@ -83,6 +85,12 @@ export interface MutationDetail {
   mutation: Mutation;
   parcel: Parcel | null;
   documents: LandDocument[];
+}
+
+export interface ServiceApplicationDetail {
+  application: ServiceApplication;
+  timeline: ServiceApplicationEvent[];
+  parcel: Parcel | null;
 }
 
 export interface FieldReportDetail {

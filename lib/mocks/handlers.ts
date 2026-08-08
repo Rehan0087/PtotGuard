@@ -170,6 +170,17 @@ db.documents
 
 const API = "/api";
 
+/** The prefix names the service on every application number it issues —
+ * mirrors APPLICATION_PREFIX in service-applications.controller.ts. */
+const APPLICATION_PREFIX: Record<string, string> = {
+  "land-tax": "LDT",
+  acquisition: "ACQ",
+  "lease-settlement": "LSE",
+  "land-admin": "ADM",
+  "revenue-case": "RVC",
+  "info-bank-request": "INF",
+};
+
 // --- handlers --------------------------------------------------------------
 
 export const handlers = [
@@ -647,6 +658,201 @@ export const handlers = [
     if (status) items = items.filter((m) => m.status === status);
     items.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return HttpResponse.json(paginate(items, url));
+  }),
+
+  // Service applications -----------------------------------------------------
+  // Shared foundation for the six not-yet-built services (Land Development
+  // Tax, Acquisition & Requisition, Lease & Settlement, Land Administration,
+  // Revenue Cases, Land Information Bank) — see ServiceApplication in
+  // @plotguard/rules. No screen calls these yet; mirrors
+  // service-applications.controller.ts so the swap to the real API is a
+  // config change once the first service screen lands.
+  http.get(`${API}/service-applications`, async ({ request }) => {
+    await latency();
+    const url = new URL(request.url);
+    const scope = url.searchParams.get("scope");
+    const serviceType = url.searchParams.get("serviceType");
+    const status = url.searchParams.get("status");
+    const me = currentUser(request);
+    let items = db.serviceApplications.slice();
+    if (scope === "mine") items = items.filter((a) => a.applicantId === me.id);
+    else if (scope === "assigned") items = items.filter((a) => a.assignedOfficerId === me.id);
+    if (serviceType) items = items.filter((a) => a.serviceType === serviceType);
+    if (status) items = items.filter((a) => a.status === status);
+    items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return HttpResponse.json(paginate(items, url));
+  }),
+
+  http.get(`${API}/service-applications/:id`, async ({ params }) => {
+    await latency();
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application) return notFound("Service application not found");
+    return HttpResponse.json({
+      application,
+      timeline: db.serviceApplicationEvents
+        .filter((e) => e.applicationId === application.id)
+        .sort((a, b) => a.at.localeCompare(b.at)),
+      parcel: application.parcelId
+        ? (db.parcels.find((p) => p.id === application.parcelId) ?? null)
+        : null,
+    });
+  }),
+
+  http.post(`${API}/service-applications`, async ({ request }) => {
+    await latency();
+    const body = (await request.json()) as Partial<{
+      serviceType: string;
+      parcelId: string;
+      details: Record<string, unknown>;
+    }>;
+    const me = currentUser(request);
+    const prefix = APPLICATION_PREFIX[body.serviceType as keyof typeof APPLICATION_PREFIX] ?? "SVC";
+    const count = db.serviceApplications.filter((a) => a.serviceType === body.serviceType).length;
+    const now = new Date().toISOString();
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `${prefix}-2026-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: (body.serviceType ?? "land-tax") as never,
+      status: "draft" as const,
+      parcelId: body.parcelId,
+      applicantId: me.id,
+      details: body.details ?? {},
+      documentIds: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
+
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { applicationNo: application.applicationNo, serviceType: application.serviceType },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "created",
+      title: "Application started",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application, { status: 201 });
+  }),
+
+  http.patch(`${API}/service-applications/:id/submit`, async ({ params, request }) => {
+    await latency();
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application) return notFound("Service application not found");
+    if (application.status !== "draft") {
+      return conflict("This application has already been submitted.");
+    }
+
+    const now = new Date().toISOString();
+    application.status = "submitted";
+    application.submittedAt = now;
+    application.updatedAt = now;
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "status-change",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { applicationNo: application.applicationNo, status: application.status },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "submitted",
+      title: "Application submitted",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application);
+  }),
+
+  http.patch(`${API}/service-applications/:id/pay`, async ({ params, request }) => {
+    await latency();
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application) return notFound("Service application not found");
+    if (!application.submittedAt) {
+      return unprocessable({ status: { code: "not-submitted" } });
+    }
+    if (application.paidAt) {
+      return conflict("This application has already been paid.");
+    }
+
+    const { paymentMethod } = (await request.json()) as { paymentMethod: string };
+    const now = new Date().toISOString();
+    application.status = "under-review";
+    application.paymentMethod = paymentMethod as never;
+    application.transactionId = `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+    application.paidAt = now;
+    application.updatedAt = now;
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "payment",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { applicationNo: application.applicationNo, paymentMethod: application.paymentMethod },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "payment-recorded",
+      title: "Payment recorded",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application);
+  }),
+
+  http.patch(`${API}/service-applications/:id/decision`, async ({ params, request }) => {
+    await latency();
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application) return notFound("Service application not found");
+    if (application.status === "draft") {
+      return unprocessable({ status: { code: "not-submitted" } });
+    }
+    if (application.status === "approved" || application.status === "rejected") {
+      return conflict("This application has already been decided.");
+    }
+
+    const { decision } = (await request.json()) as { decision: "approve" | "reject" };
+    const now = new Date().toISOString();
+    application.status = decision === "approve" ? "approved" : "rejected";
+    application.decidedAt = now;
+    application.updatedAt = now;
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: decision,
+      actorId: me.id,
+      actorName: me.name,
+      payload: { applicationNo: application.applicationNo, status: application.status },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "decided",
+      title: decision === "approve" ? "Application approved" : "Application rejected",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application);
   }),
 
   // Disputes ---------------------------------------------------------------

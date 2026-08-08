@@ -18,6 +18,8 @@ import type {
   Dispute,
   DisputeEvent,
   Mutation,
+  ServiceApplication,
+  ServiceApplicationEvent,
   FieldReport,
   Hearing,
   AppNotification,
@@ -302,6 +304,15 @@ export const mutations: Mutation[] = [
   { id: "m-1210", mutationNumber: "MUT-2026-01210", parcelId: "p-092", parcelDagNo: "RS-92/4", type: "correction", status: "submitted", fromOwnerName: "Ayesha Siddika", toOwnerName: "Ayesha Siddika", requestedById: "usr-ayesha", requestedAt: "2026-07-22T11:00:00Z", documentIds: ["d-8"], objections: [] },
   { id: "m-1150", mutationNumber: "MUT-2026-01150", parcelId: "p-205", parcelDagNo: "BS-205", type: "partition", status: "rejected", fromOwnerName: "Shanti Rani Das", toOwnerName: "Shanti Rani Das + heirs", requestedById: "usr-shanti", requestedAt: "2026-05-02T10:00:00Z", assignedOfficerId: "usr-officer2", documentIds: [], objections: [], decidedAt: "2026-05-20T10:00:00Z" },
 ];
+
+// ---------------------------------------------------------------------------
+// Service applications (Land Tax, Acquisition, Lease, Land Admin, Revenue
+// Cases, Info Bank) — the shared model behind the six not-yet-built services.
+// No seed rows: no screen reads these yet, so a demo has nothing to show —
+// they will arrive with each service's own screen (ILRDMS steps 5-9).
+// ---------------------------------------------------------------------------
+export const serviceApplications: ServiceApplication[] = [];
+export const serviceApplicationEvents: ServiceApplicationEvent[] = [];
 
 // ---------------------------------------------------------------------------
 // Field reports

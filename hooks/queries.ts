@@ -14,6 +14,7 @@ import type {
   OwnershipRecord,
   Dispute,
   Mutation as LandMutation,
+  ServiceApplication,
   LandDocument,
   FieldReport,
   FieldReportStatus,
@@ -25,6 +26,7 @@ import type {
   ParcelDetail,
   DisputeDetail,
   MutationDetail,
+  ServiceApplicationDetail,
   FieldReportDetail,
   HearingDetail,
   InheritanceInput,
@@ -210,6 +212,74 @@ export function useMutationDecision(id: string) {
       qc.invalidateQueries({ queryKey: ["mutation", id] });
       qc.invalidateQueries({ queryKey: ["mutations"] });
     },
+  });
+}
+
+// --- Service applications ---------------------------------------------------
+// Shared foundation for the six not-yet-built services (Land Development Tax,
+// Acquisition & Requisition, Lease & Settlement, Land Administration, Revenue
+// Cases, Land Information Bank) — see ServiceApplication in @plotguard/rules.
+// No screen calls these yet; each service composes a thin screen on top of
+// this same apply → pay → track → decide loop later.
+export function useServiceApplications(params: ListParams = {}) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["service-applications", role, params],
+    queryFn: () => api.get<Paginated<ServiceApplication>>(`/service-applications${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useServiceApplication(id: string | undefined) {
+  return useQuery({
+    queryKey: ["service-application", id],
+    queryFn: () => api.get<ServiceApplicationDetail>(`/service-applications/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCreateServiceApplication() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<ServiceApplication>) =>
+      api.post<ServiceApplication>("/service-applications", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
+  });
+}
+
+function useServiceApplicationWrite(id: string) {
+  const qc = useQueryClient();
+  return {
+    invalidate: () => {
+      qc.invalidateQueries({ queryKey: ["service-application", id] });
+      qc.invalidateQueries({ queryKey: ["service-applications"] });
+    },
+  };
+}
+
+export function useSubmitServiceApplication(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: () => api.patch<ServiceApplication>(`/service-applications/${id}/submit`),
+    onSuccess: invalidate,
+  });
+}
+
+export function usePayServiceApplication(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: (paymentMethod: string) =>
+      api.patch<ServiceApplication>(`/service-applications/${id}/pay`, { paymentMethod }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useServiceApplicationDecision(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: (decision: "approve" | "reject") =>
+      api.patch<ServiceApplication>(`/service-applications/${id}/decision`, { decision }),
+    onSuccess: invalidate,
   });
 }
 

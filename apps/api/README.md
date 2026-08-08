@@ -104,11 +104,21 @@ serve from the mock only.
 | `disputes` | ✅ list, detail | ⬜ create, status, assign-agent |
 | `policies` | ✅ get | ✅ update |
 | `mutations` | ✅ list, detail | ✅ create (`transferReview`), decision (`approvalGate`) |
+| `service-applications` | ✅ list, detail | ✅ create, submit, pay, decision — shared foundation, no screen yet (see below) |
 | `field-reports` | ✅ list, detail, assigned | ✅ update/file (`filingReview`) · ⬜ create, media |
 | `hearings` | ✅ list, detail | ✅ ruling (`rulingGate`), sessions · ⬜ create |
 | `notifications` | ✅ list (own inbox) | ✅ mark read, mark all read |
 | `audit` | ✅ list, per-entity, verify | — (append-only, written by other endpoints) |
 | `auth` | ✅ me (dev stand-in) | ⬜ login, refresh (real auth — see below) |
+
+`service-applications` is the shared model behind six land services that
+don't have screens yet (Land Development Tax, Acquisition & Requisition,
+Lease & Settlement, Land Administration, Revenue Cases, Land Information
+Bank) — apply → pay → track → decide is the same workflow for all six, so
+this is one controller instead of six. `details` (`Json`) is where each
+service's own fields live once it's built. Mutation (e-Namjari) predates
+this model and keeps its own table rather than folding in — see the
+`ServiceApplication` doc comment in `@plotguard/rules`.
 
 ## What's still a stand-in
 
