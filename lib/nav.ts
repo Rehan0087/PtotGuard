@@ -65,6 +65,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard, group: "myLand" },
       { labelKey: "myProperties", href: "/properties", icon: MapPin, group: "myLand" },
       { labelKey: "searchRecords", href: "/search", icon: Search, group: "myLand" },
+      { labelKey: "mutations", href: "/mutations", icon: GitBranch, group: "services" },
       { labelKey: "inheritance", href: "/inheritance", icon: GitBranch, group: "tools" },
       { labelKey: "myDocuments", href: "/documents", icon: FileText, group: "tools" },
       { labelKey: "disputes", href: "/disputes", icon: Scale, group: "tools" },

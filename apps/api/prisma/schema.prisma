@@ -306,6 +306,13 @@ model Mutation {
   objections     Json     @default("[]")
   /// { amount, currency }, optional
   fee            Json?
+  /// PaymentMethod: "bkash" | "nagad" | "card" — simulated, no gateway. See
+  /// packages/rules/src/types/mutation.ts.
+  paymentMethod  String?
+  transactionId  String?
+  /// The deed (dolil) the transfer rests on.
+  deedNumber     String?
+  deedDate       DateTime?
   objectionWindowEndsAt DateTime?
   decidedAt      DateTime?
 

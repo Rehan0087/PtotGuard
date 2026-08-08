@@ -816,7 +816,14 @@ export const en = {
           `The statutory objection window is still open — it closes in ${n(days)} day${days === 1 ? "" : "s"}.`,
       },
       closed: "This mutation is closed and recorded in the audit ledger.",
+      inProgress: "In progress — the land office will update this as it moves.",
       viewParcel: "View parcel",
+      citizenDescription:
+        "Applications you have filed to change the recorded owner of a parcel, and where each one stands.",
+      newApplication: "New application",
+      citizenEmptyTitle: "No mutation applications yet",
+      citizenEmptyBody:
+        "File one after a sale, inheritance, gift, partition, or court order to move the record into your name.",
       confirmApprove: (owner: string, dagNo: string) =>
         `Record ${owner} as the owner of ${dagNo}?`,
       confirmReject: (mutationNumber: string) => `Reject ${mutationNumber}?`,
@@ -878,6 +885,56 @@ export const en = {
         parcelRequired: "Select the parcel this dispute is about.",
         descriptionShort: "Please describe the issue in at least 20 characters.",
         descriptionLong: "Keep the description under 1000 characters.",
+      },
+    },
+
+    newMutation: {
+      title: "File a mutation (namjari)",
+      description:
+        "Apply to change the recorded owner of a parcel after a sale, inheritance, gift, partition, or court order.",
+      steps: { parcel: "Parcel", transfer: "Transfer", payment: "Payment", review: "Review" },
+      whichParcel: "Which parcel is this about?",
+      noParcels: "No parcels linked to your account",
+      typeOfTransfer: "Type of transfer",
+      toOwnerLabel: "New owner's name",
+      toOwnerPlaceholder: "Full name as it should appear on the record",
+      deedNumberLabel: "Deed number",
+      deedNumberPlaceholder: "e.g. 4821/2026",
+      deedDateLabel: "Deed date",
+      paymentTitle: "Filing fee",
+      feeLabel: "Amount due",
+      paymentMethodLabel: "Pay with",
+      paymentMethods: { bkash: "bKash", nagad: "Nagad", card: "Card" },
+      paymentNote:
+        "This is a simulated payment for demonstration — no money moves and no payment details are collected.",
+      reviewAndSubmit: "Review and submit",
+      rowParcel: "Parcel",
+      rowType: "Type",
+      rowToOwner: "New owner",
+      rowDeed: "Deed",
+      rowPayment: "Payment",
+      notSpecified: "Not specified",
+      filedAs: (name: string) =>
+        `Filed as ${name} · you can add supporting documents after the application is created.`,
+      you: "you",
+      continue: "Continue",
+      filing: "Filing…",
+      file: "File application",
+      filedTitle: "Mutation filed",
+      filedBody: (mutationNumber: string) => `${mutationNumber} has been submitted.`,
+      failedTitle: "Could not file the application",
+      failedBody: "Please try again.",
+      /** What each transfer kind means, in the citizen's words. */
+      blurbs: {
+        sale: "The land was bought and sold.",
+        inheritance: "Passed on after the previous owner's death.",
+        gift: "Given without payment, by deed of gift.",
+        partition: "Split among joint owners.",
+        correction: "Fixing an error in who the record names as owner.",
+      },
+      errors: {
+        parcelRequired: "Select the parcel this application is about.",
+        toOwnerRequired: "Enter the name of the new owner.",
       },
     },
 

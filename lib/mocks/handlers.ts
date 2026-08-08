@@ -514,6 +514,78 @@ export const handlers = [
   }),
 
   // Mutations (namjari) ----------------------------------------------------
+  // Citizen filing. Gated by transferReview(), not approvalGate(): at filing
+  // time there is no objection window yet (that starts once an officer moves
+  // this past verification) — the question is whether the land can change
+  // hands at all. A plot under an active injunction, attachment, or
+  // acquisition notice does not enter the pipeline; a mortgaged one may.
+  http.post(`${API}/mutations`, async ({ request }) => {
+    await latency();
+    const body = (await request.json()) as Partial<{
+      parcelId: string;
+      type: string;
+      toOwnerName: string;
+      deedNumber: string;
+      deedDate: string;
+      documentIds: string[];
+      paymentMethod: string;
+    }>;
+    const parcel = db.parcels.find((p) => p.id === body.parcelId);
+    if (!parcel) return notFound("Parcel not found");
+
+    const restrictions = db.parcelRestrictions.filter((r) => r.parcelId === parcel.id);
+    const review = transferReview(restrictions);
+    if (!review.canTransfer) {
+      // Assigned rather than passed as an inline literal: unprocessable()'s
+      // parameter type checks each value against { code: string } with excess
+      // fields ignored — but only when the value is not a fresh object
+      // literal at the call site, which TypeScript still excess-checks.
+      const reason = { code: "restricted", blockers: review.blockers.map((r) => r.type) };
+      return unprocessable({ parcelId: reason });
+    }
+
+    const me = currentUser(request);
+    const seq = 1300 + db.mutations.length;
+    const now = new Date().toISOString();
+    const mutation = {
+      id: `m-${Date.now()}`,
+      mutationNumber: `MUT-2026-${String(seq).padStart(5, "0")}`,
+      parcelId: parcel.id,
+      parcelDagNo: parcel.dagNo,
+      type: (body.type ?? "sale") as never,
+      status: "submitted" as const,
+      // The registry's own fact, not the applicant's claim.
+      fromOwnerName: parcel.ownerName,
+      toOwnerName: body.toOwnerName ?? "",
+      requestedById: me.id,
+      requestedAt: now,
+      documentIds: body.documentIds ?? [],
+      objections: [],
+      deedNumber: body.deedNumber,
+      deedDate: body.deedDate,
+      fee: { amount: db.policies.mutationFeeBdt, currency: "BDT" as const },
+      paymentMethod: body.paymentMethod as never,
+      // Simulated — no gateway is called.
+      transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+    };
+    db.mutations.unshift(mutation);
+
+    await appendAudit({
+      entityType: "mutation",
+      entityId: mutation.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        mutationNumber: mutation.mutationNumber,
+        parcelDagNo: mutation.parcelDagNo,
+        toOwnerName: mutation.toOwnerName,
+      },
+    });
+
+    return HttpResponse.json(mutation, { status: 201 });
+  }),
+
   // approvalGate() used to run client-side only (the button disables, but
   // nothing here checked it) — exactly the gap this file's own header says
   // this project avoids: a UI that explains a hold is not a server that
@@ -575,35 +647,6 @@ export const handlers = [
     if (status) items = items.filter((m) => m.status === status);
     items.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return HttpResponse.json(paginate(items, url));
-  }),
-
-  http.post(`${API}/mutations`, async ({ request }) => {
-    await latency();
-    const me = currentUser(request);
-    const body = (await request.json()) as Partial<{
-      parcelId: string;
-      parcelDagNo: string;
-      type: string;
-      toOwnerName: string;
-      fromOwnerName: string;
-    }>;
-    const seq = 1211 + db.mutations.length;
-    const mutation = {
-      id: `m-${seq}`,
-      mutationNumber: `MUT-2026-${String(seq).padStart(5, "0")}`,
-      parcelId: body.parcelId ?? "",
-      parcelDagNo: body.parcelDagNo ?? "",
-      type: (body.type as never) ?? "sale",
-      status: "submitted" as const,
-      fromOwnerName: body.fromOwnerName ?? me.name,
-      toOwnerName: body.toOwnerName ?? "",
-      requestedById: me.id,
-      requestedAt: new Date().toISOString(),
-      documentIds: [] as string[],
-      objections: [],
-    };
-    db.mutations.unshift(mutation);
-    return HttpResponse.json(mutation, { status: 201 });
   }),
 
   // Disputes ---------------------------------------------------------------

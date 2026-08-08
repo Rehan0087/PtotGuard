@@ -103,7 +103,7 @@ serve from the mock only.
 | `documents` | ✅ list, detail | ⬜ create, decision, fields, reprocess |
 | `disputes` | ✅ list, detail | ⬜ create, status, assign-agent |
 | `policies` | ✅ get | ✅ update |
-| `mutations` | ✅ list, detail | ✅ decision (`approvalGate`) |
+| `mutations` | ✅ list, detail | ✅ create (`transferReview`), decision (`approvalGate`) |
 | `field-reports` | ✅ list, detail, assigned | ✅ update/file (`filingReview`) · ⬜ create, media |
 | `hearings` | ✅ list, detail | ✅ ruling (`rulingGate`), sessions · ⬜ create |
 | `notifications` | ✅ list (own inbox) | ✅ mark read, mark all read |
