@@ -11,6 +11,7 @@ import { DisputesModule } from "./disputes/disputes.module";
 import { PoliciesModule } from "./policies/policies.module";
 import { MutationsModule } from "./mutations/mutations.module";
 import { ServiceApplicationsModule } from "./service-applications/service-applications.module";
+import { LandTaxModule } from "./land-tax/land-tax.module";
 import { FieldReportsModule } from "./field-reports/field-reports.module";
 import { HearingsModule } from "./hearings/hearings.module";
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -32,6 +33,7 @@ import { AuthModule } from "./auth/auth.module";
     PoliciesModule,
     MutationsModule,
     ServiceApplicationsModule,
+    LandTaxModule,
     FieldReportsModule,
     HearingsModule,
     NotificationsModule,

@@ -478,10 +478,19 @@ model AppNotification {
 
 model Policy {
   /// Fixed to "singleton" — one row, upserted, never created a second time.
-  id                  String @id @default("singleton")
-  mutationFeeBdt      Int
-  objectionWindowDays Int
-  fraudScoreThreshold Float
+  id                                   String @id @default("singleton")
+  mutationFeeBdt                       Int
+  objectionWindowDays                  Int
+  fraudScoreThreshold                  Float
+  /// Record<LandUse, number> — BDT per decimal per year. Json because it is
+  /// read and written as a unit by the tax rule and never queried by land use.
+  landTaxRatePerDecimalBdt             Json   @default("{}")
+  /// Agricultural holdings at or below this size owe nothing.
+  landTaxAgriculturalExemptionDecimals Int    @default(825)
+  /// Added per whole year an assessment stays unpaid, as a percentage.
+  landTaxArrearSurchargePercent        Float  @default(0)
+  /// How many years back arrears are billed — recovery windows are bounded.
+  landTaxMaxArrearYears                Int    @default(3)
 
   @@map("policies")
 }

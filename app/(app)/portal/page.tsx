@@ -39,7 +39,7 @@ type Service = {
 
 const SERVICES: Service[] = [
   { key: "mutation", bodyKey: "mutationBody", icon: GitBranch, href: "/mutations" },
-  { key: "landTax", bodyKey: "landTaxBody", icon: Banknote },
+  { key: "landTax", bodyKey: "landTaxBody", icon: Banknote, href: "/land-tax" },
   { key: "recordsMaps", bodyKey: "recordsMapsBody", icon: Map, href: "/search" },
   { key: "acquisition", bodyKey: "acquisitionBody", icon: Landmark },
   { key: "lease", bodyKey: "leaseBody", icon: Sprout },

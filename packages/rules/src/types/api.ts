@@ -3,6 +3,7 @@
  * Kept alongside the domain model so mocks, hooks, and the real API agree.
  */
 import type {
+  ID,
   Parcel,
   OwnershipRecord,
   ParcelRestriction,
@@ -20,9 +21,10 @@ import type {
   FieldReport,
   Hearing,
 } from ".";
-// A derived shape rather than a stored one, so it comes from the rule that
-// computes it, not from the domain model.
+// Derived shapes rather than stored ones, so they come from the rules that
+// compute them, not from the domain model.
 import type { TransferReview } from "../restrictions";
+import type { LandTaxAssessment } from "../land-tax";
 
 export interface ParcelDetail {
   parcel: Parcel;
@@ -85,6 +87,24 @@ export interface MutationDetail {
   mutation: Mutation;
   parcel: Parcel | null;
   documents: LandDocument[];
+}
+
+/**
+ * One holding on the citizen's land-tax screen, with its bill already worked
+ * out. The assessment is computed server-side and sent whole — the browser
+ * displays what is owed, it does not decide it.
+ */
+export interface LandTaxHolding {
+  parcelId: ID;
+  ulpin: string | null;
+  dagNo: string;
+  khatianNo: string;
+  title: string;
+  landUse: LandUse;
+  area: Area;
+  assessmentYear: number;
+  paidThroughYear: number | null;
+  assessment: LandTaxAssessment;
 }
 
 export interface ServiceApplicationDetail {

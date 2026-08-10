@@ -344,10 +344,24 @@ export const hearings: Hearing[] = [
 // ---------------------------------------------------------------------------
 // Policies (system configuration)
 // ---------------------------------------------------------------------------
+// The land-tax figures are demonstration values, not a published rate
+// schedule — they live here (and in the Policy row on the real API) precisely
+// so an operator sets their own district's. See assessLandTax().
 export const policies = {
   mutationFeeBdt: 5400,
   objectionWindowDays: 15,
   fraudScoreThreshold: 0.5,
+  landTaxRatePerDecimalBdt: {
+    agricultural: 2,
+    residential: 10,
+    commercial: 25,
+    industrial: 30,
+    mixed: 15,
+    vacant: 5,
+  },
+  landTaxAgriculturalExemptionDecimals: 825,
+  landTaxArrearSurchargePercent: 10,
+  landTaxMaxArrearYears: 3,
 };
 
 // ---------------------------------------------------------------------------

@@ -14,8 +14,35 @@ import { UpdatePoliciesDto } from "./update-policies.dto";
  * stripped from every response rather than leaking into one.
  */
 function toPolicy(row: Policy) {
-  const { mutationFeeBdt, objectionWindowDays, fraudScoreThreshold } = row;
-  return { mutationFeeBdt, objectionWindowDays, fraudScoreThreshold };
+  const {
+    mutationFeeBdt,
+    objectionWindowDays,
+    fraudScoreThreshold,
+    landTaxRatePerDecimalBdt,
+    landTaxAgriculturalExemptionDecimals,
+    landTaxArrearSurchargePercent,
+    landTaxMaxArrearYears,
+  } = row;
+  return {
+    mutationFeeBdt,
+    objectionWindowDays,
+    fraudScoreThreshold,
+    landTaxRatePerDecimalBdt,
+    landTaxAgriculturalExemptionDecimals,
+    landTaxArrearSurchargePercent,
+    landTaxMaxArrearYears,
+  };
+}
+
+/**
+ * The audit ledger renders every payload value as a string, so entries have to
+ * stay flat scalars — see changedFields(). The rate table is the one nested
+ * value here, carried as its JSON text so a rate change is still legible on
+ * the audit page rather than showing up as "[object Object]".
+ */
+function forAudit(row: Policy) {
+  const { landTaxRatePerDecimalBdt, ...flat } = toPolicy(row);
+  return { ...flat, landTaxRatePerDecimalBdt: JSON.stringify(landTaxRatePerDecimalBdt) };
 }
 
 @Controller("policies")
@@ -54,7 +81,7 @@ export class PoliciesController {
         actorId,
         // Recorded as before/after: a fee or a threshold changing is exactly
         // the kind of thing someone later needs to date precisely.
-        payload: changedFields(toPolicy(before), toPolicy(updated)),
+        payload: changedFields(forAudit(before), forAudit(updated)),
       });
       return toPolicy(updated);
     });

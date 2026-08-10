@@ -27,6 +27,7 @@ import type {
   DisputeDetail,
   MutationDetail,
   ServiceApplicationDetail,
+  LandTaxHolding,
   FieldReportDetail,
   HearingDetail,
   InheritanceInput,
@@ -215,12 +216,34 @@ export function useMutationDecision(id: string) {
   });
 }
 
+// --- Land development tax (khajna) ------------------------------------------
+export function useLandTaxHoldings() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["land-tax-holdings", role],
+    queryFn: () => api.get<LandTaxHolding[]>("/land-tax/holdings"),
+  });
+}
+
+export function usePayLandTax() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { parcelId: string; paymentMethod: string }) =>
+      api.post<ServiceApplication>("/land-tax/pay", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
+      qc.invalidateQueries({ queryKey: ["service-applications"] });
+    },
+  });
+}
+
 // --- Service applications ---------------------------------------------------
-// Shared foundation for the six not-yet-built services (Land Development Tax,
+// Shared foundation across services — see ServiceApplication in
+// @plotguard/rules. Land Development Tax is the first one built on it (via
+// the land-tax hooks above, which record payment as a ServiceApplication);
 // Acquisition & Requisition, Lease & Settlement, Land Administration, Revenue
-// Cases, Land Information Bank) — see ServiceApplication in @plotguard/rules.
-// No screen calls these yet; each service composes a thin screen on top of
-// this same apply → pay → track → decide loop later.
+// Cases, and Land Information Bank still compose their screens on top of this
+// same apply → pay → track → decide loop.
 export function useServiceApplications(params: ListParams = {}) {
   const role = useRole();
   return useQuery({

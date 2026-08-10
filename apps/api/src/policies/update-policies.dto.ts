@@ -1,4 +1,4 @@
-import { IsInt, IsNumber, IsOptional, Max, Min } from "class-validator";
+import { IsInt, IsNumber, IsObject, IsOptional, Max, Min } from "class-validator";
 
 /**
  * Every field optional — the admin screen PATCHes only what changed. Bounds
@@ -24,4 +24,25 @@ export class UpdatePoliciesDto {
   @Min(0)
   @Max(1)
   fraudScoreThreshold?: number;
+
+  /** Record<LandUse, number>, BDT per decimal per year — see assessLandTax(). */
+  @IsOptional()
+  @IsObject()
+  landTaxRatePerDecimalBdt?: Record<string, number>;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  landTaxAgriculturalExemptionDecimals?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  landTaxArrearSurchargePercent?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  landTaxMaxArrearYears?: number;
 }

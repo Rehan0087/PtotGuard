@@ -108,6 +108,7 @@ export const bn: Dictionary = {
     inheritance: "উত্তরাধিকার",
     records: "রেকর্ড",
     mutations: "নামজারি",
+    landTax: "ভূমি উন্নয়ন কর",
     ocrQueue: "ওসিআর সারি",
     fraudReview: "জালিয়াতি পর্যালোচনা",
     fieldAgents: "মাঠকর্মী",
@@ -1181,6 +1182,40 @@ export const bn: Dictionary = {
         revenueCasesBody: "রাজস্ব আদালতে মামলা দায়ের করুন ও অগ্রগতি দেখুন।",
         infoBank: "ভূমি তথ্য ব্যাংক",
         infoBankBody: "রেকর্ডভুক্ত খাস, অধিগ্রহণকৃত ও সরকারি জমি দেখুন।",
+      },
+    },
+
+    landTax: {
+      description:
+        "আপনার প্রতিটি জমির উপর ধার্য ভূমি উন্নয়ন কর (খাজনা), বকেয়া বছরসহ। অনলাইনে পরিশোধ করলে দাখিলা জমির রেকর্ডে সংরক্ষিত হয়।",
+      totalDueLabel: (count: string) => `${count}টি জমিতে মোট প্রদেয়`,
+      yearLabel: (year: string) => `${year} সালের ধার্য`,
+      decimals: (value: string) => `${value} শতাংশ`,
+      colYear: "বছর",
+      colAssessed: "ধার্য",
+      colSurcharge: "জরিমানা",
+      colDue: "প্রদেয়",
+      arrear: "বকেয়া",
+      arrearsNotice: (amount: string) =>
+        `এর মধ্যে ${amount} পূর্ববর্তী বছরের অপরিশোধিত কর, বিলম্ব জরিমানাসহ।`,
+      settled: (year: string) => `${year} সাল পর্যন্ত সম্পূর্ণ পরিশোধিত।`,
+      pay: "এখন পরিশোধ করুন",
+      confirmPay: (amount: string) => `${amount} পরিশোধ করুন`,
+      viewParcel: "দাগ দেখুন",
+      paymentMethods: { bkash: "বিকাশ", nagad: "নগদ", card: "কার্ড" },
+      paymentNote:
+        "এটি প্রদর্শনের জন্য অনুকরণকৃত পরিশোধ — কোনো অর্থ স্থানান্তরিত হয় না এবং কোনো পরিশোধের তথ্য সংগ্রহ করা হয় না।",
+      paidTitle: "কর পরিশোধিত",
+      paidBody: (dagNo: string, transactionId: string) =>
+        `${dagNo}-এর এ বছরের কর পরিশোধ হয়েছে। রেফারেন্স ${transactionId}।`,
+      failedTitle: "পরিশোধ নথিভুক্ত করা যায়নি",
+      failedBody: "অনুগ্রহ করে আবার চেষ্টা করুন।",
+      emptyTitle: "রেকর্ডে কোনো জমি নেই",
+      emptyBody: "ভূমি উন্নয়ন কর প্রতিটি দাগের উপর ধার্য হয়। আপনার নামে রেকর্ডকৃত জমি এখানে দেখা যাবে।",
+      exempt: {
+        smallholder: (threshold: string) =>
+          `অব্যাহতিপ্রাপ্ত — ${threshold} শতাংশ বা তার কম কৃষিজমির উপর কোনো ভূমি উন্নয়ন কর নেই।`,
+        zeroRated: (landUse: string) => `অব্যাহতিপ্রাপ্ত — এই উপজেলায় ${landUse} জমির উপর কর ধার্য হয় না।`,
       },
     },
 

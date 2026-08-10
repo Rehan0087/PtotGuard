@@ -127,6 +127,7 @@ export const en = {
     inheritance: "Inheritance",
     records: "Records",
     mutations: "Mutations",
+    landTax: "Land development tax",
     ocrQueue: "OCR queue",
     fraudReview: "Fraud review",
     fieldAgents: "Field agents",
@@ -1251,6 +1252,41 @@ export const en = {
         revenueCasesBody: "File and follow a case before the revenue court.",
         infoBank: "Land information bank",
         infoBankBody: "Browse khas, acquired, and government land on record.",
+      },
+    },
+
+    landTax: {
+      description:
+        "Land development tax (khajna) assessed on each holding you own, including any unpaid earlier years. Pay online and the receipt is recorded against the plot.",
+      totalDueLabel: (count: string) => `Due across ${count} holding${count === "1" ? "" : "s"}`,
+      yearLabel: (year: string) => `${year} assessment`,
+      decimals: (value: string) => `${value} decimal`,
+      colYear: "Year",
+      colAssessed: "Assessed",
+      colSurcharge: "Surcharge",
+      colDue: "Due",
+      arrear: "Arrear",
+      arrearsNotice: (amount: string) =>
+        `${amount} of this is unpaid tax from earlier years, with the late surcharge added.`,
+      settled: (year: string) => `Paid in full through ${year}.`,
+      pay: "Pay now",
+      confirmPay: (amount: string) => `Pay ${amount}`,
+      viewParcel: "View parcel",
+      paymentMethods: { bkash: "bKash", nagad: "Nagad", card: "Card" },
+      paymentNote:
+        "This is a simulated payment for demonstration — no money moves and no payment details are collected.",
+      paidTitle: "Tax paid",
+      paidBody: (dagNo: string, transactionId: string) =>
+        `${dagNo} is settled for this year. Reference ${transactionId}.`,
+      failedTitle: "Payment could not be recorded",
+      failedBody: "Please try again.",
+      emptyTitle: "No holdings on record",
+      emptyBody: "Land development tax is assessed per plot. Plots recorded in your name will appear here.",
+      /** Why a holding owes nothing — see ExemptionReason in @plotguard/rules. */
+      exempt: {
+        smallholder: (threshold: string) =>
+          `Exempt — agricultural holdings of ${threshold} decimal or less pay no land development tax.`,
+        zeroRated: (landUse: string) => `Exempt — ${landUse} land is not taxed in this district.`,
       },
     },
 

@@ -19,6 +19,7 @@ import type {
 import { ROLES } from "@/lib/types";
 import {
   approvalGate,
+  assessLandTax,
   calcInheritance,
   deletionGate,
   filingReview,
@@ -27,6 +28,7 @@ import {
   rulingGate,
   toPublicParcel,
   transferReview,
+  type LandTaxRates,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
@@ -169,6 +171,29 @@ db.documents
   .forEach((d, i) => scheduleOcrWorker(d.id, d.parcelId, 7000 + i * 5000));
 
 const API = "/api";
+
+/** Read off the paid land-tax applications themselves — the payment record is
+ * the evidence, so there is no second counter to drift from it. Mirrors
+ * paidThroughYear() in land-tax.controller.ts. */
+function paidThroughYear(
+  paid: { parcelId?: string; details: Record<string, unknown> }[],
+  parcelId: string,
+): number | null {
+  const years = paid
+    .filter((a) => a.parcelId === parcelId)
+    .map((a) => Number(a.details?.assessmentYear))
+    .filter((y) => Number.isFinite(y));
+  return years.length > 0 ? Math.max(...years) : null;
+}
+
+function landTaxRates(): LandTaxRates {
+  return {
+    perDecimalByLandUse: db.policies.landTaxRatePerDecimalBdt,
+    agriculturalExemptionDecimals: db.policies.landTaxAgriculturalExemptionDecimals,
+    arrearSurchargePercent: db.policies.landTaxArrearSurchargePercent,
+    maxArrearYears: db.policies.landTaxMaxArrearYears,
+  };
+}
 
 /** The prefix names the service on every application number it issues —
  * mirrors APPLICATION_PREFIX in service-applications.controller.ts. */
@@ -658,6 +683,137 @@ export const handlers = [
     if (status) items = items.filter((m) => m.status === status);
     items.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return HttpResponse.json(paginate(items, url));
+  }),
+
+  // Land development tax (khajna) --------------------------------------------
+  // Assessments are computed here, never taken from the request: what a
+  // citizen owes is the registry's determination. Mirrors
+  // land-tax.controller.ts, including recording the payment as a
+  // ServiceApplication rather than in a table of its own.
+  http.get(`${API}/land-tax/holdings`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const year = new Date().getUTCFullYear();
+    const rates = landTaxRates();
+    const paid = db.serviceApplications.filter(
+      (a) => a.applicantId === me.id && a.serviceType === "land-tax" && a.paidAt,
+    );
+
+    const holdings = db.parcels
+      .filter((p) => p.ownerId === me.id)
+      .sort((a, b) => a.dagNo.localeCompare(b.dagNo))
+      .map((parcel) => {
+        const settled = paidThroughYear(paid, parcel.id);
+        return {
+          parcelId: parcel.id,
+          ulpin: parcel.ulpin,
+          dagNo: parcel.dagNo,
+          khatianNo: parcel.khatianNo,
+          title: parcel.title,
+          landUse: parcel.landUse,
+          area: parcel.area,
+          assessmentYear: year,
+          paidThroughYear: settled,
+          assessment: assessLandTax(
+            {
+              area: parcel.area,
+              landUse: parcel.landUse,
+              assessmentYear: year,
+              paidThroughYear: settled,
+              liableFromYear: new Date(parcel.registeredAt).getUTCFullYear(),
+            },
+            rates,
+          ),
+        };
+      });
+
+    return HttpResponse.json(holdings);
+  }),
+
+  http.post(`${API}/land-tax/pay`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as { parcelId: string; paymentMethod: string };
+    const parcel = db.parcels.find((p) => p.id === body.parcelId);
+    // Same answer for "no such parcel" and "not yours": tax is the holder's
+    // liability, and distinguishing the two would confirm a stranger's holding.
+    if (!parcel || parcel.ownerId !== me.id) return notFound("Parcel not found");
+
+    const year = new Date().getUTCFullYear();
+    const paid = db.serviceApplications.filter(
+      (a) => a.applicantId === me.id && a.serviceType === "land-tax" && a.paidAt,
+    );
+    const settled = paidThroughYear(paid, parcel.id);
+    if (settled !== null && settled >= year) {
+      return conflict("This holding is already paid for the current year.");
+    }
+
+    const assessment = assessLandTax(
+      {
+        area: parcel.area,
+        landUse: parcel.landUse,
+        assessmentYear: year,
+        paidThroughYear: settled,
+        liableFromYear: new Date(parcel.registeredAt).getUTCFullYear(),
+      },
+      landTaxRates(),
+    );
+    if (assessment.total <= 0) return conflict("Nothing is due on this holding.");
+
+    const now = new Date().toISOString();
+    const count = db.serviceApplications.filter((a) => a.serviceType === "land-tax").length;
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `LDT-2026-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: "land-tax" as const,
+      // Paying khajna is a counter transaction, not an application anyone
+      // adjudicates — settled the moment it is paid.
+      status: "approved" as const,
+      parcelId: parcel.id,
+      applicantId: me.id,
+      details: {
+        assessmentYear: year,
+        decimals: assessment.decimals,
+        arrears: assessment.arrears,
+        currentYearDue: assessment.currentYearDue,
+        years: assessment.years,
+      },
+      documentIds: [],
+      feeAmount: assessment.total,
+      paymentMethod: body.paymentMethod as never,
+      transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+      paidAt: now,
+      submittedAt: now,
+      decidedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
+
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "payment",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        applicationNo: application.applicationNo,
+        serviceType: "land-tax",
+        parcelDagNo: parcel.dagNo,
+        assessmentYear: year,
+        amount: application.feeAmount,
+      },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "payment-recorded",
+      title: "Land development tax paid",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application, { status: 201 });
   }),
 
   // Service applications -----------------------------------------------------

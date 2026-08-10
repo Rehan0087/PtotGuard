@@ -104,21 +104,31 @@ serve from the mock only.
 | `disputes` | ✅ list, detail | ⬜ create, status, assign-agent |
 | `policies` | ✅ get | ✅ update |
 | `mutations` | ✅ list, detail | ✅ create (`transferReview`), decision (`approvalGate`) |
-| `service-applications` | ✅ list, detail | ✅ create, submit, pay, decision — shared foundation, no screen yet (see below) |
+| `service-applications` | ✅ list, detail | ✅ create, submit, pay, decision — shared foundation (see below) |
+| `land-tax` | ✅ holdings (+assessment) | ✅ pay (`assessLandTax`) |
 | `field-reports` | ✅ list, detail, assigned | ✅ update/file (`filingReview`) · ⬜ create, media |
 | `hearings` | ✅ list, detail | ✅ ruling (`rulingGate`), sessions · ⬜ create |
 | `notifications` | ✅ list (own inbox) | ✅ mark read, mark all read |
 | `audit` | ✅ list, per-entity, verify | — (append-only, written by other endpoints) |
 | `auth` | ✅ me (dev stand-in) | ⬜ login, refresh (real auth — see below) |
 
-`service-applications` is the shared model behind six land services that
-don't have screens yet (Land Development Tax, Acquisition & Requisition,
-Lease & Settlement, Land Administration, Revenue Cases, Land Information
-Bank) — apply → pay → track → decide is the same workflow for all six, so
-this is one controller instead of six. `details` (`Json`) is where each
-service's own fields live once it's built. Mutation (e-Namjari) predates
-this model and keeps its own table rather than folding in — see the
+`service-applications` is the shared model behind six land services —
+apply → pay → track → decide is the same workflow for all of them, so this
+is one controller instead of six, with `details` (`Json`) holding whatever
+each service differs on. Land Development Tax is the first built on it;
+Acquisition & Requisition, Lease & Settlement, Land Administration, Revenue
+Cases, and Land Information Bank still have no screen. Mutation (e-Namjari)
+predates this model and keeps its own table rather than folding in — see the
 `ServiceApplication` doc comment in `@plotguard/rules`.
+
+`land-tax` shows how a service sits on that foundation: it computes each
+holding's bill with `assessLandTax()` and records payment as a
+ServiceApplication, so tracking and audit come for free. Two things about it
+are deliberate. **Rates are not in the code** — they live on the `Policy`
+singleton, because statutory rates change by finance act and vary by
+district, so the rule takes them as input. And **the amount is never
+accepted from the client**: `POST /land-tax/pay` carries only which holding
+and which method, and recomputes what is owed server-side.
 
 ## What's still a stand-in
 
