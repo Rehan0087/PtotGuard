@@ -8,7 +8,6 @@ import { useSession } from "@/hooks/queries";
 import { useT } from "@/lib/i18n/provider";
 import { IdChip } from "@/components/id-chip";
 import { JurisdictionName } from "@/components/jurisdiction-name";
-import { RoleSwitcher } from "./role-switcher";
 import { LanguageToggle } from "./language-toggle";
 import { ThemeToggle } from "./theme-toggle";
 import { NotificationsMenu } from "./notifications-menu";
@@ -50,7 +49,6 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
           <Search className="size-3.5" />
           {t.shell.searchRecords}
         </Link>
-        <RoleSwitcher />
         <LanguageToggle />
         <ThemeToggle />
         <NotificationsMenu />

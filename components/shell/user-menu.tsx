@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { LogOut, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
@@ -14,10 +15,12 @@ import {
 import { useSession } from "@/hooks/queries";
 import { initials } from "@/lib/format";
 import { useT } from "@/lib/i18n/provider";
-import { toast } from "sonner";
+import { useSessionStore } from "@/store/session";
 
 export function UserMenu() {
   const t = useT();
+  const router = useRouter();
+  const logout = useSessionStore((s) => s.logout);
   const { data } = useSession();
   const user = data?.user;
 
@@ -46,9 +49,10 @@ export function UserMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
-          onClick={() =>
-            toast.info(t.shell.signOutTitle, { description: t.shell.signOutBody })
-          }
+          onClick={() => {
+            logout();
+            router.push("/login");
+          }}
         >
           <LogOut className="size-4" />
           {t.shell.signOut}

@@ -43,3 +43,7 @@ next-env.d.ts
 
 # workspace package build output
 dist
+
+# demo.sh runtime artifacts
+/logs/
+.demo.pids

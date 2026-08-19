@@ -73,17 +73,27 @@ export const bn: Dictionary = {
     changeLanguage: "ভাষা পরিবর্তন করুন",
     accountMenu: "অ্যাকাউন্ট মেনু",
     signOut: "সাইন আউট",
-    signOutTitle: "সাইন আউট এখনো যুক্ত হয়নি",
-    signOutBody:
-      "ব্যাকএন্ড যুক্ত হলে প্রমাণীকরণ আসবে। এখন পোর্টালগুলো দেখতে ভূমিকা পরিবর্তনকারী ব্যবহার করুন।",
-    previewAs: "যে ভূমিকায়",
-    previewAsRole: "ভূমিকা বেছে দেখুন",
-    dev: "ডেভ",
     notifications: "বিজ্ঞপ্তি",
     notificationsAria: (unread: number) =>
       unread ? `বিজ্ঞপ্তি, ${n(unread)}টি অপঠিত` : "বিজ্ঞপ্তি",
     markAllRead: "সব পঠিত চিহ্নিত করুন",
     allCaughtUp: "সব দেখা হয়ে গেছে।",
+  },
+
+  login: {
+    tagline: "আপনার অ্যাকাউন্টে সাইন ইন করুন",
+    emailLabel: "ইমেইল",
+    emailPlaceholder: "you@example.bd",
+    passwordLabel: "পাসওয়ার্ড",
+    passwordPlaceholder: "••••••••",
+    submit: "সাইন ইন",
+    submitting: "সাইন ইন হচ্ছে…",
+    errorTitle: "এই অ্যাকাউন্টটি খুঁজে পাওয়া যায়নি",
+    errorBody: "ইমেইল ঠিকানাটি যাচাই করুন, অথবা নিচের ডেমো অ্যাকাউন্ট থেকে একটি বেছে নিন।",
+    wrongPasswordTitle: "পাসওয়ার্ডটি মিলছে না",
+    wrongPasswordBody: "নিচের ডেমো পাসওয়ার্ডটি ব্যবহার করুন, অথবা একটি ডেমো অ্যাকাউন্ট বেছে নিলে দুটো ঘরই পূরণ হয়ে যাবে।",
+    demoAccountsLabel: "ডেমো অ্যাকাউন্ট",
+    demoPasswordHint: "ডেমো পাসওয়ার্ড:",
   },
 
   nav: {

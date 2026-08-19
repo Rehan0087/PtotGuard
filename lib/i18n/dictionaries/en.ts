@@ -90,17 +90,28 @@ export const en = {
     changeLanguage: "Change language",
     accountMenu: "Account menu",
     signOut: "Sign out",
-    signOutTitle: "Sign-out isn't wired yet",
-    signOutBody:
-      "Authentication arrives with the backend. Use the role switcher to preview portals.",
-    previewAs: "Preview as",
-    previewAsRole: "Preview as role",
-    dev: "Dev",
     notifications: "Notifications",
     notificationsAria: (unread: number) =>
       unread ? `Notifications, ${n(unread)} unread` : "Notifications",
     markAllRead: "Mark all read",
     allCaughtUp: "You're all caught up.",
+  },
+
+  // ── Sign-in ───────────────────────────────────────────────────────────────
+  login: {
+    tagline: "Sign in to your account",
+    emailLabel: "Email",
+    emailPlaceholder: "you@example.bd",
+    passwordLabel: "Password",
+    passwordPlaceholder: "••••••••",
+    submit: "Sign in",
+    submitting: "Signing in…",
+    errorTitle: "We couldn't find that account",
+    errorBody: "Check the email address, or pick one of the demo accounts below.",
+    wrongPasswordTitle: "That password doesn't match",
+    wrongPasswordBody: "Try the demo password below, or pick a demo account to fill both fields.",
+    demoAccountsLabel: "Demo accounts",
+    demoPasswordHint: "Demo password:",
   },
 
   // ── Portals and their sidebar entries ────────────────────────────────────
