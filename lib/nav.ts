@@ -68,6 +68,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "searchRecords", href: "/search", icon: Search, group: "myLand" },
       { labelKey: "mutations", href: "/mutations", icon: GitBranch, group: "services" },
       { labelKey: "landTax", href: "/land-tax", icon: Banknote, group: "services" },
+      { labelKey: "landAdmin", href: "/land-admin", icon: Building2, group: "services" },
       { labelKey: "inheritance", href: "/inheritance", icon: GitBranch, group: "tools" },
       { labelKey: "myDocuments", href: "/documents", icon: FileText, group: "tools" },
       { labelKey: "disputes", href: "/disputes", icon: Scale, group: "tools" },
@@ -79,6 +80,7 @@ export const NAV: Record<Role, PortalNav> = {
     items: [
       { labelKey: "records", href: "/records", icon: BookMarked },
       { labelKey: "mutations", href: "/mutations", icon: GitBranch },
+      { labelKey: "landAdmin", href: "/land-admin", icon: Building2 },
       { labelKey: "ocrQueue", href: "/ocr-queue", icon: ScanLine },
       { labelKey: "fraudReview", href: "/fraud-review", icon: ShieldAlert },
       { labelKey: "fieldAgents", href: "/agents", icon: Users2 },

@@ -18,6 +18,7 @@ import type {
   FieldReportStatus,
   HearingStatus,
   UserStatus,
+  ServiceApplicationStatus,
 } from "@/lib/types";
 
 export interface StatusMeta {
@@ -92,4 +93,18 @@ export const userStatusTone: Record<UserStatus, StatusTone> = {
   active: "verified",
   suspended: "flagged",
   invited: "pending",
+};
+
+/** Shared by every service built on ServiceApplication — see land-admin,
+ * the first screen to render one of these generically. */
+export const serviceApplicationStatusTone: Record<ServiceApplicationStatus, StatusTone> = {
+  draft: "draft",
+  submitted: "pending",
+  "payment-pending": "pending",
+  "under-review": "review",
+  "field-investigation": "review",
+  "hearing-scheduled": "disputed",
+  approved: "verified",
+  rejected: "flagged",
+  withdrawn: "draft",
 };

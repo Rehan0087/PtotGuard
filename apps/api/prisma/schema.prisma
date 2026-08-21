@@ -491,6 +491,10 @@ model Policy {
   landTaxArrearSurchargePercent        Float  @default(0)
   /// How many years back arrears are billed — recovery windows are bounded.
   landTaxMaxArrearYears                Int    @default(3)
+  /// Flat fee, BDT — same convention as mutationFeeBdt, not landTax's rate
+  /// table, since a certified copy doesn't vary by land use.
+  landAdminCertifiedCopyFeeBdt         Int    @default(200)
+  landAdminCorrectionFeeBdt            Int    @default(500)
 
   @@map("policies")
 }

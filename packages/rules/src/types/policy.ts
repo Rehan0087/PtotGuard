@@ -14,4 +14,7 @@ export interface Policy {
   landTaxArrearSurchargePercent: number;
   /** How many years back arrears are billed — see assessLandTax(). */
   landTaxMaxArrearYears: number;
+  /** Flat fee, BDT — a certified copy doesn't vary by land use like tax does. */
+  landAdminCertifiedCopyFeeBdt: number;
+  landAdminCorrectionFeeBdt: number;
 }

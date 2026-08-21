@@ -22,6 +22,8 @@ function toPolicy(row: Policy) {
     landTaxAgriculturalExemptionDecimals,
     landTaxArrearSurchargePercent,
     landTaxMaxArrearYears,
+    landAdminCertifiedCopyFeeBdt,
+    landAdminCorrectionFeeBdt,
   } = row;
   return {
     mutationFeeBdt,
@@ -31,6 +33,8 @@ function toPolicy(row: Policy) {
     landTaxAgriculturalExemptionDecimals,
     landTaxArrearSurchargePercent,
     landTaxMaxArrearYears,
+    landAdminCertifiedCopyFeeBdt,
+    landAdminCorrectionFeeBdt,
   };
 }
 

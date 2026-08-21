@@ -45,4 +45,15 @@ export class UpdatePoliciesDto {
   @IsInt()
   @Min(0)
   landTaxMaxArrearYears?: number;
+
+  /** Flat fee, BDT — see land-admin.controller.ts. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  landAdminCertifiedCopyFeeBdt?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  landAdminCorrectionFeeBdt?: number;
 }

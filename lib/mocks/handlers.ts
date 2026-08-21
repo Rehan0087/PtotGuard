@@ -816,6 +816,103 @@ export const handlers = [
     return HttpResponse.json(application, { status: 201 });
   }),
 
+  // Land administration (certified copies + record corrections) --------------
+  // What's owed is a flat fee by request type, not a computed assessment —
+  // no rule to mirror here, just Policy lookup. Mirrors land-admin.controller.ts.
+  http.post(`${API}/land-admin/apply`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as {
+      parcelId: string;
+      requestType: "certified-copy" | "correction";
+      correctionType?: "name" | "area" | "other";
+      currentValue?: string;
+      correctedValue?: string;
+      reason?: string;
+      documentIds?: string[];
+    };
+    const parcel = db.parcels.find((p) => p.id === body.parcelId);
+    // Same answer for "no such parcel" and "not yours" as land-tax's own
+    // pay handler: a record request is the owner's to make.
+    if (!parcel || parcel.ownerId !== me.id) return notFound("Parcel not found");
+
+    const OPEN_STATUSES = new Set([
+      "submitted",
+      "payment-pending",
+      "under-review",
+      "field-investigation",
+    ]);
+    const hasOpenRequest = db.serviceApplications.some(
+      (a) =>
+        a.applicantId === me.id &&
+        a.serviceType === "land-admin" &&
+        a.parcelId === parcel.id &&
+        OPEN_STATUSES.has(a.status) &&
+        (a.details as { requestType?: string })?.requestType === body.requestType,
+    );
+    if (hasOpenRequest) {
+      return conflict(
+        body.requestType === "certified-copy"
+          ? "A certified-copy request for this parcel is already in progress."
+          : "A correction request for this parcel is already in progress.",
+      );
+    }
+
+    const now = new Date().toISOString();
+    const count = db.serviceApplications.filter((a) => a.serviceType === "land-admin").length;
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `ADM-2026-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: "land-admin" as const,
+      status: "submitted" as const,
+      parcelId: parcel.id,
+      applicantId: me.id,
+      details: {
+        requestType: body.requestType,
+        correctionType: body.correctionType,
+        currentValue: body.currentValue,
+        correctedValue: body.correctedValue,
+        reason: body.reason,
+      },
+      documentIds: body.documentIds ?? [],
+      feeAmount:
+        body.requestType === "certified-copy"
+          ? db.policies.landAdminCertifiedCopyFeeBdt
+          : db.policies.landAdminCorrectionFeeBdt,
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
+
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        applicationNo: application.applicationNo,
+        serviceType: "land-admin",
+        parcelDagNo: parcel.dagNo,
+        requestType: body.requestType,
+      },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "submitted",
+      title:
+        body.requestType === "certified-copy"
+          ? "Certified copy requested"
+          : "Correction request submitted",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application, { status: 201 });
+  }),
+
   // Service applications -----------------------------------------------------
   // Shared foundation for the six not-yet-built services (Land Development
   // Tax, Acquisition & Requisition, Lease & Settlement, Land Administration,

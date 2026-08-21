@@ -362,6 +362,8 @@ export const policies = {
   landTaxAgriculturalExemptionDecimals: 825,
   landTaxArrearSurchargePercent: 10,
   landTaxMaxArrearYears: 3,
+  landAdminCertifiedCopyFeeBdt: 200,
+  landAdminCorrectionFeeBdt: 500,
 };
 
 // ---------------------------------------------------------------------------

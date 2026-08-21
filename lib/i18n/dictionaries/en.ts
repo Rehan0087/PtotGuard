@@ -139,6 +139,7 @@ export const en = {
     records: "Records",
     mutations: "Mutations",
     landTax: "Land development tax",
+    landAdmin: "Land administration",
     ocrQueue: "OCR queue",
     fraudReview: "Fraud review",
     fieldAgents: "Field agents",
@@ -219,6 +220,18 @@ export const en = {
       active: "Active",
       suspended: "Suspended",
       invited: "Invited",
+    },
+    /** Shared by every service built on ServiceApplication — see land-admin. */
+    serviceApplication: {
+      draft: "Draft",
+      submitted: "Submitted",
+      "payment-pending": "Payment pending",
+      "under-review": "Under review",
+      "field-investigation": "Field investigation",
+      "hearing-scheduled": "Hearing scheduled",
+      approved: "Approved",
+      rejected: "Rejected",
+      withdrawn: "Withdrawn",
     },
   },
 
@@ -1298,6 +1311,61 @@ export const en = {
         smallholder: (threshold: string) =>
           `Exempt — agricultural holdings of ${threshold} decimal or less pay no land development tax.`,
         zeroRated: (landUse: string) => `Exempt — ${landUse} land is not taxed in this district.`,
+      },
+    },
+
+    landAdmin: {
+      description:
+        "Request a certified copy of your land record, or ask for a correction to a clerical error — a misspelled name, wrong area, and the like.",
+      newRequest: "New request",
+      requestType: {
+        certifiedCopy: "Certified copy",
+        certifiedCopyBlurb: "An official copy of your parcel's record, stamped and dated.",
+        correction: "Correction",
+        correctionBlurb:
+          "Fix a clerical error on record — a misspelled name, wrong area, or similar.",
+      },
+      parcelLabel: "Parcel",
+      parcelPlaceholder: "Select a parcel",
+      correctionTypeLabel: "What needs correcting?",
+      correctionType: {
+        name: "Name",
+        area: "Area",
+        other: "Other",
+      },
+      currentValueLabel: "Currently on record",
+      correctedValueLabel: "Should read",
+      reasonLabel: "Reason for the correction",
+      reasonPlaceholder: "Explain what's wrong and why",
+      feeLabel: "Fee",
+      pay: "Pay and submit",
+      confirmPay: (amount: string) => `Pay ${amount}`,
+      paymentNote:
+        "This is a simulated payment for demonstration — no money moves and no payment details are collected.",
+      paymentMethods: { bkash: "bKash", nagad: "Nagad", card: "Card" },
+      appliedTitle: "Request submitted",
+      appliedBody: (applicationNo: string) =>
+        `${applicationNo} has been recorded and sent for review.`,
+      failedTitle: "Request could not be submitted",
+      failedBody: "Please try again.",
+      myRequestsLabel: "Your requests",
+      emptyTitle: "No requests yet",
+      emptyBody: "Certified copies and correction requests you file will appear here.",
+      queueTitle: "Requests awaiting decision",
+      queueEmptyTitle: "Nothing awaiting a decision",
+      queueEmptyBody:
+        "Certified-copy and correction requests will appear here once citizens file them.",
+      approve: "Approve",
+      reject: "Reject",
+      approvedTitle: "Request approved",
+      rejectedTitle: "Request rejected",
+      closed: "Decided",
+      errors: {
+        parcelRequired: "Choose a parcel.",
+        correctionTypeRequired: "Choose what needs correcting.",
+        currentValueRequired: "Enter what's currently on record.",
+        correctedValueRequired: "Enter what it should say instead.",
+        reasonRequired: "Explain the reason for this correction.",
       },
     },
 

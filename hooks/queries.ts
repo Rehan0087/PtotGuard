@@ -306,6 +306,35 @@ export function useServiceApplicationDecision(id: string) {
   });
 }
 
+// --- Land administration (certified copies + record corrections) -----------
+// The first screen actually built on the generic service-applications hooks
+// above. Deciding reuses useServiceApplicationDecision untouched. Applying and
+// paying are two backend calls — POST /land-admin/apply (the only bespoke
+// endpoint the feature needed) then the generic PATCH .../pay — chained here
+// into one citizen-facing action, the same "apply and pay in one step" feel
+// Mutation filing and Land Tax both already have.
+export function useApplyLandAdmin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      parcelId: string;
+      requestType: "certified-copy" | "correction";
+      correctionType?: string;
+      currentValue?: string;
+      correctedValue?: string;
+      reason?: string;
+      paymentMethod: string;
+    }) => {
+      const { paymentMethod, ...applyBody } = body;
+      const created = await api.post<ServiceApplication>("/land-admin/apply", applyBody);
+      return api.patch<ServiceApplication>(`/service-applications/${created.id}/pay`, {
+        paymentMethod,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
+  });
+}
+
 // --- Documents -------------------------------------------------------------
 export function useDocuments(params: ListParams = {}) {
   const role = useRole();
