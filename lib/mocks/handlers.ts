@@ -1017,6 +1017,76 @@ export const handlers = [
     return HttpResponse.json(application);
   }),
 
+  // Lease & settlement (khas land settlement applications) --------------------
+  // No parcel to anchor to — khas land isn't in db.parcels, so the citizen
+  // describes what they're applying for instead of picking from what they
+  // own. No ownership check, no duplicate guard. Mirrors
+  // lease-settlement.controller.ts.
+  http.post(`${API}/lease-settlement/apply`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as {
+      landUse: "agricultural" | "non-agricultural";
+      locationDescription: string;
+      areaDecimals: number;
+      termYears: number;
+      purpose: string;
+      documentIds?: string[];
+    };
+
+    const now = new Date().toISOString();
+    const count = db.serviceApplications.filter((a) => a.serviceType === "lease-settlement").length;
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `LSE-2026-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: "lease-settlement" as const,
+      status: "submitted" as const,
+      applicantId: me.id,
+      details: {
+        landUse: body.landUse,
+        locationDescription: body.locationDescription,
+        areaDecimals: body.areaDecimals,
+        termYears: body.termYears,
+        purpose: body.purpose,
+      },
+      documentIds: body.documentIds ?? [],
+      feeAmount:
+        body.landUse === "agricultural"
+          ? db.policies.leaseSettlementAgriculturalFeeBdt
+          : db.policies.leaseSettlementNonAgriculturalFeeBdt,
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
+
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        applicationNo: application.applicationNo,
+        serviceType: "lease-settlement",
+        landUse: body.landUse,
+      },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "submitted",
+      title:
+        body.landUse === "agricultural"
+          ? "Agricultural settlement requested"
+          : "Non-agricultural settlement requested",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application, { status: 201 });
+  }),
+
   // Service applications -----------------------------------------------------
   // Shared foundation for the six not-yet-built services (Land Development
   // Tax, Acquisition & Requisition, Lease & Settlement, Land Administration,

@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   ShieldCheck,
   Banknote,
+  Sprout,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -70,6 +71,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "landTax", href: "/land-tax", icon: Banknote, group: "services" },
       { labelKey: "landAdmin", href: "/land-admin", icon: Building2, group: "services" },
       { labelKey: "revenueCases", href: "/revenue-cases", icon: Scale, group: "services" },
+      { labelKey: "leaseSettlement", href: "/lease-settlement", icon: Sprout, group: "services" },
       { labelKey: "inheritance", href: "/inheritance", icon: GitBranch, group: "tools" },
       { labelKey: "myDocuments", href: "/documents", icon: FileText, group: "tools" },
       { labelKey: "disputes", href: "/disputes", icon: Scale, group: "tools" },
@@ -83,6 +85,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "mutations", href: "/mutations", icon: GitBranch },
       { labelKey: "landAdmin", href: "/land-admin", icon: Building2 },
       { labelKey: "revenueCases", href: "/revenue-cases", icon: Scale },
+      { labelKey: "leaseSettlement", href: "/lease-settlement", icon: Sprout },
       { labelKey: "ocrQueue", href: "/ocr-queue", icon: ScanLine },
       { labelKey: "fraudReview", href: "/fraud-review", icon: ShieldAlert },
       { labelKey: "fieldAgents", href: "/agents", icon: Users2 },

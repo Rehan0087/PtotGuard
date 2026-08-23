@@ -498,6 +498,10 @@ model Policy {
   /// Flat filing fee, BDT — doesn't vary by case type, same reasoning as
   /// the land-admin fees not varying by land use.
   revenueCaseFilingFeeBdt              Int    @default(300)
+  /// Flat fees, BDT, keyed by land use — same two-fee shape as land-admin's,
+  /// since non-agricultural settlement carries a real premium in practice.
+  leaseSettlementAgriculturalFeeBdt    Int    @default(300)
+  leaseSettlementNonAgriculturalFeeBdt Int    @default(1000)
 
   @@map("policies")
 }

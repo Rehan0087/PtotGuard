@@ -372,6 +372,32 @@ export function useScheduleHearing(id: string) {
   });
 }
 
+// --- Lease & settlement (khas land settlement applications) ----------------
+// Same "apply and pay in one step" shape as useApplyLandAdmin(). No parcel
+// picker feeding this one — khas land isn't in the parcel table, so the
+// citizen describes what they're applying for instead of choosing from what
+// they own.
+export function useApplyLeaseSettlement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      landUse: "agricultural" | "non-agricultural";
+      locationDescription: string;
+      areaDecimals: number;
+      termYears: number;
+      purpose: string;
+      paymentMethod: string;
+    }) => {
+      const { paymentMethod, ...applyBody } = body;
+      const created = await api.post<ServiceApplication>("/lease-settlement/apply", applyBody);
+      return api.patch<ServiceApplication>(`/service-applications/${created.id}/pay`, {
+        paymentMethod,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
+  });
+}
+
 // --- Documents -------------------------------------------------------------
 export function useDocuments(params: ListParams = {}) {
   const role = useRole();

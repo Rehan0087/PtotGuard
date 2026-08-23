@@ -25,6 +25,8 @@ function toPolicy(row: Policy) {
     landAdminCertifiedCopyFeeBdt,
     landAdminCorrectionFeeBdt,
     revenueCaseFilingFeeBdt,
+    leaseSettlementAgriculturalFeeBdt,
+    leaseSettlementNonAgriculturalFeeBdt,
   } = row;
   return {
     mutationFeeBdt,
@@ -37,6 +39,8 @@ function toPolicy(row: Policy) {
     landAdminCertifiedCopyFeeBdt,
     landAdminCorrectionFeeBdt,
     revenueCaseFilingFeeBdt,
+    leaseSettlementAgriculturalFeeBdt,
+    leaseSettlementNonAgriculturalFeeBdt,
   };
 }
 

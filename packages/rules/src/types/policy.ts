@@ -19,4 +19,7 @@ export interface Policy {
   landAdminCorrectionFeeBdt: number;
   /** Flat filing fee, BDT — doesn't vary by case type. */
   revenueCaseFilingFeeBdt: number;
+  /** Flat fees, BDT, keyed by land use — non-agricultural carries a premium. */
+  leaseSettlementAgriculturalFeeBdt: number;
+  leaseSettlementNonAgriculturalFeeBdt: number;
 }

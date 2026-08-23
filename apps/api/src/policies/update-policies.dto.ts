@@ -62,4 +62,15 @@ export class UpdatePoliciesDto {
   @IsInt()
   @Min(0)
   revenueCaseFilingFeeBdt?: number;
+
+  /** Flat fees, BDT, keyed by land use — see lease-settlement.controller.ts. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  leaseSettlementAgriculturalFeeBdt?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  leaseSettlementNonAgriculturalFeeBdt?: number;
 }
