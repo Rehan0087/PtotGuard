@@ -913,6 +913,110 @@ export const handlers = [
     return HttpResponse.json(application, { status: 201 });
   }),
 
+  // Revenue cases (misc. cases + appeals before AC Land / ADC Revenue) --------
+  // "Hearing" here is a status plus a date in `details`, not the Dispute-only
+  // Hearing model (mandatory disputeId FK, built for mediator-run mediation).
+  // Mirrors revenue-cases.controller.ts.
+  http.post(`${API}/revenue-cases/file`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as {
+      parcelId: string;
+      caseType: "miscellaneous" | "appeal";
+      grounds: string;
+      againstReference?: string;
+      documentIds?: string[];
+    };
+    const parcel = db.parcels.find((p) => p.id === body.parcelId);
+    // Same answer for "no such parcel" and "not yours" as land-admin's own
+    // apply handler: filing a case is the owner's to do.
+    if (!parcel || parcel.ownerId !== me.id) return notFound("Parcel not found");
+
+    const now = new Date().toISOString();
+    const count = db.serviceApplications.filter((a) => a.serviceType === "revenue-case").length;
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `RVC-2026-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: "revenue-case" as const,
+      status: "submitted" as const,
+      parcelId: parcel.id,
+      applicantId: me.id,
+      details: {
+        caseType: body.caseType,
+        grounds: body.grounds,
+        againstReference: body.againstReference,
+      },
+      documentIds: body.documentIds ?? [],
+      feeAmount: db.policies.revenueCaseFilingFeeBdt,
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
+
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        applicationNo: application.applicationNo,
+        serviceType: "revenue-case",
+        parcelDagNo: parcel.dagNo,
+        caseType: body.caseType,
+      },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "submitted",
+      title: body.caseType === "appeal" ? "Appeal case filed" : "Miscellaneous case filed",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application, { status: 201 });
+  }),
+
+  http.patch(`${API}/revenue-cases/:id/schedule-hearing`, async ({ params, request }) => {
+    await latency();
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application) return notFound("Service application not found");
+    if (!application.paidAt) {
+      return unprocessable({ status: { code: "not-paid" } });
+    }
+    if (application.status === "approved" || application.status === "rejected") {
+      return conflict("This case has already been decided.");
+    }
+
+    const { hearingAt } = (await request.json()) as { hearingAt: string };
+    const now = new Date().toISOString();
+    application.status = "hearing-scheduled";
+    application.details = { ...application.details, hearingAt };
+    application.updatedAt = now;
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "status-change",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { applicationNo: application.applicationNo, status: application.status, hearingAt },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "status-change",
+      title: "Hearing scheduled",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application);
+  }),
+
   // Service applications -----------------------------------------------------
   // Shared foundation for the six not-yet-built services (Land Development
   // Tax, Acquisition & Requisition, Lease & Settlement, Land Administration,

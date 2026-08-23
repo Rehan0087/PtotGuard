@@ -17,4 +17,6 @@ export interface Policy {
   /** Flat fee, BDT — a certified copy doesn't vary by land use like tax does. */
   landAdminCertifiedCopyFeeBdt: number;
   landAdminCorrectionFeeBdt: number;
+  /** Flat filing fee, BDT — doesn't vary by case type. */
+  revenueCaseFilingFeeBdt: number;
 }

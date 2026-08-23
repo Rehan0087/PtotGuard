@@ -364,6 +364,7 @@ export const policies = {
   landTaxMaxArrearYears: 3,
   landAdminCertifiedCopyFeeBdt: 200,
   landAdminCorrectionFeeBdt: 500,
+  revenueCaseFilingFeeBdt: 300,
 };
 
 // ---------------------------------------------------------------------------

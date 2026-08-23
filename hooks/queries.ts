@@ -335,6 +335,43 @@ export function useApplyLandAdmin() {
   });
 }
 
+// --- Revenue cases (misc. cases + appeals before AC Land / ADC Revenue) ----
+// Same "apply and pay in one step" shape as useApplyLandAdmin(). Scheduling
+// a hearing and deciding are two separate officer actions afterward — the
+// first is the one bespoke endpoint this service needed beyond filing;
+// deciding reuses useServiceApplicationDecision untouched.
+export function useFileRevenueCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      parcelId: string;
+      caseType: "miscellaneous" | "appeal";
+      grounds: string;
+      againstReference?: string;
+      paymentMethod: string;
+    }) => {
+      const { paymentMethod, ...fileBody } = body;
+      const created = await api.post<ServiceApplication>("/revenue-cases/file", fileBody);
+      return api.patch<ServiceApplication>(`/service-applications/${created.id}/pay`, {
+        paymentMethod,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
+  });
+}
+
+export function useScheduleHearing(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (hearingAt: string) =>
+      api.patch<ServiceApplication>(`/revenue-cases/${id}/schedule-hearing`, { hearingAt }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["service-application", id] });
+      qc.invalidateQueries({ queryKey: ["service-applications"] });
+    },
+  });
+}
+
 // --- Documents -------------------------------------------------------------
 export function useDocuments(params: ListParams = {}) {
   const role = useRole();

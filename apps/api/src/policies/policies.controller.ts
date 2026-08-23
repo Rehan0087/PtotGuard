@@ -24,6 +24,7 @@ function toPolicy(row: Policy) {
     landTaxMaxArrearYears,
     landAdminCertifiedCopyFeeBdt,
     landAdminCorrectionFeeBdt,
+    revenueCaseFilingFeeBdt,
   } = row;
   return {
     mutationFeeBdt,
@@ -35,6 +36,7 @@ function toPolicy(row: Policy) {
     landTaxMaxArrearYears,
     landAdminCertifiedCopyFeeBdt,
     landAdminCorrectionFeeBdt,
+    revenueCaseFilingFeeBdt,
   };
 }
 

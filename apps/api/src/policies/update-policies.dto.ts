@@ -56,4 +56,10 @@ export class UpdatePoliciesDto {
   @IsInt()
   @Min(0)
   landAdminCorrectionFeeBdt?: number;
+
+  /** Flat filing fee, BDT — see revenue-cases.controller.ts. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  revenueCaseFilingFeeBdt?: number;
 }

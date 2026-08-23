@@ -44,7 +44,7 @@ const SERVICES: Service[] = [
   { key: "acquisition", bodyKey: "acquisitionBody", icon: Landmark },
   { key: "lease", bodyKey: "leaseBody", icon: Sprout },
   { key: "landAdmin", bodyKey: "landAdminBody", icon: Building2, href: "/land-admin" },
-  { key: "revenueCases", bodyKey: "revenueCasesBody", icon: Scale },
+  { key: "revenueCases", bodyKey: "revenueCasesBody", icon: Scale, href: "/revenue-cases" },
   { key: "infoBank", bodyKey: "infoBankBody", icon: FileStack },
 ];
 

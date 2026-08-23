@@ -495,6 +495,9 @@ model Policy {
   /// table, since a certified copy doesn't vary by land use.
   landAdminCertifiedCopyFeeBdt         Int    @default(200)
   landAdminCorrectionFeeBdt            Int    @default(500)
+  /// Flat filing fee, BDT — doesn't vary by case type, same reasoning as
+  /// the land-admin fees not varying by land use.
+  revenueCaseFilingFeeBdt              Int    @default(300)
 
   @@map("policies")
 }

@@ -140,6 +140,7 @@ export const en = {
     mutations: "Mutations",
     landTax: "Land development tax",
     landAdmin: "Land administration",
+    revenueCases: "Revenue cases",
     ocrQueue: "OCR queue",
     fraudReview: "Fraud review",
     fieldAgents: "Field agents",
@@ -1366,6 +1367,59 @@ export const en = {
         currentValueRequired: "Enter what's currently on record.",
         correctedValueRequired: "Enter what it should say instead.",
         reasonRequired: "Explain the reason for this correction.",
+      },
+    },
+
+    revenueCases: {
+      description:
+        "File a miscellaneous case or an appeal before the revenue court, and track it through to a decision.",
+      newCase: "New case",
+      caseType: {
+        miscellaneous: "Miscellaneous case",
+        miscellaneousBlurb:
+          "A written petition on a matter not otherwise covered — record entries, classification, and similar.",
+        appeal: "Appeal",
+        appealBlurb:
+          "Appeal a decision made against you, citing what it was and why it should be reconsidered.",
+      },
+      parcelLabel: "Parcel",
+      parcelPlaceholder: "Select a parcel",
+      groundsLabel: "Grounds",
+      groundsPlaceholder: "State the facts and what you're asking for",
+      againstReferenceLabel: "Reference for what you're appealing",
+      againstReferencePlaceholder: "e.g. a memo or order number",
+      feeLabel: "Filing fee",
+      pay: "Pay and file",
+      confirmPay: (amount: string) => `Pay ${amount}`,
+      paymentNote:
+        "This is a simulated payment for demonstration — no money moves and no payment details are collected.",
+      paymentMethods: { bkash: "bKash", nagad: "Nagad", card: "Card" },
+      filedTitle: "Case filed",
+      filedBody: (applicationNo: string) =>
+        `${applicationNo} has been recorded and sent for review.`,
+      failedTitle: "Case could not be filed",
+      failedBody: "Please try again.",
+      myCasesLabel: "Your cases",
+      emptyTitle: "No cases yet",
+      emptyBody: "Cases you file will appear here.",
+      hearingAtLabel: (date: string) => `Hearing on ${date}`,
+      queueTitle: "Cases awaiting decision",
+      queueEmptyTitle: "Nothing awaiting a decision",
+      queueEmptyBody:
+        "Miscellaneous cases and appeals will appear here once citizens file them.",
+      scheduleHearing: "Schedule hearing",
+      hearingDateLabel: "Hearing date",
+      confirmScheduleHearing: "Confirm",
+      approve: "Approve",
+      reject: "Reject",
+      approvedTitle: "Case approved",
+      rejectedTitle: "Case rejected",
+      closed: "Decided",
+      errors: {
+        parcelRequired: "Choose a parcel.",
+        groundsRequired: "State the grounds for this case.",
+        againstReferenceRequired: "Enter what you're appealing.",
+        hearingDateRequired: "Choose a hearing date.",
       },
     },
 
