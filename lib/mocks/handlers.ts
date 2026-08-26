@@ -29,6 +29,7 @@ import {
   normaliseUlpin,
   registryStatusAfter,
   reviewDraft,
+  routeDisputeToOfficer,
   rulingGate,
   toPublicParcel,
   transferReview,
@@ -1467,27 +1468,37 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
+  /** Mirrors DisputesController.create() — see its own note on ownership and routing. */
   http.post(`${API}/disputes`, async ({ request }) => {
     await latency();
     const me = currentUser(request);
     const body = (await request.json()) as Partial<{
       parcelId: string;
-      parcelDagNo: string;
       type: string;
       priority: string;
       description: string;
       respondentName: string;
     }>;
-    const seq = 418 + db.disputes.length;
+    const parcel = db.parcels.find((p) => p.id === body.parcelId);
+    if (!parcel || parcel.ownerId !== me.id) return notFound("Parcel not found");
+
+    const seq = 1000 + db.disputes.length;
     const now = new Date().toISOString();
     const parties = [{ name: me.name, role: "claimant" as const, userId: me.id }];
     if (body.respondentName?.trim())
       parties.push({ name: body.respondentName.trim(), role: "respondent" as never, userId: undefined as never });
+
+    const officer = routeDisputeToOfficer(
+      parcel.jurisdictionId,
+      db.users.filter((u) => u.role === "land-office"),
+      db.jurisdictions,
+    );
+
     const dispute = {
       id: `ds-${seq}`,
       caseNumber: `DSP-2026-${String(seq).padStart(5, "0")}`,
-      parcelId: body.parcelId ?? "",
-      parcelDagNo: body.parcelDagNo ?? "",
+      parcelId: parcel.id,
+      parcelDagNo: parcel.dagNo,
       type: (body.type as never) ?? "boundary",
       status: "submitted" as const,
       priority: (body.priority as never) ?? "medium",
@@ -1497,9 +1508,12 @@ export const handlers = [
       updatedAt: now,
       description: body.description ?? "",
       parties,
+      assignedOfficerId: officer?.id,
       evidenceDocumentIds: [] as string[],
     };
     db.disputes.unshift(dispute);
+    parcel.registryStatus = "disputed";
+
     db.disputeEvents.push({
       id: `de-${Date.now()}`,
       disputeId: dispute.id,
@@ -1510,6 +1524,20 @@ export const handlers = [
       actorId: me.id,
       actorName: me.name,
     });
+
+    if (officer) {
+      db.notifications.unshift({
+        id: `n-${Date.now()}-${officer.id}`,
+        userId: officer.id,
+        at: now,
+        severity: "info",
+        title: "New dispute assigned",
+        body: `${dispute.caseNumber} requires review.`,
+        content: { code: "dispute-assigned", caseNumber: dispute.caseNumber },
+        read: false,
+        href: `/disputes/${dispute.id}`,
+      });
+    }
 
     await appendAudit({
       entityType: "dispute",

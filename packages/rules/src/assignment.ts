@@ -50,6 +50,61 @@ export function covers(
   return false;
 }
 
+/**
+ * Hops from `fromId` up the tree to `toId` — 0 for an exact match, 1 for the
+ * immediate parent, and so on. `undefined` when `toId` isn't an ancestor (or
+ * itself), the same "doesn't cover" case `covers()` returns false for.
+ */
+function coverDistance(
+  fromId: string,
+  toId: string,
+  jurisdictions: Jurisdiction[],
+): number | undefined {
+  const byId = new Map(jurisdictions.map((j) => [j.id, j]));
+  let cursor: string | null | undefined = fromId;
+  for (let hops = 0; cursor && hops <= jurisdictions.length; hops++) {
+    if (cursor === toId) return hops;
+    cursor = byId.get(cursor)?.parentId;
+  }
+  return undefined;
+}
+
+/**
+ * Which land-office officer a freshly filed dispute is routed to.
+ *
+ * Whoever's own jurisdiction covers the parcel's — same `covers()` reach a
+ * field-agent candidate gets — but here there is no "ask the officer first"
+ * step, so ties need a deterministic pick: the *most local* covering office
+ * wins (a mouza desk over the upazila office above it, which also technically
+ * covers it), and a further tie breaks on name rather than insertion order.
+ *
+ * Returns null rather than throwing when nobody covers the area — an empty
+ * desk is a real, if regrettable, state a jurisdiction can be in; the dispute
+ * still gets filed and waits for an officer to be added or reassigned by
+ * hand, same as any other unassigned case.
+ */
+export function routeDisputeToOfficer(
+  parcelJurisdictionId: string,
+  officers: User[],
+  jurisdictions: Jurisdiction[],
+): User | null {
+  let best: { officer: User; distance: number } | null = null;
+
+  for (const officer of officers) {
+    const distance = coverDistance(parcelJurisdictionId, officer.jurisdictionId, jurisdictions);
+    if (distance === undefined) continue;
+    if (
+      !best ||
+      distance < best.distance ||
+      (distance === best.distance && officer.name.localeCompare(best.officer.name) < 0)
+    ) {
+      best = { officer, distance };
+    }
+  }
+
+  return best?.officer ?? null;
+}
+
 /** The survey a dispute of this kind actually calls for. */
 export const PURPOSE_FOR_DISPUTE: Record<DisputeType, FieldReportPurpose> = {
   boundary: "boundary-survey",

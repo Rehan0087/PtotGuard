@@ -148,11 +148,18 @@ export function useDispute(id: string | undefined) {
   });
 }
 
+export interface FileDisputeInput {
+  parcelId: string;
+  type: Dispute["type"];
+  priority: Dispute["priority"];
+  description: string;
+  respondentName?: string;
+}
+
 export function useFileDispute() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<Dispute> & { respondentName?: string }) =>
-      api.post<Dispute>("/disputes", body),
+    mutationFn: (body: FileDisputeInput) => api.post<Dispute>("/disputes", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["disputes"] }),
   });
 }

@@ -54,7 +54,6 @@ const PRIORITIES = ["low", "medium", "high"] as const;
 function makeSchema(t: Dictionary) {
   return z.object({
     parcelId: z.string().min(1, t.pages.newDispute.errors.parcelRequired),
-    parcelDagNo: z.string(),
     type: z.enum(["boundary", "ownership", "inheritance", "encroachment", "fraud", "easement"]),
     priority: z.enum(["low", "medium", "high"]),
     description: z
@@ -93,7 +92,6 @@ export default function NewDisputePage() {
     resolver: standardSchemaResolver(schema),
     defaultValues: {
       parcelId: "",
-      parcelDagNo: "",
       type: "boundary",
       priority: "medium",
       description: "",
@@ -119,7 +117,6 @@ export default function NewDisputePage() {
     fileDispute.mutate(
       {
         parcelId: values.parcelId,
-        parcelDagNo: values.parcelDagNo,
         type: values.type as never,
         priority: values.priority as never,
         description: values.description,
@@ -197,10 +194,7 @@ export default function NewDisputePage() {
                     <button
                       type="button"
                       key={p.id}
-                      onClick={() => {
-                        setValue("parcelId", p.id, { shouldValidate: true });
-                        setValue("parcelDagNo", p.dagNo);
-                      }}
+                      onClick={() => setValue("parcelId", p.id, { shouldValidate: true })}
                       className={cn(
                         "flex items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors",
                         active

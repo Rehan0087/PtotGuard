@@ -7,6 +7,7 @@ import {
   disputesNeedingSurvey,
   isOpenVisit,
   rankCandidates,
+  routeDisputeToOfficer,
 } from "./assignment";
 import type {
   Dispute,
@@ -372,5 +373,49 @@ describe("PURPOSE_FOR_DISPUTE", () => {
     ];
 
     for (const t of types) expect(PURPOSE_FOR_DISPUTE[t]).toBeDefined();
+  });
+});
+
+function officer(id: string, jurisdictionId: string, name = id): User {
+  return { id, name, role: "land-office", jurisdictionId, status: "active" } as User;
+}
+
+describe("routeDisputeToOfficer", () => {
+  it("picks the officer sitting at the parcel's own jurisdiction over one further up", () => {
+    const local = officer("o-raj", "j-raj");
+    const upazila = officer("o-deb", "j-deb");
+
+    const picked = routeDisputeToOfficer("j-raj", [upazila, local], JURISDICTIONS);
+
+    expect(picked?.id).toBe("o-raj");
+  });
+
+  it("falls back to the nearest covering ancestor when nobody sits at the parcel's own level", () => {
+    const upazila = officer("o-deb", "j-deb");
+    const district = officer("o-cum", "j-cum");
+
+    const picked = routeDisputeToOfficer("j-raj", [district, upazila], JURISDICTIONS);
+
+    expect(picked?.id).toBe("o-deb");
+  });
+
+  it("ignores an officer in a sibling jurisdiction that doesn't cover the parcel", () => {
+    // j-mur is a sibling upazila under the same district, not an ancestor of j-raj.
+    const sibling = officer("o-mur", "j-mur");
+
+    expect(routeDisputeToOfficer("j-raj", [sibling], JURISDICTIONS)).toBeNull();
+  });
+
+  it("returns null when no officer covers the area at all", () => {
+    expect(routeDisputeToOfficer("j-raj", [], JURISDICTIONS)).toBeNull();
+  });
+
+  it("breaks a tie at the same jurisdiction by name, not list order", () => {
+    const first = officer("o-2", "j-raj", "Zahir");
+    const second = officer("o-1", "j-raj", "Amin");
+
+    const picked = routeDisputeToOfficer("j-raj", [first, second], JURISDICTIONS);
+
+    expect(picked?.id).toBe("o-1");
   });
 });

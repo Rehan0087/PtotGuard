@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, Param, Patch, Query, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import {
   activeRestrictions,
   executionGate,
   registryStatusAfter,
+  routeDisputeToOfficer,
   type Dispute,
+  type DisputeParty,
+  type Jurisdiction,
   type ParcelRestriction,
   type RulingOutcome,
+  type User,
 } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -16,6 +20,7 @@ import { pageParams, paginate } from "../common/pagination";
 import { currentUserId } from "../auth/dev-current-user";
 import { findParcelView } from "../parcels/parcel-view";
 import { disputeAudience } from "./dispute-audience";
+import { CreateDisputeDto } from "./create-dispute.dto";
 import { ExecuteRulingDto } from "./execute-ruling.dto";
 
 function toOutcome(body: ExecuteRulingDto): RulingOutcome {
@@ -88,6 +93,124 @@ export class DisputesController {
     );
 
     return { dispute, timeline, parcel, evidence, activeRestrictions: activeParcelRestrictions };
+  }
+
+  /**
+   * Citizen filing — additive to the frozen spec, and this controller's
+   * first write of any kind (it was @Get-only before this). Ownership-
+   * checked like land-admin/land-tax: the wizard's own picker only offers
+   * "my properties", so filing about a parcel that isn't the caller's own
+   * gets the same NotFoundError as one that doesn't exist.
+   *
+   * Routed to a land-office officer by jurisdiction (routeDisputeToOfficer())
+   * — the one piece of the citizen spec ("routes the file based on
+   * jurisdiction") that was never actually implemented anywhere:
+   * `assignedOfficerId` existed on the schema but had no writer.
+   */
+  @Post()
+  @HttpCode(201)
+  async create(@Body() body: CreateDisputeDto, @Req() req: Request) {
+    const actorId = currentUserId(req);
+    const parcel = await this.prisma.parcel.findUnique({ where: { id: body.parcelId } });
+    if (!parcel || parcel.ownerId !== actorId) throw new NotFoundError("Parcel not found");
+
+    const [filer, officers, jurisdictions] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: actorId } }),
+      this.prisma.user.findMany({ where: { role: "land-office" } }),
+      this.prisma.jurisdiction.findMany(),
+    ]);
+    if (!filer) throw new NotFoundError("User not found");
+
+    const officer = routeDisputeToOfficer(
+      parcel.jurisdictionId,
+      officers as unknown as User[],
+      jurisdictions as unknown as Jurisdiction[],
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      // Disjoint from the seeded case numbers (which run up to DSP-2026-00417)
+      // — same running-count-plus-base-offset scheme as mutations/land-admin.
+      const count = await tx.dispute.count();
+      const caseNumber = `DSP-2026-${String(1000 + count).padStart(5, "0")}`;
+
+      const parties: DisputeParty[] = [
+        { name: filer.name, role: "claimant", userId: filer.id },
+        ...(body.respondentName?.trim()
+          ? [{ name: body.respondentName.trim(), role: "respondent" as const }]
+          : []),
+      ];
+
+      const created = await tx.dispute.create({
+        data: {
+          id: `ds-${randomUUID()}`,
+          caseNumber,
+          parcelId: parcel.id,
+          parcelDagNo: parcel.dagNo,
+          type: body.type,
+          status: "submitted",
+          priority: body.priority,
+          filedById: filer.id,
+          filedByName: filer.name,
+          filedAt: now,
+          description: body.description,
+          parties: parties as never,
+          assignedOfficerId: officer?.id,
+          evidenceDocumentIds: [],
+          updatedAt: now,
+        },
+      });
+
+      // The record's own signal that its facts are contested — the
+      // counterpart to execute()'s registryStatusAfter(), which is what
+      // eventually clears this back once the case is resolved.
+      await tx.parcel.update({
+        where: { id: parcel.id },
+        data: { registryStatus: "disputed" },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "dispute",
+        entityId: created.id,
+        action: "create",
+        actorId,
+        payload: {
+          caseNumber: created.caseNumber,
+          parcelDagNo: created.parcelDagNo,
+          type: created.type,
+        },
+      });
+
+      await tx.disputeEvent.create({
+        data: {
+          id: `de-${randomUUID()}`,
+          disputeId: created.id,
+          at: now,
+          type: "filed",
+          title: "Dispute filed",
+          content: { code: "filed" },
+          actorId,
+        },
+      });
+
+      if (officer) {
+        await tx.appNotification.create({
+          data: {
+            id: `n-${randomUUID()}`,
+            userId: officer.id,
+            at: now,
+            severity: "info",
+            title: "New dispute assigned",
+            body: `${created.caseNumber} requires review.`,
+            content: { code: "dispute-assigned", caseNumber: created.caseNumber },
+            read: false,
+            href: `/disputes/${created.id}`,
+          },
+        });
+      }
+
+      return created;
+    });
   }
 
   /**
