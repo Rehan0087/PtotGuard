@@ -81,6 +81,8 @@ export interface DisputeDetail {
   timeline: DisputeEvent[];
   parcel: Parcel | null;
   evidence: LandDocument[];
+  /** Restrictions currently in force on the parcel — what execute() may lift. */
+  activeRestrictions: ParcelRestriction[];
 }
 
 export interface MutationDetail {

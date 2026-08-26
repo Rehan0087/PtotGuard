@@ -31,6 +31,8 @@ export function useNotificationText() {
           return t.notifications["dispute-assigned"](c.caseNumber);
         case "dispute-ruled":
           return t.notifications["dispute-ruled"](c.caseNumber);
+        case "dispute-executed":
+          return t.notifications["dispute-executed"](c.caseNumber);
         case "hearing-scheduled":
           return t.notifications["hearing-scheduled"](c.caseNumber);
         case "document-verified":
@@ -77,6 +79,8 @@ export function useDisputeEventTitle() {
           return t.disputeEvents["field-visit-completed"];
         case "ruled":
           return t.disputeEvents.ruled;
+        case "records-executed":
+          return t.disputeEvents["records-executed"](t.domain.rulingOutcome[c.action]);
       }
     },
     [t],

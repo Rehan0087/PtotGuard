@@ -275,6 +275,10 @@ export const en = {
       title: "Namjari in verification",
       body: `Mutation ${mutationNumber} for dag ${dagNo} is being verified.`,
     }),
+    "dispute-executed": (caseNumber: string) => ({
+      title: "Land record updated",
+      body: `The land record for case ${caseNumber} has been updated to reflect the ruling.`,
+    }),
     welcome: () => ({
       title: "Welcome to PlotGuard",
       body: "Your account is active. You can now search records and track disputes.",
@@ -290,6 +294,7 @@ export const en = {
     "field-visit-scheduled": "Field visit scheduled",
     "field-visit-completed": "Field survey filed",
     ruled: "Ruling issued",
+    "records-executed": (outcome: string) => `Records updated — ${outcome}`,
   },
 
   // ── Domain enums that appear as plain text, not badges ───────────────────
@@ -375,6 +380,12 @@ export const en = {
       acquisition: "Under acquisition",
       "non-transferable": "Non-transferable",
     },
+    rulingOutcome: {
+      "no-change": "No change — record confirmed",
+      "restriction-added": "Restriction added",
+      "restriction-removed": "Restriction lifted",
+      "referred-to-mutation": "Referred for mutation filing",
+    },
     mutationType: {
       sale: "Sale",
       inheritance: "Inheritance",
@@ -402,6 +413,7 @@ export const en = {
       reject: "Reject",
       assign: "Assign",
       ruling: "Ruling",
+      "execute-ruling": "Execute ruling",
       upload: "Upload",
       delete: "Delete",
     },
@@ -717,6 +729,21 @@ export const en = {
       hearing: "Hearing",
       parties: "Parties",
       evidence: "Evidence",
+      execute: {
+        title: "Execute ruling",
+        description:
+          "The ruling is issued. Apply what it means for the parcel record.",
+        outcomeLabel: "Outcome",
+        restrictionTypeLabel: "Restriction type",
+        authorityLabel: "Imposed by",
+        authorityPlaceholder: "Court, bank, or office",
+        noteLabel: "Note (optional)",
+        restrictionToLiftLabel: "Restriction to lift",
+        noActiveRestrictions: "No active restrictions on this parcel.",
+        submit: "Apply to record",
+        successTitle: "Land record updated",
+        failedTitle: "Couldn't update the record",
+      },
     },
 
     search: {

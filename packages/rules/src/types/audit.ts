@@ -8,6 +8,7 @@ export type AuditAction =
   | "reject"
   | "assign"
   | "ruling"
+  | "execute-ruling"
   | "upload"
   | "delete";
 

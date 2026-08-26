@@ -23,3 +23,4 @@ export * from "./ulpin";
 export * from "./restrictions";
 export * from "./area";
 export * from "./land-tax";
+export * from "./execution";

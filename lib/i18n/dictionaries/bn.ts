@@ -252,6 +252,10 @@ export const bn: Dictionary = {
       title: "নামজারি যাচাই চলছে",
       body: `${dagNo} দাগের নামজারি ${mutationNumber} যাচাই করা হচ্ছে।`,
     }),
+    "dispute-executed": (caseNumber: string) => ({
+      title: "ভূমি রেকর্ড হালনাগাদ হয়েছে",
+      body: `${caseNumber} মামলার রায় অনুযায়ী ভূমি রেকর্ড হালনাগাদ করা হয়েছে।`,
+    }),
     welcome: () => ({
       title: "PlotGuard-এ স্বাগতম",
       body: "আপনার অ্যাকাউন্ট সক্রিয়। এখন আপনি রেকর্ড খুঁজতে ও বিরোধের অগ্রগতি দেখতে পারবেন।",
@@ -267,6 +271,7 @@ export const bn: Dictionary = {
     "field-visit-scheduled": "সরেজমিন পরিদর্শন নির্ধারিত",
     "field-visit-completed": "সরেজমিন প্রতিবেদন জমা হয়েছে",
     ruled: "রায় দেওয়া হয়েছে",
+    "records-executed": (outcome: string) => `রেকর্ড হালনাগাদ হয়েছে — ${outcome}`,
   },
 
   domain: {
@@ -351,6 +356,12 @@ export const bn: Dictionary = {
       acquisition: "অধিগ্রহণাধীন",
       "non-transferable": "হস্তান্তর-অযোগ্য",
     },
+    rulingOutcome: {
+      "no-change": "কোনো পরিবর্তন নেই — রেকর্ড বহাল",
+      "restriction-added": "বিধিনিষেধ যুক্ত হয়েছে",
+      "restriction-removed": "বিধিনিষেধ প্রত্যাহার হয়েছে",
+      "referred-to-mutation": "নামজারি দাখিলের জন্য প্রেরিত",
+    },
     mutationType: {
       sale: "বিক্রয়",
       inheritance: "উত্তরাধিকার",
@@ -378,6 +389,7 @@ export const bn: Dictionary = {
       reject: "প্রত্যাখ্যান",
       assign: "বরাদ্দ",
       ruling: "রায়",
+      "execute-ruling": "রায় কার্যকর",
       upload: "আপলোড",
       delete: "মুছে ফেলা",
     },
@@ -673,6 +685,20 @@ export const bn: Dictionary = {
       hearing: "শুনানি",
       parties: "পক্ষসমূহ",
       evidence: "প্রমাণ",
+      execute: {
+        title: "রায় কার্যকর করুন",
+        description: "রায় দেওয়া হয়েছে। এটি ভূমি রেকর্ডে প্রয়োগ করুন।",
+        outcomeLabel: "ফলাফল",
+        restrictionTypeLabel: "বিধিনিষেধের ধরন",
+        authorityLabel: "আরোপকারী",
+        authorityPlaceholder: "আদালত, ব্যাংক বা দপ্তর",
+        noteLabel: "মন্তব্য (ঐচ্ছিক)",
+        restrictionToLiftLabel: "যে বিধিনিষেধ প্রত্যাহার করা হবে",
+        noActiveRestrictions: "এই দাগে কোনো সক্রিয় বিধিনিষেধ নেই।",
+        submit: "রেকর্ডে প্রয়োগ করুন",
+        successTitle: "ভূমি রেকর্ড হালনাগাদ হয়েছে",
+        failedTitle: "রেকর্ড হালনাগাদ করা যায়নি",
+      },
     },
 
     search: {

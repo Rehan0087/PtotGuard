@@ -15,6 +15,7 @@ export type NotificationContent =
   | { code: "dispute-status"; caseNumber: string; status: DisputeStatus }
   | { code: "dispute-assigned"; caseNumber: string }
   | { code: "dispute-ruled"; caseNumber: string }
+  | { code: "dispute-executed"; caseNumber: string }
   | { code: "hearing-scheduled"; caseNumber: string; }
   | { code: "document-verified"; dagNo: string }
   | { code: "document-unclear"; dagNo: string }

@@ -13,22 +13,27 @@ import type {
   JurisdictionLevel,
   Paginated,
   Policy,
+  RestrictionType,
   Role,
   User,
 } from "@/lib/types";
 import { ROLES } from "@/lib/types";
 import {
+  activeRestrictions,
   approvalGate,
   assessLandTax,
   calcInheritance,
   deletionGate,
+  executionGate,
   filingReview,
   normaliseUlpin,
+  registryStatusAfter,
   reviewDraft,
   rulingGate,
   toPublicParcel,
   transferReview,
   type LandTaxRates,
+  type RulingOutcome,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
@@ -1327,7 +1332,116 @@ export const handlers = [
         .sort((a, b) => a.at.localeCompare(b.at)),
       parcel: db.parcels.find((p) => p.id === dispute.parcelId) ?? null,
       evidence: db.documents.filter((d) => dispute.evidenceDocumentIds.includes(d.id)),
+      activeRestrictions: activeRestrictions(
+        db.parcelRestrictions.filter((r) => r.parcelId === dispute.parcelId),
+      ),
     });
+  }),
+
+  /**
+   * Mirrors DisputesController.execute() — see execution.ts in @plotguard/rules
+   * for why this stops at registryStatus/ParcelRestriction and never touches
+   * Parcel.ownerId.
+   */
+  http.patch(`${API}/disputes/:id/execute`, async ({ params, request }) => {
+    await latency();
+    const dispute = db.disputes.find((d) => d.id === params.id);
+    if (!dispute) return notFound("Dispute not found");
+
+    const body = (await request.json()) as {
+      action: RulingOutcome["action"];
+      restrictionType?: RestrictionType;
+      authority?: string;
+      note?: string;
+      restrictionId?: string;
+    };
+    const outcome: RulingOutcome =
+      body.action === "restriction-added"
+        ? {
+            action: "restriction-added",
+            restrictionType: body.restrictionType!,
+            authority: body.authority ?? "",
+            note: body.note,
+          }
+        : body.action === "restriction-removed"
+          ? { action: "restriction-removed", restrictionId: body.restrictionId ?? "" }
+          : body.action === "referred-to-mutation"
+            ? { action: "referred-to-mutation" }
+            : { action: "no-change" };
+
+    const active = activeRestrictions(
+      db.parcelRestrictions.filter((r) => r.parcelId === dispute.parcelId),
+    );
+    const review = executionGate(dispute as never, outcome, active.map((r) => r.id));
+    if (!review.canExecute) {
+      return unprocessable({ action: review.blockers[0] });
+    }
+
+    const me = currentUser(request);
+    const now = new Date().toISOString();
+
+    if (outcome.action === "restriction-added") {
+      db.parcelRestrictions.push({
+        id: `pr-${Date.now()}`,
+        parcelId: dispute.parcelId,
+        type: outcome.restrictionType,
+        authority: outcome.authority,
+        referenceNo: dispute.caseNumber,
+        note: outcome.note,
+        fromDate: now,
+        toDate: null,
+      });
+    } else if (outcome.action === "restriction-removed") {
+      const r = db.parcelRestrictions.find((r) => r.id === outcome.restrictionId);
+      if (r) r.toDate = now;
+    }
+
+    const remaining =
+      outcome.action === "restriction-removed"
+        ? active.filter((r) => r.id !== outcome.restrictionId).length
+        : active.length;
+    const parcel = db.parcels.find((p) => p.id === dispute.parcelId);
+    if (parcel) parcel.registryStatus = registryStatusAfter(outcome, remaining);
+
+    dispute.recordsExecutedAt = now;
+    dispute.recordsExecutedById = me.id;
+
+    await appendAudit({
+      entityType: "dispute",
+      entityId: dispute.id,
+      action: "execute-ruling",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { caseNumber: dispute.caseNumber, outcome: outcome.action },
+    });
+
+    db.disputeEvents.push({
+      id: `de-${Date.now()}`,
+      disputeId: dispute.id,
+      at: now,
+      type: "records-executed",
+      title: "Records updated",
+      content: { code: "records-executed", action: outcome.action },
+      actorId: me.id,
+      actorName: me.name,
+    });
+
+    const audience = disputeAudience(dispute, me.id);
+    for (const userId of audience) {
+      db.notifications.unshift({
+        id: `n-${Date.now()}-${userId}`,
+        userId,
+        at: now,
+        severity: "info",
+        title: "Land record updated",
+        body: `The land record for case ${dispute.caseNumber} has been updated to reflect the ruling.`,
+        content: { code: "dispute-executed", caseNumber: dispute.caseNumber },
+        read: false,
+        href: `/disputes/${dispute.id}`,
+      });
+    }
+
+    return HttpResponse.json(dispute);
   }),
 
   http.get(`${API}/disputes`, async ({ request }) => {

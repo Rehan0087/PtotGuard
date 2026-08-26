@@ -77,6 +77,7 @@ model User {
   disputesAsOfficer            Dispute[]                 @relation("DisputeOfficer")
   disputesAsAgent              Dispute[]                 @relation("DisputeAgent")
   disputesAsMediator           Dispute[]                 @relation("DisputeMediator")
+  disputesExecuted             Dispute[]                 @relation("DisputeExecutedBy")
   disputeEvents                DisputeEvent[]
   mutationsRequested           Mutation[]                @relation("MutationRequestedBy")
   mutationsAsOfficer           Mutation[]                @relation("MutationOfficer")
@@ -249,6 +250,12 @@ model Dispute {
   evidenceDocumentIds String[]
   hearingDate         DateTime?
   resolution          String?
+  /// Set once a land-office officer applies the ruling to the parcel record
+  /// — see executionGate() in @plotguard/rules. Null while a resolved case
+  /// still awaits that step.
+  recordsExecutedAt   DateTime?
+  recordsExecutedById String?
+  recordsExecutedBy   User?     @relation("DisputeExecutedBy", fields: [recordsExecutedById], references: [id])
   updatedAt           DateTime  @updatedAt
 
   events       DisputeEvent[]
@@ -270,6 +277,7 @@ model DisputeEvent {
   at          DateTime @default(now())
   /// DisputeEventType: "filed" | "assigned" | "comment" | "status-change"
   /// | "field-visit" | "document-added" | "hearing" | "resolved"
+  /// | "records-executed"
   type        String
   title       String
   /// DisputeEventContent — see the domain model for why this is preferred

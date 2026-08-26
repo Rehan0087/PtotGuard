@@ -1,24 +1,190 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, MapPin, FileText, Scale, CalendarClock } from "lucide-react";
+import { toast } from "sonner";
+import { executionGate, type ParcelRestriction, type RestrictionType, type RulingOutcome } from "@plotguard/rules";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDispute } from "@/hooks/queries";
+import { Textarea } from "@/components/ui/textarea";
+import { useDispute, useExecuteRuling, useRole } from "@/hooks/queries";
 import { useDisputeEventTitle } from "@/lib/i18n/content";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 
+const RESTRICTION_TYPES: RestrictionType[] = [
+  "mortgage",
+  "injunction",
+  "attachment",
+  "acquisition",
+  "non-transferable",
+];
+
+const selectClass =
+  "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+
+/**
+ * The step a ruling used to stop short of: land office turns "resolved"
+ * into an actual change on the parcel record. Only shown to the role that
+ * does this (land-office), only once there's a ruling to execute, and only
+ * until it's been executed once — executionGate() is the same gate the
+ * endpoint enforces, so this is explanation, not the only thing stopping a
+ * bad request.
+ */
+function ExecuteRulingCard({
+  disputeId,
+  status,
+  recordsExecutedAt,
+  activeRestrictions,
+}: {
+  disputeId: string;
+  status: string;
+  recordsExecutedAt?: string;
+  activeRestrictions: ParcelRestriction[];
+}) {
+  const t = useT();
+  const et = t.pages.dispute.execute;
+  const execute = useExecuteRuling(disputeId);
+
+  const [action, setAction] = useState<RulingOutcome["action"]>("no-change");
+  const [restrictionType, setRestrictionType] = useState<RestrictionType>("injunction");
+  const [authority, setAuthority] = useState("");
+  const [note, setNote] = useState("");
+  const [restrictionId, setRestrictionId] = useState(activeRestrictions[0]?.id ?? "");
+
+  if (recordsExecutedAt) return null;
+
+  const outcome: RulingOutcome =
+    action === "restriction-added"
+      ? { action, restrictionType, authority, note: note || undefined }
+      : action === "restriction-removed"
+        ? { action, restrictionId }
+        : { action };
+
+  const review = executionGate(
+    { status: status as never, recordsExecutedAt },
+    outcome,
+    activeRestrictions.map((r) => r.id),
+  );
+
+  function submit() {
+    execute.mutate(outcome, {
+      onSuccess: () => toast.success(et.successTitle),
+      onError: () => toast.error(et.failedTitle),
+    });
+  }
+
+  return (
+    <Card className="gap-3 px-4">
+      <h3 className="font-heading text-sm font-semibold text-foreground">{et.title}</h3>
+      <p className="text-xs text-muted-foreground">{et.description}</p>
+
+      <div className="space-y-1.5">
+        <label className="block text-xs font-medium text-muted-foreground">{et.outcomeLabel}</label>
+        <select
+          className={selectClass}
+          value={action}
+          onChange={(e) => setAction(e.target.value as RulingOutcome["action"])}
+        >
+          {(
+            [
+              "no-change",
+              "restriction-added",
+              "restriction-removed",
+              "referred-to-mutation",
+            ] satisfies RulingOutcome["action"][]
+          ).map((a) => (
+            <option key={a} value={a}>
+              {t.domain.rulingOutcome[a]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {action === "restriction-added" ? (
+        <>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-muted-foreground">
+              {et.restrictionTypeLabel}
+            </label>
+            <select
+              className={selectClass}
+              value={restrictionType}
+              onChange={(e) => setRestrictionType(e.target.value as RestrictionType)}
+            >
+              {RESTRICTION_TYPES.map((rt) => (
+                <option key={rt} value={rt}>
+                  {t.domain.restrictionType[rt]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-muted-foreground">
+              {et.authorityLabel}
+            </label>
+            <input
+              className={selectClass}
+              value={authority}
+              placeholder={et.authorityPlaceholder}
+              onChange={(e) => setAuthority(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-muted-foreground">{et.noteLabel}</label>
+            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+        </>
+      ) : null}
+
+      {action === "restriction-removed" ? (
+        activeRestrictions.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{et.noActiveRestrictions}</p>
+        ) : (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-muted-foreground">
+              {et.restrictionToLiftLabel}
+            </label>
+            <select
+              className={selectClass}
+              value={restrictionId}
+              onChange={(e) => setRestrictionId(e.target.value)}
+            >
+              {activeRestrictions.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {t.domain.restrictionType[r.type]} — {r.authority}
+                </option>
+              ))}
+            </select>
+          </div>
+        )
+      ) : null}
+
+      <Button
+        type="button"
+        size="sm"
+        disabled={!review.canExecute || execute.isPending}
+        onClick={submit}
+      >
+        {et.submit}
+      </Button>
+    </Card>
+  );
+}
+
 export default function DisputeDetailPage() {
   const t = useT();
   const f = useFmt();
   const s = useStatusMeta();
+  const role = useRole();
   const eventTitle = useDisputeEventTitle();
   const { id } = useParams<{ id: string }>();
   const { data, isLoading } = useDispute(id);
@@ -46,7 +212,7 @@ export default function DisputeDetailPage() {
     );
   }
 
-  const { dispute, timeline, parcel, evidence } = data;
+  const { dispute, timeline, parcel, evidence, activeRestrictions } = data;
 
   return (
     <div className="space-y-6">
@@ -158,6 +324,15 @@ export default function DisputeDetailPage() {
               </Link>
             ) : null}
           </Card>
+
+          {role === "land-office" && dispute.status === "resolved" ? (
+            <ExecuteRulingCard
+              disputeId={dispute.id}
+              status={dispute.status}
+              recordsExecutedAt={dispute.recordsExecutedAt}
+              activeRestrictions={activeRestrictions}
+            />
+          ) : null}
 
           {evidence.length > 0 ? (
             <section>

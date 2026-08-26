@@ -36,6 +36,7 @@ import type {
   AuditVerifyResult,
   Policy,
 } from "@/lib/types";
+import type { RulingOutcome } from "@plotguard/rules";
 
 /** The active role scopes every query key so switching roles refetches. */
 export function useRole() {
@@ -174,6 +175,20 @@ export function useAssignAgent(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dispute", id] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+/** Land office turning a mediator's ruling into an actual record change. */
+export function useExecuteRuling(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (outcome: RulingOutcome) =>
+      api.patch<Dispute>(`/disputes/${id}/execute`, outcome),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dispute", id] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["parcel"] });
     },
   });
 }

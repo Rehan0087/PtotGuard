@@ -34,7 +34,8 @@ export type DisputeEventType =
   | "field-visit"
   | "document-added"
   | "hearing"
-  | "resolved";
+  | "resolved"
+  | "records-executed";
 
 /**
  * The structured form of a timeline entry's headline — see NotificationContent
@@ -50,7 +51,13 @@ export type DisputeEventContent =
   | { code: "hearing-held"; ordinal: number }
   | { code: "field-visit-scheduled" }
   | { code: "field-visit-completed" }
-  | { code: "ruled" };
+  | { code: "ruled" }
+  | {
+      code: "records-executed";
+      /** Mirrors RulingOutcome["action"] in ../execution — kept as a plain
+       * union here, not imported, so this file and execution.ts don't cycle. */
+      action: "no-change" | "restriction-added" | "restriction-removed" | "referred-to-mutation";
+    };
 
 /** One entry in a dispute's tracking timeline. */
 export interface DisputeEvent {
@@ -86,5 +93,8 @@ export interface Dispute {
   evidenceDocumentIds: ID[];
   hearingDate?: ISODateString;
   resolution?: string;
+  /** Set once a land-office officer applies the ruling to the parcel record. */
+  recordsExecutedAt?: ISODateString;
+  recordsExecutedById?: ID;
   updatedAt: ISODateString;
 }
