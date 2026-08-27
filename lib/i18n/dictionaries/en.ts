@@ -1561,6 +1561,45 @@ export const en = {
         "This route is scaffolded. Compose it from the shared UI kit and the typed query hooks in hooks/queries.ts.",
     },
   },
+
+  // ── Public landing page (app/page.tsx) ────────────────────────────────
+  landing: {
+    signIn: "Sign in",
+    exploreServices: "Explore services",
+    eyebrow: "Digital land records",
+    heroTitle: "The land record, done right.",
+    heroBody:
+      "Search parcels, file disputes and mutations, pay land tax, and track every step — with citizens, land offices, field surveyors, mediators, and administrators on one system.",
+    statServices: "Land services",
+    statRoles: "Role-based workflows",
+    statAuditValue: "Hash-chained",
+    statAudit: "Audit ledger",
+    statBilingual: "Interface language",
+    servicesTitle: "Every service, in one place",
+    servicesBody:
+      "From a mutation after a sale to a certified copy of your record — sign in to search, file, pay, and track.",
+    rolesTitle: "Built for how land offices actually work",
+    rolesBody:
+      "Each role sees only what its work needs — filing, verification, fieldwork, adjudication, or governance.",
+    roleBlurbs: {
+      citizen: "Search records, calculate inheritance shares, file disputes and mutations, and track every case.",
+      "land-office": "Digitise and verify documents, review fraud flags, and decide mutations and applications.",
+      "field-agent": "Carry out GPS boundary surveys and file evidence — photos and points — from the field.",
+      mediator: "Hold hearings, record attendance and testimony, and issue binding rulings.",
+      admin: "Manage accounts and jurisdictions, set fees and thresholds, and oversee the audit ledger.",
+    },
+    trustEyebrow: "Tamper-evident by design",
+    trustTitle: "Every decision leaves a trail",
+    trustBody:
+      "Every create, approve, reject, and ruling is written to an append-only, hash-chained ledger — each entry linked to the one before it, so the whole history can be verified end to end, not just trusted.",
+    trustSteps: [
+      { title: "An action happens", body: "A document is verified, a mutation approved, a ruling issued." },
+      { title: "It's chained to the ledger", body: "Recorded with a hash of the entry before it — nothing slots in unnoticed." },
+      { title: "Anyone can verify it", body: "Walk the chain end to end and confirm nothing has been altered." },
+    ],
+    ctaTitle: "See it end to end",
+    ctaBody: "Sign in with a demo account and follow a record from filing to decision.",
+  },
 };
 
 /**
