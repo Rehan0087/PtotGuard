@@ -34,6 +34,13 @@ export interface Mutation {
   type: MutationType;
   status: MutationStatus;
   fromOwnerName: string;
+  /**
+   * The registered account the parcel moves to once approved. Every
+   * mutation filed since ownership transfer went live has one; absent only
+   * on a handful of rows that predate the requirement — approvalGate()
+   * refuses to approve those rather than guessing a recipient.
+   */
+  toOwnerId?: ID;
   toOwnerName: string;
   requestedById: ID;
   requestedAt: ISODateString;

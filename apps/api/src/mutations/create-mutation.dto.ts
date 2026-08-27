@@ -10,8 +10,11 @@ export class CreateMutationDto {
   @IsIn(TYPES)
   type!: (typeof TYPES)[number];
 
+  // A registered account, not a typed name — see MutationsController's own
+  // note on why this can't be free text if approval is ever going to
+  // actually move ownership.
   @IsString()
-  toOwnerName!: string;
+  toOwnerId!: string;
 
   @IsOptional()
   @IsString()

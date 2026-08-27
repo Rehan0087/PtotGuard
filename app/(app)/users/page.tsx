@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { UserRound } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { StatusMetaBadge } from "@/components/status-badge";
@@ -16,17 +17,155 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useUsers, useJurisdictions } from "@/hooks/queries";
+import { useUsers, useJurisdictions, useUpdateUser, useSession } from "@/hooks/queries";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import { useJurisdictionName } from "@/components/jurisdiction-name";
-import { ROLES, type Role } from "@/lib/types";
+import { ROLES, type Jurisdiction, type Role, type User } from "@/lib/types";
 import { initials } from "@/lib/format";
+
+const selectClass =
+  "h-7 max-w-[11rem] rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+
+function UserRow({
+  user,
+  jurisdictions,
+  jName,
+  isSelf,
+}: {
+  user: User;
+  jurisdictions: Jurisdiction[];
+  jName: (id: string) => string;
+  isSelf: boolean;
+}) {
+  const dict = useT();
+  const t = dict.pages.users;
+  const s = useStatusMeta();
+  const update = useUpdateUser(user.id);
+  const [confirming, setConfirming] = useState(false);
+  const selfSuspendBlocked = isSelf && user.status === "active";
+
+  function onError() {
+    toast.error(t.failedTitle, {
+      description: update.error?.message ?? t.failedTitle,
+    });
+  }
+
+  function toggleStatus() {
+    const next = user.status === "suspended" ? "active" : "suspended";
+    update.mutate(
+      { status: next },
+      {
+        onSuccess: () => {
+          setConfirming(false);
+          toast.success(t.updatedTitle, {
+            description:
+              next === "suspended" ? t.suspendedBody(user.name) : t.reactivatedBody(user.name),
+          });
+        },
+        onError,
+      },
+    );
+  }
+
+  function changeJurisdiction(jurisdictionId: string) {
+    if (jurisdictionId === user.jurisdictionId) return;
+    update.mutate(
+      { jurisdictionId },
+      {
+        onSuccess: () =>
+          toast.success(t.updatedTitle, { description: t.jurisdictionUpdatedBody(user.name) }),
+        onError,
+      },
+    );
+  }
+
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="flex items-center gap-2.5">
+          <Avatar size="sm">
+            <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
+              {initials(user.name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <div className="font-medium text-foreground">{user.name}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {user.title ?? user.email}
+            </div>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="text-muted-foreground">
+        {/* Role reassignment isn't offered here — see UsersController's own
+            note on why account creation and role changes stay out. */}
+        {dict.roles[user.role]}
+      </TableCell>
+      <TableCell>
+        <select
+          className={selectClass}
+          value={user.jurisdictionId}
+          disabled={update.isPending}
+          onChange={(e) => changeJurisdiction(e.target.value)}
+        >
+          {jurisdictions.map((j) => (
+            <option key={j.id} value={j.id}>
+              {jName(j.id)}
+            </option>
+          ))}
+        </select>
+      </TableCell>
+      <TableCell>
+        <StatusMetaBadge meta={s.user[user.status]} />
+      </TableCell>
+      <TableCell>
+        {confirming ? (
+          <div className="flex max-w-[16rem] flex-col items-start gap-1.5">
+            <p className="text-pretty text-xs text-muted-foreground">
+              {t.confirmSuspendBody(user.name)}
+            </p>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="xs"
+                variant="destructive"
+                disabled={update.isPending}
+                onClick={toggleStatus}
+              >
+                {t.confirm}
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={update.isPending}
+                onClick={() => setConfirming(false)}
+              >
+                {dict.common.cancel}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            size="xs"
+            variant={user.status === "suspended" ? "secondary" : "outline"}
+            disabled={selfSuspendBlocked}
+            title={selfSuspendBlocked ? t.cannotSuspendSelf : undefined}
+            onClick={() =>
+              user.status === "suspended" ? toggleStatus() : setConfirming(true)
+            }
+          >
+            {user.status === "suspended" ? t.reactivate : t.suspend}
+          </Button>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
 
 export default function UsersPage() {
   const t = useT();
-  const s = useStatusMeta();
   const jurisdictionName = useJurisdictionName();
+  const { data: session } = useSession();
   const [role, setRole] = useState<"all" | Role>("all");
 
   const roleFilters: { value: "all" | Role; label: string }[] = [
@@ -82,32 +221,18 @@ export default function UsersPage() {
                 <TableHead>{t.pages.users.colRole}</TableHead>
                 <TableHead>{t.pages.users.colJurisdiction}</TableHead>
                 <TableHead>{t.pages.users.colStatus}</TableHead>
+                <TableHead>{t.pages.users.colActions}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2.5">
-                      <Avatar size="sm">
-                        <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
-                          {initials(u.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <div className="font-medium text-foreground">{u.name}</div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {u.title ?? u.email}
-                        </div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{t.roles[u.role]}</TableCell>
-                  <TableCell className="text-muted-foreground">{jName(u.jurisdictionId)}</TableCell>
-                  <TableCell>
-                    <StatusMetaBadge meta={s.user[u.status]} />
-                  </TableCell>
-                </TableRow>
+                <UserRow
+                  key={u.id}
+                  user={u}
+                  jurisdictions={jurisdictions}
+                  jName={jName}
+                  isSelf={u.id === session?.user.id}
+                />
               ))}
             </TableBody>
           </Table>

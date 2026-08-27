@@ -175,17 +175,6 @@ export function useUpdateDisputeStatus(id: string) {
   });
 }
 
-export function useAssignAgent(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (agentId: string) => api.post<Dispute>(`/disputes/${id}/assign-agent`, { agentId }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["dispute", id] });
-      qc.invalidateQueries({ queryKey: ["disputes"] });
-    },
-  });
-}
-
 /** Land office turning a mediator's ruling into an actual record change. */
 export function useExecuteRuling(id: string) {
   const qc = useQueryClient();
@@ -223,6 +212,19 @@ export function useCreateMutation() {
   return useMutation({
     mutationFn: (body: Partial<LandMutation>) => api.post<LandMutation>("/mutations", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["mutations"] }),
+  });
+}
+
+/** The mutation wizard's recipient picker — a citizen found by email/phone,
+ * never browsed. Short-circuits below the server's own minimum length so a
+ * half-typed query never fires a request. */
+export function useSearchCitizens(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["users-search", q],
+    queryFn: () => api.get<{ id: string; name: string }[]>(`/users/search?q=${encodeURIComponent(q)}`),
+    enabled: q.length >= 4,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -535,12 +537,12 @@ export function useAssignFieldSurvey() {
   return useMutation({
     mutationFn: (body: {
       parcelId: string;
-      parcelDagNo: string;
       disputeId?: string;
       purpose: string;
       assignedAgentId: string;
       scheduledFor: string;
       addressHint?: string;
+      allowOutsideJurisdiction?: boolean;
     }) => api.post<FieldReport>("/field-reports", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["field-reports"] });
@@ -711,6 +713,17 @@ export function useUsers(params: ListParams = {}) {
     queryKey: ["users", params],
     queryFn: () => api.get<Paginated<User>>(`/users${qs(params)}`),
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Suspend/reactivate, or reassign jurisdiction — the two account actions
+ * that need no real auth system behind them. */
+export function useUpdateUser(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { status?: "active" | "suspended"; jurisdictionId?: string }) =>
+      api.patch<User>(`/users/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 }
 

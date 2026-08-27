@@ -19,14 +19,17 @@ import type {
 } from "@/lib/types";
 import { ROLES } from "@/lib/types";
 import {
+  ACQUISITION_TYPE_BY_MUTATION_TYPE,
   activeRestrictions,
   approvalGate,
   assessLandTax,
   calcInheritance,
   deletionGate,
   executionGate,
+  extractionReview,
   filingReview,
   normaliseUlpin,
+  rankCandidates,
   registryStatusAfter,
   reviewDraft,
   routeDisputeToOfficer,
@@ -465,9 +468,12 @@ export const handlers = [
     return HttpResponse.json(doc);
   }),
 
-  // Officer decision on a document. Additive to the frozen spec, mirroring the
-  // /mutations/:id/decision verb style. `flag` is the OCR queue's escalation
-  // path — it hands the document to the fraud-review queue.
+  /**
+   * Officer decision on a document. Mirrors DocumentsController.decide() —
+   * `verify` now actually runs extractionReview() (it never did before this
+   * fix — see that controller's own note), so a hand-crafted request can't
+   * mark a document with missing or contradicting fields as verified.
+   */
   http.patch(`${API}/documents/:id/decision`, async ({ params, request }) => {
     await latency();
     const doc = db.documents.find((d) => d.id === params.id);
@@ -475,6 +481,13 @@ export const handlers = [
     const { decision } = (await request.json()) as {
       decision: "verify" | "reject" | "flag";
     };
+
+    if (decision === "verify") {
+      const parcel = doc.parcelId ? db.parcels.find((p) => p.id === doc.parcelId) : undefined;
+      const review = extractionReview(doc, parcel);
+      if (!review.canAccept) return unprocessable({ decision: review.hold! });
+    }
+
     doc.verificationStatus =
       decision === "verify" ? "verified" : decision === "flag" ? "flagged" : "rejected";
 
@@ -487,6 +500,25 @@ export const handlers = [
       actorName: me.name,
       payload: { decision, fileName: doc.fileName, status: doc.verificationStatus },
     });
+
+    // document-verified has existed on NotificationContent with no writer
+    // anywhere — the citizen finds out their document passed from the app.
+    if (decision === "verify" && doc.ownerId && doc.ownerId !== me.id) {
+      const dagNo = doc.parcelId ? db.parcels.find((p) => p.id === doc.parcelId)?.dagNo : undefined;
+      if (dagNo) {
+        db.notifications.unshift({
+          id: `n-${Date.now()}`,
+          userId: doc.ownerId,
+          at: new Date().toISOString(),
+          severity: "success",
+          title: "Document verified",
+          body: `Your ${doc.type.replace(/-/g, " ")} for dag ${dagNo} passed verification.`,
+          content: { code: "document-verified", dagNo },
+          read: false,
+          href: "/documents",
+        });
+      }
+    }
 
     return HttpResponse.json(doc);
   }),
@@ -510,6 +542,7 @@ export const handlers = [
     return HttpResponse.json(doc);
   }),
 
+  /** Mirrors DocumentsController.create() — no real object storage in this phase. */
   http.post(`${API}/documents`, async ({ request }) => {
     await latency();
     const me = currentUser(request);
@@ -520,6 +553,10 @@ export const handlers = [
       mimeType: string;
       sizeBytes: number;
     }>;
+    if (body.parcelId) {
+      const parcel = db.parcels.find((p) => p.id === body.parcelId);
+      if (!parcel || parcel.ownerId !== me.id) return notFound("Parcel not found");
+    }
     const doc = {
       id: `d-${Date.now()}`,
       parcelId: body.parcelId || undefined,
@@ -561,12 +598,13 @@ export const handlers = [
   // this past verification) — the question is whether the land can change
   // hands at all. A plot under an active injunction, attachment, or
   // acquisition notice does not enter the pipeline; a mortgaged one may.
+  /** Mirrors MutationsController.create() — toOwnerId names a registered account. */
   http.post(`${API}/mutations`, async ({ request }) => {
     await latency();
     const body = (await request.json()) as Partial<{
       parcelId: string;
       type: string;
-      toOwnerName: string;
+      toOwnerId: string;
       deedNumber: string;
       deedDate: string;
       documentIds: string[];
@@ -574,6 +612,8 @@ export const handlers = [
     }>;
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
     if (!parcel) return notFound("Parcel not found");
+    const toOwner = db.users.find((u) => u.id === body.toOwnerId);
+    if (!toOwner || toOwner.role !== "citizen") return notFound("Recipient not found");
 
     const restrictions = db.parcelRestrictions.filter((r) => r.parcelId === parcel.id);
     const review = transferReview(restrictions);
@@ -598,7 +638,8 @@ export const handlers = [
       status: "submitted" as const,
       // The registry's own fact, not the applicant's claim.
       fromOwnerName: parcel.ownerName,
-      toOwnerName: body.toOwnerName ?? "",
+      toOwnerId: toOwner.id,
+      toOwnerName: toOwner.name,
       requestedById: me.id,
       requestedAt: now,
       documentIds: body.documentIds ?? [],
@@ -646,8 +687,31 @@ export const handlers = [
     const allowed = decision === "approve" ? gate.canApprove : gate.canReject;
     if (!allowed) return unprocessable({ decision: gate.hold ?? undefined });
 
+    const now = new Date().toISOString();
     mutation.status = decision === "approve" ? "approved" : "rejected";
-    mutation.decidedAt = new Date().toISOString();
+    mutation.decidedAt = now;
+
+    if (decision === "approve" && mutation.toOwnerId) {
+      const parcel = db.parcels.find((p) => p.id === mutation.parcelId);
+      if (parcel) {
+        parcel.ownerId = mutation.toOwnerId;
+        parcel.ownerName = mutation.toOwnerName;
+        parcel.lastMutationAt = now;
+      }
+      for (const r of db.ownershipRecords) {
+        if (r.parcelId === mutation.parcelId && r.toDate === null) r.toDate = now;
+      }
+      db.ownershipRecords.unshift({
+        id: `own-${Date.now()}`,
+        parcelId: mutation.parcelId,
+        ownerId: mutation.toOwnerId,
+        ownerName: mutation.toOwnerName,
+        acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type],
+        fromDate: now,
+        toDate: null,
+        documentId: mutation.documentIds[0],
+      });
+    }
 
     const me = currentUser(request);
     await appendAudit({
@@ -1415,17 +1479,6 @@ export const handlers = [
     return HttpResponse.json(dispute);
   }),
 
-  http.post(`${API}/disputes/:id/assign-agent`, async ({ params, request }) => {
-    await latency();
-    const dispute = db.disputes.find((d) => d.id === params.id);
-    if (!dispute) return notFound("Dispute not found");
-    const { agentId } = (await request.json()) as { agentId: string };
-    dispute.assignedAgentId = agentId;
-    dispute.status = "field-visit-scheduled";
-    dispute.updatedAt = new Date().toISOString();
-    return HttpResponse.json(dispute);
-  }),
-
   http.get(`${API}/disputes/:id`, async ({ params }) => {
     await latency();
     const dispute = db.disputes.find((d) => d.id === params.id);
@@ -1782,51 +1835,58 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
-  // Two callers share this: the land office booking a survey (an agent and a
-  // date are named), and an agent filing a report they carried out themselves.
+  /** Mirrors FieldReportsController.create() — see its own note on the gate. */
   http.post(`${API}/field-reports`, async ({ request }) => {
     await latency();
     const me = currentUser(request);
     const body = (await request.json()) as Partial<{
       parcelId: string;
-      parcelDagNo: string;
       disputeId: string;
-      mutationId: string;
       purpose: string;
       assignedAgentId: string;
       scheduledFor: string;
       addressHint: string;
-      notes: string;
+      allowOutsideJurisdiction: boolean;
     }>;
+
+    const parcel = db.parcels.find((p) => p.id === body.parcelId);
+    if (!parcel) return notFound("Parcel not found");
+    const agent = db.users.find((u) => u.id === body.assignedAgentId);
+    if (!agent || agent.role !== "field-agent") return notFound("Field agent not found");
+    const dispute = body.disputeId ? db.disputes.find((d) => d.id === body.disputeId) : undefined;
+    if (body.disputeId && !dispute) return notFound("Dispute not found");
+
+    const agentReports = db.fieldReports.filter((v) => v.assignedAgentId === agent.id);
+    const [candidate] = rankCandidates(
+      parcel,
+      [agent],
+      agentReports,
+      db.jurisdictions,
+      body.allowOutsideJurisdiction ?? false,
+    );
+    if (candidate.blocker) return unprocessable({ assignedAgentId: candidate.blocker });
+
     const now = new Date().toISOString();
-    const booked = Boolean(body.assignedAgentId);
     const purpose = body.purpose ?? "measurement";
     const report = {
       id: `fr-${Date.now()}`,
-      parcelId: body.parcelId ?? "",
-      parcelDagNo: body.parcelDagNo ?? "",
+      parcelId: parcel.id,
+      parcelDagNo: parcel.dagNo,
       disputeId: body.disputeId || undefined,
-      mutationId: body.mutationId || undefined,
       purpose: purpose as never,
-      status: (booked ? "assigned" : "completed") as never,
-      assignedAgentId: body.assignedAgentId || me.id,
+      status: "assigned" as const,
+      assignedAgentId: agent.id,
       scheduledFor: body.scheduledFor || now,
-      submittedAt: booked ? undefined : now,
       addressHint: body.addressHint || undefined,
       gpsCaptures: [],
       photos: [],
-      notes: body.notes,
     };
     db.fieldReports.unshift(report);
 
     // Booking a survey against an open dispute moves the case along and shows
     // up on its tracking timeline, same as the real workflow.
-    const dispute = body.disputeId
-      ? db.disputes.find((d) => d.id === body.disputeId)
-      : undefined;
-    if (booked && dispute) {
-      const agent = db.users.find((u) => u.id === body.assignedAgentId);
-      dispute.assignedAgentId = report.assignedAgentId;
+    if (dispute) {
+      dispute.assignedAgentId = agent.id;
       dispute.status = "field-visit-scheduled";
       dispute.updatedAt = now;
       db.disputeEvents.push({
@@ -1836,10 +1896,26 @@ export const handlers = [
         type: "field-visit",
         title: "Field visit scheduled",
         content: { code: "field-visit-scheduled" },
-        description: `${agent?.name ?? "A field agent"} is booked for a ${purpose.replace(/-/g, " ")} on ${report.parcelDagNo}.`,
+        description: `${agent.name} is booked for a ${purpose.replace(/-/g, " ")} on ${report.parcelDagNo}.`,
         actorId: me.id,
         actorName: me.name,
       });
+
+      // survey-scheduled has existed on NotificationContent with no writer
+      // anywhere — the citizen whose case this is finds out from the app.
+      if (dispute.filedById !== me.id) {
+        db.notifications.unshift({
+          id: `n-${Date.now()}-${dispute.filedById}`,
+          userId: dispute.filedById,
+          at: now,
+          severity: "info",
+          title: "Field survey scheduled",
+          body: `A ${purpose.replace(/-/g, " ")} for dag ${report.parcelDagNo} has been scheduled.`,
+          content: { code: "survey-scheduled", dagNo: report.parcelDagNo },
+          read: false,
+          href: `/disputes/${dispute.id}`,
+        });
+      }
     }
 
     return HttpResponse.json(report, { status: 201 });
@@ -2114,6 +2190,27 @@ export const handlers = [
   }),
 
   // Admin ------------------------------------------------------------------
+  /** Mirrors UsersController.search() — the mutation wizard's recipient picker. */
+  http.get(`${API}/users/search`, async ({ request }) => {
+    await latency();
+    const url = new URL(request.url);
+    const query = (url.searchParams.get("q") ?? "").trim();
+    if (query.length < 4) return HttpResponse.json([]);
+
+    const q = query.toLowerCase();
+    const me = currentUser(request);
+    const matches = db.users
+      .filter(
+        (u) =>
+          u.role === "citizen" &&
+          u.id !== me.id &&
+          (u.email.toLowerCase().includes(q) || u.phone?.toLowerCase().includes(q)),
+      )
+      .slice(0, 5)
+      .map((u) => ({ id: u.id, name: u.name }));
+    return HttpResponse.json(matches);
+  }),
+
   http.get(`${API}/users`, async ({ request }) => {
     await latency();
     const url = new URL(request.url);
@@ -2126,6 +2223,44 @@ export const handlers = [
         (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
       );
     return HttpResponse.json(paginate(items, url));
+  }),
+
+  /** Mirrors UsersController.update() — see its own note on scope. */
+  http.patch(`${API}/users/:id`, async ({ params, request }) => {
+    await latency();
+    const user = db.users.find((u) => u.id === params.id);
+    if (!user) return notFound("User not found");
+
+    const body = (await request.json()) as Partial<{
+      status: "active" | "suspended";
+      jurisdictionId: string;
+    }>;
+
+    const me = currentUser(request);
+    if (body.status === "suspended" && user.id === me.id) {
+      return conflict("You cannot suspend your own account.");
+    }
+    if (body.jurisdictionId && !db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
+      return notFound("Jurisdiction not found");
+    }
+
+    if (body.status) user.status = body.status;
+    if (body.jurisdictionId) user.jurisdictionId = body.jurisdictionId;
+
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        name: user.name,
+        ...(body.status ? { status: user.status } : {}),
+        ...(body.jurisdictionId ? { jurisdictionId: user.jurisdictionId } : {}),
+      },
+    });
+
+    return HttpResponse.json(user);
   }),
 
   http.get(`${API}/policies`, async () => {

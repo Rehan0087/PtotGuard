@@ -98,7 +98,9 @@ export type AcquisitionType =
   | "gift"
   | "grant"
   | "partition"
-  | "court-order";
+  | "court-order"
+  /** The record itself was wrong (name/owner misfiled), not a real transfer. */
+  | "correction";
 
 /** One row in a parcel's ownership history / chain of title. */
 export interface OwnershipRecord {

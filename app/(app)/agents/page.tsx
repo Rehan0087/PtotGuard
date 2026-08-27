@@ -155,12 +155,12 @@ function AssignPanel({
     assign.mutate(
       {
         parcelId: parcel.id,
-        parcelDagNo: parcel.dagNo,
         disputeId: dispute.id,
         purpose,
         assignedAgentId: chosen.agent.id,
         scheduledFor: new Date(scheduledFor).toISOString(),
         addressHint: parcel.title,
+        allowOutsideJurisdiction: allowOutside,
       },
       {
         onSuccess: () =>
