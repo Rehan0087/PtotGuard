@@ -22,6 +22,7 @@ function mutation(over: Partial<Mutation> = {}): Mutation {
     type: "sale",
     status: "objection-period",
     fromOwnerName: "Aleya Begum",
+    toOwnerId: "usr-2",
     toOwnerName: "Sohel Rana",
     requestedById: "usr-1",
     requestedAt: fromNow(-30),
@@ -40,6 +41,23 @@ describe("approvalGate", () => {
 
     expect(gate.canApprove).toBe(true);
     expect(gate.hold).toBeNull();
+  });
+
+  it("holds approval when the mutation has no linked recipient", () => {
+    // Pre-existing rows filed before ownership transfer went live.
+    const gate = approvalGate(
+      mutation({ toOwnerId: undefined, objectionWindowEndsAt: fromNow(-1) }),
+      NOW,
+    );
+
+    expect(gate.canApprove).toBe(false);
+    expect(gate.hold).toEqual({ code: "no-recipient" });
+  });
+
+  it("still allows rejecting a mutation with no linked recipient", () => {
+    const gate = approvalGate(mutation({ toOwnerId: undefined }), NOW);
+
+    expect(gate.canReject).toBe(true);
   });
 
   it("holds approval while the statutory window is open", () => {

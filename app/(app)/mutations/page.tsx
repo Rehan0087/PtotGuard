@@ -37,9 +37,14 @@ type Scope = "all" | "assigned";
 
 /** The gate states its reason as a code; the wording is the screen's job. */
 function holdText(hold: MutationHold, t: Dictionary): string {
-  return hold.code === "objections"
-    ? t.pages.mutations.hold.objections(hold.count)
-    : t.pages.mutations.hold.objectionWindow(hold.days);
+  switch (hold.code) {
+    case "objections":
+      return t.pages.mutations.hold.objections(hold.count);
+    case "objection-window":
+      return t.pages.mutations.hold.objectionWindow(hold.days);
+    case "no-recipient":
+      return t.pages.mutations.hold.noRecipient;
+  }
 }
 
 function MutationCard({ mutation }: { mutation: LandMutation }) {

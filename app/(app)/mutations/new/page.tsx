@@ -20,6 +20,9 @@ import {
   Smartphone,
   CreditCard,
   AlertCircle,
+  Search,
+  UserRound,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -35,7 +38,13 @@ import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import type { Dictionary } from "@/lib/i18n";
-import { useParcels, useCreateMutation, useSession, usePolicies } from "@/hooks/queries";
+import {
+  useParcels,
+  useCreateMutation,
+  useSession,
+  usePolicies,
+  useSearchCitizens,
+} from "@/hooks/queries";
 import type { MutationType, PaymentMethod } from "@/lib/types";
 
 /** Icon and order per transfer kind; the name and blurb come from the dictionary. */
@@ -58,7 +67,7 @@ function makeSchema(t: Dictionary) {
   return z.object({
     parcelId: z.string().min(1, t.pages.newMutation.errors.parcelRequired),
     type: z.enum(["sale", "inheritance", "gift", "partition", "correction"]),
-    toOwnerName: z.string().min(1, t.pages.newMutation.errors.toOwnerRequired).max(120),
+    toOwnerId: z.string().min(1, t.pages.newMutation.errors.toOwnerRequired),
     deedNumber: z.string().max(60),
     deedDate: z.string(),
     paymentMethod: z.enum(["bkash", "nagad", "card"]),
@@ -70,7 +79,7 @@ type FormValues = z.infer<ReturnType<typeof makeSchema>>;
 const STEP_KEYS = ["parcel", "transfer", "payment", "review"] as const;
 const STEP_FIELDS: (keyof FormValues)[][] = [
   ["parcelId"],
-  ["type", "toOwnerName"],
+  ["type", "toOwnerId"],
   ["paymentMethod"],
   [],
 ];
@@ -100,7 +109,7 @@ export default function NewMutationPage() {
     defaultValues: {
       parcelId: "",
       type: "sale",
-      toOwnerName: "",
+      toOwnerId: "",
       deedNumber: "",
       deedDate: "",
       paymentMethod: "bkash",
@@ -110,10 +119,14 @@ export default function NewMutationPage() {
   // useWatch (vs watch()) keeps the component React-Compiler friendly.
   const parcelId = useWatch({ control, name: "parcelId" });
   const type = useWatch({ control, name: "type" });
-  const toOwnerName = useWatch({ control, name: "toOwnerName" });
+  const toOwnerId = useWatch({ control, name: "toOwnerId" });
   const deedNumber = useWatch({ control, name: "deedNumber" });
   const deedDate = useWatch({ control, name: "deedDate" });
   const paymentMethod = useWatch({ control, name: "paymentMethod" });
+
+  // Display-only — the form only ever submits toOwnerId, but the picked
+  // name is what the review step and a "change" chip need to show.
+  const [toOwnerName, setToOwnerName] = useState("");
 
   const selectedParcel = parcels.find((p) => p.id === parcelId);
   const fee = policy ? { amount: policy.mutationFeeBdt, currency: "BDT" as const } : null;
@@ -128,7 +141,7 @@ export default function NewMutationPage() {
       {
         parcelId: values.parcelId,
         type: values.type as never,
-        toOwnerName: values.toOwnerName,
+        toOwnerId: values.toOwnerId,
         deedNumber: values.deedNumber || undefined,
         deedDate: values.deedDate || undefined,
         paymentMethod: values.paymentMethod as never,
@@ -288,22 +301,19 @@ export default function NewMutationPage() {
               />
             </div>
 
-            <div>
-              <label htmlFor="toOwner" className="mb-1.5 block text-sm font-medium text-foreground">
-                {t.pages.newMutation.toOwnerLabel}
-              </label>
-              <Input
-                id="toOwner"
-                placeholder={t.pages.newMutation.toOwnerPlaceholder}
-                {...register("toOwnerName")}
-              />
-              {errors.toOwnerName ? (
-                <p className="mt-1.5 flex items-center gap-1.5 text-sm text-destructive">
-                  <AlertCircle className="size-4" />
-                  {errors.toOwnerName.message}
-                </p>
-              ) : null}
-            </div>
+            <RecipientPicker
+              toOwnerId={toOwnerId}
+              toOwnerName={toOwnerName}
+              error={errors.toOwnerId?.message}
+              onPick={(id, name) => {
+                setValue("toOwnerId", id, { shouldValidate: true });
+                setToOwnerName(name);
+              }}
+              onClear={() => {
+                setValue("toOwnerId", "", { shouldValidate: true });
+                setToOwnerName("");
+              }}
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -435,6 +445,101 @@ export default function NewMutationPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Finds the new owner by email or phone rather than a typed name — the only
+ * way an approved transfer can actually move Parcel.ownerId anywhere real.
+ * See useSearchCitizens's own note on the minimum-length guard.
+ */
+function RecipientPicker({
+  toOwnerId,
+  toOwnerName,
+  error,
+  onPick,
+  onClear,
+}: {
+  toOwnerId: string;
+  toOwnerName: string;
+  error?: string;
+  onPick: (id: string, name: string) => void;
+  onClear: () => void;
+}) {
+  const t = useT();
+  const [query, setQuery] = useState("");
+  const { data: results, isFetching } = useSearchCitizens(query);
+
+  if (toOwnerId) {
+    return (
+      <div>
+        <span className="mb-1.5 block text-sm font-medium text-foreground">
+          {t.pages.newMutation.toOwnerLabel}
+        </span>
+        <div className="flex items-center gap-2.5 rounded-lg border border-primary bg-card p-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+            <UserRound className="size-4" />
+          </span>
+          <span className="flex-1 text-sm font-medium text-foreground">{toOwnerName}</span>
+          <Button type="button" size="xs" variant="ghost" onClick={onClear}>
+            <X className="size-3.5" />
+            {t.pages.newMutation.changeRecipient}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label htmlFor="toOwner" className="mb-1.5 block text-sm font-medium text-foreground">
+        {t.pages.newMutation.toOwnerLabel}
+      </label>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          id="toOwner"
+          className="pl-8"
+          placeholder={t.pages.newMutation.toOwnerPlaceholder}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">{t.pages.newMutation.toOwnerHint}</p>
+
+      {query.trim().length >= 4 ? (
+        <div className="mt-2 space-y-1.5">
+          {isFetching ? (
+            <Skeleton className="h-11 rounded-lg" />
+          ) : results && results.length > 0 ? (
+            results.map((r) => (
+              <button
+                type="button"
+                key={r.id}
+                onClick={() => onPick(r.id, r.name)}
+                className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50"
+              >
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+                  <UserRound className="size-3.5" />
+                </span>
+                <span className="text-sm font-medium text-foreground">{r.name}</span>
+              </button>
+            ))
+          ) : (
+            <p className="text-pretty text-sm text-muted-foreground">
+              {t.pages.newMutation.toOwnerNoMatch}
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {error ? (
+        <p className="mt-1.5 flex items-center gap-1.5 text-sm text-destructive">
+          <AlertCircle className="size-4" />
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

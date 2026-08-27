@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { approvalGate, transferReview, type Mutation, type ParcelRestriction } from "@plotguard/rules";
+import {
+  ACQUISITION_TYPE_BY_MUTATION_TYPE,
+  approvalGate,
+  transferReview,
+  type Mutation,
+  type MutationType,
+  type ParcelRestriction,
+} from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -51,19 +58,27 @@ export class MutationsController {
    * an active injunction, attachment, or acquisition notice has no business
    * entering the pipeline; a mortgaged one may, the same distinction
    * transferReview() already draws for the parcel record itself.
+   *
+   * toOwnerId names a registered account, not a typed name — the only way
+   * approval below can actually move Parcel.ownerId anywhere real. See
+   * users.controller.ts's search() for how the citizen finds that account.
    */
   @Post()
   @HttpCode(201)
   async create(@Body() body: CreateMutationDto, @Req() req: Request) {
-    const [parcel, restrictions, policy] = await Promise.all([
+    const [parcel, restrictions, policy, toOwner] = await Promise.all([
       this.prisma.parcel.findUnique({
         where: { id: body.parcelId },
         include: { owner: { select: { name: true } } },
       }),
       this.prisma.parcelRestriction.findMany({ where: { parcelId: body.parcelId } }),
       this.prisma.policy.findUnique({ where: { id: "singleton" } }),
+      this.prisma.user.findUnique({ where: { id: body.toOwnerId } }),
     ]);
     if (!parcel) throw new NotFoundError("Parcel not found");
+    if (!toOwner || toOwner.role !== "citizen") {
+      throw new NotFoundError("Recipient not found");
+    }
 
     const review = transferReview(restrictions as unknown as ParcelRestriction[]);
     if (!review.canTransfer) {
@@ -95,7 +110,8 @@ export class MutationsController {
           // The registry's own fact, not the applicant's claim — a citizen
           // does not get to assert who the current owner is.
           fromOwnerName: parcel.owner.name,
-          toOwnerName: body.toOwnerName,
+          toOwnerId: toOwner.id,
+          toOwnerName: toOwner.name,
           requestedById: actorId,
           documentIds: body.documentIds ?? [],
           deedNumber: body.deedNumber,
@@ -129,6 +145,11 @@ export class MutationsController {
    * gap this codebase's own design principle warns against: a UI that
    * explains a hold is not a server that enforces one. Fixed here and in the
    * mock (parity), so a request that bypasses the disabled button still 422s.
+   *
+   * Approval used to stop at flipping `status` — the actual point of a
+   * namjari, moving the parcel to its new owner, never happened.
+   * approvalGate()'s own `no-recipient` hold is what makes this safe: by the
+   * time execution reaches here, `toOwnerId` is guaranteed present.
    */
   @Patch(":id/decision")
   async decide(
@@ -155,10 +176,39 @@ export class MutationsController {
     const status = body.decision === "approve" ? "approved" : "rejected";
 
     return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
       const updated = await tx.mutation.update({
         where: { id },
-        data: { status, decidedAt: new Date() },
+        data: { status, decidedAt: now },
       });
+
+      if (body.decision === "approve") {
+        // Guaranteed by approvalGate()'s no-recipient hold above.
+        const toOwnerId = mutation.toOwnerId!;
+
+        await tx.parcel.update({
+          where: { id: mutation.parcelId },
+          data: { ownerId: toOwnerId, lastMutationAt: now },
+        });
+
+        // Chain of title: close whoever's record was open, open the new one.
+        await tx.ownershipRecord.updateMany({
+          where: { parcelId: mutation.parcelId, toDate: null },
+          data: { toDate: now },
+        });
+        await tx.ownershipRecord.create({
+          data: {
+            id: `own-${randomUUID()}`,
+            parcelId: mutation.parcelId,
+            ownerId: toOwnerId,
+            ownerName: updated.toOwnerName,
+            acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type as MutationType],
+            fromDate: now,
+            documentId: mutation.documentIds[0],
+          },
+        });
+      }
+
       await this.audit.append(tx, {
         entityType: "mutation",
         entityId: updated.id,

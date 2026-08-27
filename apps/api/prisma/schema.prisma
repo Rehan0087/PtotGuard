@@ -81,6 +81,7 @@ model User {
   disputeEvents                DisputeEvent[]
   mutationsRequested           Mutation[]                @relation("MutationRequestedBy")
   mutationsAsOfficer           Mutation[]                @relation("MutationOfficer")
+  mutationsAsRecipient         Mutation[]                @relation("MutationToOwner")
   serviceApplicationsFiled     ServiceApplication[]      @relation("ServiceApplicant")
   serviceApplicationsAsOfficer ServiceApplication[]      @relation("ServiceApplicationOfficer")
   serviceApplicationEvents     ServiceApplicationEvent[]
@@ -305,6 +306,12 @@ model Mutation {
   /// MutationStatus: "submitted" | "verification" | "objection-period" | "approved" | "rejected"
   status                String    @default("submitted")
   fromOwnerName         String
+  /// Nullable: only filings made after ownership transfer went live carry a
+  /// linked recipient — a handful of pre-existing rows predate the
+  /// requirement and have no real account to point at. decide() refuses to
+  /// approve any mutation missing this rather than guessing.
+  toOwnerId             String?
+  toOwner               User?     @relation("MutationToOwner", fields: [toOwnerId], references: [id])
   toOwnerName           String
   requestedById         String
   requestedBy           User      @relation("MutationRequestedBy", fields: [requestedById], references: [id])
