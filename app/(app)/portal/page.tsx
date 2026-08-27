@@ -41,7 +41,7 @@ const SERVICES: Service[] = [
   { key: "mutation", bodyKey: "mutationBody", icon: GitBranch, href: "/mutations" },
   { key: "landTax", bodyKey: "landTaxBody", icon: Banknote, href: "/land-tax" },
   { key: "recordsMaps", bodyKey: "recordsMapsBody", icon: Map, href: "/search" },
-  { key: "acquisition", bodyKey: "acquisitionBody", icon: Landmark },
+  { key: "acquisition", bodyKey: "acquisitionBody", icon: Landmark, href: "/acquisition" },
   { key: "lease", bodyKey: "leaseBody", icon: Sprout, href: "/lease-settlement" },
   { key: "landAdmin", bodyKey: "landAdminBody", icon: Building2, href: "/land-admin" },
   { key: "revenueCases", bodyKey: "revenueCasesBody", icon: Scale, href: "/revenue-cases" },

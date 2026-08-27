@@ -1093,6 +1093,110 @@ export const handlers = [
     return HttpResponse.json(application, { status: 201 });
   }),
 
+  // Acquisition & requisition ---------------------------------------------------
+  // The one service the citizen doesn't start: a land office officer issues
+  // a notice against a parcel with a compensation award; the owner may
+  // object. No fee, so no .../pay step — the notice is created already
+  // under-review. Mirrors acquisition.controller.ts.
+  http.post(`${API}/acquisition/notice`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as {
+      parcelId: string;
+      purpose: string;
+      awardAmount: number;
+    };
+    const parcel = db.parcels.find((p) => p.id === body.parcelId);
+    if (!parcel) return notFound("Parcel not found");
+
+    const CLOSED = new Set(["approved", "rejected"]);
+    const hasOpenNotice = db.serviceApplications.some(
+      (a) => a.parcelId === parcel.id && a.serviceType === "acquisition" && !CLOSED.has(a.status),
+    );
+    if (hasOpenNotice) {
+      return conflict("An acquisition notice is already open on this parcel.");
+    }
+
+    const now = new Date().toISOString();
+    const count = db.serviceApplications.filter((a) => a.serviceType === "acquisition").length;
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `ACQ-2026-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: "acquisition" as const,
+      status: "under-review" as const,
+      parcelId: parcel.id,
+      applicantId: parcel.ownerId,
+      assignedOfficerId: me.id,
+      details: { purpose: body.purpose, awardAmount: body.awardAmount },
+      documentIds: [],
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
+
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        applicationNo: application.applicationNo,
+        serviceType: "acquisition",
+        parcelDagNo: parcel.dagNo,
+        awardAmount: body.awardAmount,
+      },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "submitted",
+      title: "Acquisition notice issued",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application, { status: 201 });
+  }),
+
+  http.patch(`${API}/acquisition/:id/object`, async ({ params, request }) => {
+    await latency();
+    const me = currentUser(request);
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    // Same answer for missing or not yours as land-admin's own apply handler.
+    if (!application || application.applicantId !== me.id) {
+      return notFound("Service application not found");
+    }
+    if (application.status === "approved" || application.status === "rejected") {
+      return conflict("This notice has already been decided.");
+    }
+
+    const { objectionText } = (await request.json()) as { objectionText: string };
+    const now = new Date().toISOString();
+    application.details = { ...application.details, objectionText };
+    application.updatedAt = now;
+
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "status-change",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { applicationNo: application.applicationNo },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "status-change",
+      title: "Objection filed",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application);
+  }),
+
   // Service applications -----------------------------------------------------
   // Shared foundation for the six not-yet-built services (Land Development
   // Tax, Acquisition & Requisition, Lease & Settlement, Land Administration,
