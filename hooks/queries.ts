@@ -420,6 +420,28 @@ export function useApplyLeaseSettlement() {
   });
 }
 
+// --- Acquisition & requisition -----------------------------------------------
+// The one service a citizen doesn't start — a land office officer issues the
+// notice, so there's no "apply and pay" hook here, just issuing and, on the
+// citizen's side, objecting. No fee, so no pay step in either hook.
+export function useIssueAcquisitionNotice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { parcelId: string; purpose: string; awardAmount: number }) =>
+      api.post<ServiceApplication>("/acquisition/notice", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
+  });
+}
+
+export function useFileAcquisitionObjection(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: (objectionText: string) =>
+      api.patch<ServiceApplication>(`/acquisition/${id}/object`, { objectionText }),
+    onSuccess: invalidate,
+  });
+}
+
 // --- Documents -------------------------------------------------------------
 export function useDocuments(params: ListParams = {}) {
   const role = useRole();
