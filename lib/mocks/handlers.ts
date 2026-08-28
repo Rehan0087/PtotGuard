@@ -1261,6 +1261,39 @@ export const handlers = [
     return HttpResponse.json(application);
   }),
 
+  // Land information bank -------------------------------------------------------
+  // Read-only: parcels with an approved acquisition notice. No khas-land
+  // inventory exists in this system, so this shows only what actually
+  // happened — nothing applied for, paid, or decided. Mirrors
+  // land-info-bank.controller.ts.
+  http.get(`${API}/land-info-bank`, async ({ request }) => {
+    await latency();
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q")?.trim().toLowerCase();
+
+    const entries = db.serviceApplications
+      .filter((a) => a.serviceType === "acquisition" && a.status === "approved")
+      .sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))
+      .map((application) => ({
+        application,
+        parcel: db.parcels.find((p) => p.id === application.parcelId),
+      }))
+      .filter((e): e is { application: (typeof db.serviceApplications)[number]; parcel: NonNullable<typeof e.parcel> } =>
+        Boolean(e.parcel),
+      )
+      .filter((e) => {
+        if (!q) return true;
+        const purpose = String((e.application.details as { purpose?: string })?.purpose ?? "");
+        return (
+          e.parcel.dagNo.toLowerCase().includes(q) ||
+          e.parcel.title.toLowerCase().includes(q) ||
+          purpose.toLowerCase().includes(q)
+        );
+      });
+
+    return HttpResponse.json(paginate(entries, url));
+  }),
+
   // Service applications -----------------------------------------------------
   // Shared foundation for the six not-yet-built services (Land Development
   // Tax, Acquisition & Requisition, Lease & Settlement, Land Administration,

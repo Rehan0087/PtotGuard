@@ -45,7 +45,7 @@ const SERVICES: Service[] = [
   { key: "lease", bodyKey: "leaseBody", icon: Sprout, href: "/lease-settlement" },
   { key: "landAdmin", bodyKey: "landAdminBody", icon: Building2, href: "/land-admin" },
   { key: "revenueCases", bodyKey: "revenueCasesBody", icon: Scale, href: "/revenue-cases" },
-  { key: "infoBank", bodyKey: "infoBankBody", icon: FileStack },
+  { key: "infoBank", bodyKey: "infoBankBody", icon: FileStack, href: "/land-info-bank" },
 ];
 
 export default function PortalPage() {

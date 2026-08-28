@@ -123,6 +123,7 @@ export const bn: Dictionary = {
     revenueCases: "রাজস্ব মামলা",
     leaseSettlement: "ইজারা ও বন্দোবস্ত",
     acquisition: "অধিগ্রহণ ও হুকুমদখল",
+    infoBank: "ভূমি তথ্য ব্যাংক",
     ocrQueue: "ওসিআর সারি",
     fraudReview: "জালিয়াতি পর্যালোচনা",
     fieldAgents: "মাঠকর্মী",
@@ -1271,7 +1272,7 @@ export const bn: Dictionary = {
         revenueCases: "রাজস্ব মামলা",
         revenueCasesBody: "রাজস্ব আদালতে মামলা দায়ের করুন ও অগ্রগতি দেখুন।",
         infoBank: "ভূমি তথ্য ব্যাংক",
-        infoBankBody: "রেকর্ডভুক্ত খাস, অধিগ্রহণকৃত ও সরকারি জমি দেখুন।",
+        infoBankBody: "সরকারি নোটিশে আনুষ্ঠানিকভাবে অধিগ্রহণকৃত জমি দেখুন, উদ্দেশ্য ও রোয়েদাদসহ।",
       },
     },
 
@@ -1497,6 +1498,19 @@ export const bn: Dictionary = {
         awardAmountRequired: "ক্ষতিপূরণের রোয়েদাদ লিখুন।",
         objectionRequired: "আপনার আপত্তি ব্যাখ্যা করুন।",
       },
+    },
+
+    landInfoBank: {
+      description: "সরকারি নোটিশে আনুষ্ঠানিকভাবে অধিগ্রহণকৃত জমি — উদ্দেশ্য, ক্ষতিপূরণের রোয়েদাদ, এবং সিদ্ধান্তের তারিখসহ।",
+      searchPlaceholder: "দাগ নম্বর, শিরোনাম, বা উদ্দেশ্য দিয়ে খুঁজুন",
+      resultCount: (count: number) => `${n(count)}টি দাগ`,
+      purposeLabel: "উদ্দেশ্য",
+      awardLabel: "ক্ষতিপূরণের রোয়েদাদ",
+      decidedLabel: (date: string) => `${date} তারিখে সিদ্ধান্ত হয়েছে`,
+      emptyTitle: "কোনো অধিগ্রহণকৃত জমি নেই",
+      emptyBody: "অনুমোদিত সরকারি নোটিশে অধিগ্রহণকৃত দাগ এখানে দেখা যাবে।",
+      noResultsTitle: "কোনো মিল পাওয়া যায়নি",
+      noResultsBody: "ভিন্ন দাগ নম্বর, শিরোনাম, বা উদ্দেশ্য দিয়ে চেষ্টা করুন।",
     },
 
     // <<PAGES-END>>

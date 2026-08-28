@@ -444,6 +444,23 @@ export function useFileAcquisitionObjection(id: string) {
   });
 }
 
+// --- Land information bank --------------------------------------------------
+// Read-only: parcels with an approved acquisition notice — the only land
+// this system actually knows the government holds an interest in. No apply
+// or decide hooks; there's nothing here to submit.
+export interface LandInfoBankEntry {
+  application: ServiceApplication;
+  parcel: Parcel;
+}
+
+export function useLandInfoBank(params: ListParams = {}) {
+  return useQuery({
+    queryKey: ["land-info-bank", params],
+    queryFn: () => api.get<Paginated<LandInfoBankEntry>>(`/land-info-bank${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
 // --- Documents -------------------------------------------------------------
 export function useDocuments(params: ListParams = {}) {
   const role = useRole();

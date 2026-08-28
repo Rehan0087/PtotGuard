@@ -143,6 +143,7 @@ export const en = {
     revenueCases: "Revenue cases",
     leaseSettlement: "Lease & settlement",
     acquisition: "Acquisition & requisition",
+    infoBank: "Land information bank",
     ocrQueue: "OCR queue",
     fraudReview: "Fraud review",
     fieldAgents: "Field agents",
@@ -1343,7 +1344,7 @@ export const en = {
         revenueCases: "Revenue cases",
         revenueCasesBody: "File and follow a case before the revenue court.",
         infoBank: "Land information bank",
-        infoBankBody: "Browse khas, acquired, and government land on record.",
+        infoBankBody: "Browse land formally acquired by government notice, with purpose and award on record.",
       },
     },
 
@@ -1579,6 +1580,20 @@ export const en = {
         awardAmountRequired: "Enter the compensation award.",
         objectionRequired: "Explain your objection.",
       },
+    },
+
+    landInfoBank: {
+      description:
+        "Land formally acquired by government notice — the purpose, the compensation award, and the date it was decided.",
+      searchPlaceholder: "Search by dag number, title, or purpose",
+      resultCount: (count: number) => `${n(count)} parcel${count === 1 ? "" : "s"}`,
+      purposeLabel: "Purpose",
+      awardLabel: "Compensation award",
+      decidedLabel: (date: string) => `Decided ${date}`,
+      emptyTitle: "No acquired land on record",
+      emptyBody: "Parcels acquired by an approved government notice will appear here.",
+      noResultsTitle: "No matches",
+      noResultsBody: "Try a different dag number, title, or purpose.",
     },
 
     // <<PAGES-END>>
