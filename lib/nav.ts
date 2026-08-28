@@ -21,6 +21,7 @@ import {
   Landmark,
   FileStack,
   Receipt,
+  CalendarClock,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -80,6 +81,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "inheritance", href: "/inheritance", icon: GitBranch, group: "tools" },
       { labelKey: "myDocuments", href: "/documents", icon: FileText, group: "tools" },
       { labelKey: "disputes", href: "/disputes", icon: Scale, group: "tools" },
+      { labelKey: "appointments", href: "/appointments", icon: CalendarClock, group: "tools" },
       { labelKey: "payments", href: "/payments", icon: Receipt, group: "tools" },
     ],
   },
@@ -93,6 +95,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "revenueCases", href: "/revenue-cases", icon: Scale },
       { labelKey: "leaseSettlement", href: "/lease-settlement", icon: Sprout },
       { labelKey: "acquisition", href: "/acquisition", icon: Landmark },
+      { labelKey: "appointments", href: "/appointments", icon: CalendarClock },
       { labelKey: "ocrQueue", href: "/ocr-queue", icon: ScanLine },
       { labelKey: "fraudReview", href: "/fraud-review", icon: ShieldAlert },
       { labelKey: "fieldAgents", href: "/agents", icon: Users2 },

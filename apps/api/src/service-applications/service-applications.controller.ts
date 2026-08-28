@@ -20,6 +20,7 @@ const APPLICATION_PREFIX: Record<ServiceType, string> = {
   "land-admin": "ADM",
   "revenue-case": "RVC",
   "info-bank-request": "INF",
+  appointment: "APT",
 };
 
 /**
