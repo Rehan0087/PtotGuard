@@ -1,10 +1,11 @@
 import type { ID, ISODateString } from "./common";
 
 /**
- * The six not-yet-built land services (Land Development Tax, Acquisition &
- * Requisition, Lease & Settlement, Land Administration, Revenue Cases, Land
- * Information Bank). Mutation (e-Namjari) is not here — it was already built
- * end-to-end before this model existed and keeps its own table; see Mutation.
+ * The land services built on this shared model (Land Development Tax,
+ * Acquisition & Requisition, Lease & Settlement, Land Administration,
+ * Revenue Cases, Land Information Bank, Appointment Booking). Mutation
+ * (e-Namjari) is not here — it was already built end-to-end before this
+ * model existed and keeps its own table; see Mutation.
  */
 export type ServiceType =
   | "land-tax"
@@ -12,7 +13,8 @@ export type ServiceType =
   | "lease-settlement"
   | "land-admin"
   | "revenue-case"
-  | "info-bank-request";
+  | "info-bank-request"
+  | "appointment";
 
 export type ServiceApplicationStatus =
   | "draft"

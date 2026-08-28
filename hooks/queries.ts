@@ -461,6 +461,32 @@ export function useLandInfoBank(params: ListParams = {}) {
   });
 }
 
+// --- Appointments ------------------------------------------------------------
+// No fee, so no pay step — booking lands straight in under-review. An
+// officer may propose a different time (reschedule) before finally
+// confirming or declining via the generic decision hook.
+export function useBookAppointment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      officeJurisdictionId: string;
+      purpose: string;
+      preferredAt: string;
+      parcelId?: string;
+    }) => api.post<ServiceApplication>("/appointments/book", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
+  });
+}
+
+export function useRescheduleAppointment(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: (confirmedAt: string) =>
+      api.patch<ServiceApplication>(`/appointments/${id}/reschedule`, { confirmedAt }),
+    onSuccess: invalidate,
+  });
+}
+
 // --- Documents -------------------------------------------------------------
 export function useDocuments(params: ListParams = {}) {
   const role = useRole();

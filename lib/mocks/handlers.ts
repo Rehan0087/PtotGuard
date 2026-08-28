@@ -213,6 +213,7 @@ const APPLICATION_PREFIX: Record<string, string> = {
   "land-admin": "ADM",
   "revenue-case": "RVC",
   "info-bank-request": "INF",
+  appointment: "APT",
 };
 
 // --- handlers --------------------------------------------------------------
@@ -1292,6 +1293,107 @@ export const handlers = [
       });
 
     return HttpResponse.json(paginate(entries, url));
+  }),
+
+  // Appointment booking -----------------------------------------------------
+  // "Office" is a real upazila-level jurisdiction, the same one every other
+  // routed record here already uses — no invented office directory, and no
+  // fake slot/capacity system either, since none exists. No fee, so the
+  // notice lands straight in under-review. Mirrors appointments.controller.ts.
+  http.post(`${API}/appointments/book`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as {
+      officeJurisdictionId: string;
+      purpose: string;
+      preferredAt: string;
+      parcelId?: string;
+    };
+    const office = db.jurisdictions.find((j) => j.id === body.officeJurisdictionId);
+    if (!office || office.level !== "upazila") return notFound("Office not found");
+
+    if (body.parcelId) {
+      const parcel = db.parcels.find((p) => p.id === body.parcelId);
+      if (!parcel || parcel.ownerId !== me.id) return notFound("Parcel not found");
+    }
+
+    const now = new Date().toISOString();
+    const count = db.serviceApplications.filter((a) => a.serviceType === "appointment").length;
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `APT-2026-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: "appointment" as const,
+      status: "under-review" as const,
+      parcelId: body.parcelId ?? undefined,
+      applicantId: me.id,
+      details: {
+        officeJurisdictionId: body.officeJurisdictionId,
+        purpose: body.purpose,
+        preferredAt: body.preferredAt,
+      },
+      documentIds: [],
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
+
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        applicationNo: application.applicationNo,
+        serviceType: "appointment",
+        officeJurisdictionId: body.officeJurisdictionId,
+      },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "submitted",
+      title: "Appointment requested",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application, { status: 201 });
+  }),
+
+  http.patch(`${API}/appointments/:id/reschedule`, async ({ params, request }) => {
+    await latency();
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application) return notFound("Service application not found");
+    if (application.status === "approved" || application.status === "rejected") {
+      return conflict("This appointment has already been decided.");
+    }
+
+    const { confirmedAt } = (await request.json()) as { confirmedAt: string };
+    const now = new Date().toISOString();
+    application.details = { ...application.details, confirmedAt };
+    application.updatedAt = now;
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "status-change",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { applicationNo: application.applicationNo, confirmedAt },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "status-change",
+      title: "Appointment time proposed",
+      actorId: me.id,
+    });
+
+    return HttpResponse.json(application);
   }),
 
   // Service applications -----------------------------------------------------
