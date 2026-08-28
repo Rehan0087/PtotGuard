@@ -144,6 +144,7 @@ export const en = {
     leaseSettlement: "Lease & settlement",
     acquisition: "Acquisition & requisition",
     infoBank: "Land information bank",
+    payments: "Payments",
     ocrQueue: "OCR queue",
     fraudReview: "Fraud review",
     fieldAgents: "Field agents",
@@ -1594,6 +1595,26 @@ export const en = {
       emptyBody: "Parcels acquired by an approved government notice will appear here.",
       noResultsTitle: "No matches",
       noResultsBody: "Try a different dag number, title, or purpose.",
+    },
+
+    payments: {
+      description: "Every fee you've paid — filing a mutation, land tax, or any other service — in one place.",
+      totalPaidLabel: "Total paid",
+      countLabel: (count: number) => `${n(count)} payment${count === 1 ? "" : "s"}`,
+      serviceLabel: {
+        mutation: "Mutation",
+        "land-tax": "Land development tax",
+        "land-admin": "Land administration",
+        "revenue-case": "Revenue case",
+        "lease-settlement": "Lease & settlement",
+      },
+      referenceLabel: "Reference",
+      methodLabel: "Method",
+      dateLabel: "Date",
+      paymentMethods: { bkash: "bKash", nagad: "Nagad", card: "Card" },
+      viewRecord: "View",
+      emptyTitle: "No payments yet",
+      emptyBody: "Fees you pay while filing a mutation or applying for a service will appear here.",
     },
 
     // <<PAGES-END>>
