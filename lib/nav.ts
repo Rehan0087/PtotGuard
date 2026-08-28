@@ -20,6 +20,7 @@ import {
   Sprout,
   Landmark,
   FileStack,
+  Receipt,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -79,6 +80,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "inheritance", href: "/inheritance", icon: GitBranch, group: "tools" },
       { labelKey: "myDocuments", href: "/documents", icon: FileText, group: "tools" },
       { labelKey: "disputes", href: "/disputes", icon: Scale, group: "tools" },
+      { labelKey: "payments", href: "/payments", icon: Receipt, group: "tools" },
     ],
   },
   "land-office": {

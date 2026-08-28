@@ -124,6 +124,7 @@ export const bn: Dictionary = {
     leaseSettlement: "ইজারা ও বন্দোবস্ত",
     acquisition: "অধিগ্রহণ ও হুকুমদখল",
     infoBank: "ভূমি তথ্য ব্যাংক",
+    payments: "পরিশোধসমূহ",
     ocrQueue: "ওসিআর সারি",
     fraudReview: "জালিয়াতি পর্যালোচনা",
     fieldAgents: "মাঠকর্মী",
@@ -1511,6 +1512,26 @@ export const bn: Dictionary = {
       emptyBody: "অনুমোদিত সরকারি নোটিশে অধিগ্রহণকৃত দাগ এখানে দেখা যাবে।",
       noResultsTitle: "কোনো মিল পাওয়া যায়নি",
       noResultsBody: "ভিন্ন দাগ নম্বর, শিরোনাম, বা উদ্দেশ্য দিয়ে চেষ্টা করুন।",
+    },
+
+    payments: {
+      description: "নামজারি, ভূমি উন্নয়ন কর, বা অন্য যেকোনো সেবার জন্য পরিশোধিত প্রতিটি ফি — একই জায়গায়।",
+      totalPaidLabel: "মোট পরিশোধিত",
+      countLabel: (count: number) => `${n(count)}টি পরিশোধ`,
+      serviceLabel: {
+        mutation: "নামজারি",
+        "land-tax": "ভূমি উন্নয়ন কর",
+        "land-admin": "ভূমি প্রশাসন",
+        "revenue-case": "রাজস্ব মামলা",
+        "lease-settlement": "ইজারা ও বন্দোবস্ত",
+      },
+      referenceLabel: "রেফারেন্স",
+      methodLabel: "মাধ্যম",
+      dateLabel: "তারিখ",
+      paymentMethods: { bkash: "বিকাশ", nagad: "নগদ", card: "কার্ড" },
+      viewRecord: "দেখুন",
+      emptyTitle: "এখনো কোনো পরিশোধ নেই",
+      emptyBody: "নামজারি দাখিল বা কোনো সেবার আবেদনের সময় পরিশোধিত ফি এখানে দেখা যাবে।",
     },
 
     // <<PAGES-END>>
