@@ -19,6 +19,7 @@ import {
   Banknote,
   Sprout,
   Landmark,
+  FileStack,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -74,6 +75,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "revenueCases", href: "/revenue-cases", icon: Scale, group: "services" },
       { labelKey: "leaseSettlement", href: "/lease-settlement", icon: Sprout, group: "services" },
       { labelKey: "acquisition", href: "/acquisition", icon: Landmark, group: "services" },
+      { labelKey: "infoBank", href: "/land-info-bank", icon: FileStack, group: "services" },
       { labelKey: "inheritance", href: "/inheritance", icon: GitBranch, group: "tools" },
       { labelKey: "myDocuments", href: "/documents", icon: FileText, group: "tools" },
       { labelKey: "disputes", href: "/disputes", icon: Scale, group: "tools" },

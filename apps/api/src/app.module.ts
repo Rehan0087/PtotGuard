@@ -16,6 +16,7 @@ import { LandAdminModule } from "./land-admin/land-admin.module";
 import { RevenueCasesModule } from "./revenue-cases/revenue-cases.module";
 import { LeaseSettlementModule } from "./lease-settlement/lease-settlement.module";
 import { AcquisitionModule } from "./acquisition/acquisition.module";
+import { LandInfoBankModule } from "./land-info-bank/land-info-bank.module";
 import { FieldReportsModule } from "./field-reports/field-reports.module";
 import { HearingsModule } from "./hearings/hearings.module";
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -42,6 +43,7 @@ import { AuthModule } from "./auth/auth.module";
     RevenueCasesModule,
     LeaseSettlementModule,
     AcquisitionModule,
+    LandInfoBankModule,
     FieldReportsModule,
     HearingsModule,
     NotificationsModule,
