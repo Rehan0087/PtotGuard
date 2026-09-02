@@ -2202,24 +2202,35 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
+  // The parcel and the parties come off the dispute, not the body — the
+  // hearing is over that record. Mirrors hearings.controller.ts's convene().
   http.post(`${API}/hearings`, async ({ request }) => {
     await latency();
-    const body = (await request.json()) as Partial<{
-      disputeId: string;
-      parcelDagNo: string;
-      parties: string[];
-      hearingDate: string;
-    }>;
+    const body = (await request.json()) as { disputeId: string; hearingDate: string };
     const me = currentUser(request);
-    const seq = 45 + db.hearings.length;
+
+    const dispute = db.disputes.find((d) => d.id === body.disputeId);
+    if (!dispute) return notFound("Dispute not found");
+    if (isClosed(dispute.status)) {
+      return conflict("This case is closed and cannot be listed for hearing.");
+    }
+    const OPEN_HEARING_STATUSES = ["scheduled", "in-hearing", "deliberation"];
+    if (
+      db.hearings.some(
+        (h) => h.disputeId === dispute.id && OPEN_HEARING_STATUSES.includes(h.status),
+      )
+    ) {
+      return conflict("This case is already listed for hearing.");
+    }
+
     const hearing = {
       id: `h-${Date.now()}`,
-      caseNumber: `HRG-2026-${String(seq).padStart(4, "0")}`,
-      disputeId: body.disputeId ?? "",
-      parcelDagNo: body.parcelDagNo ?? "",
+      caseNumber: `HRG-2026-${String(1000 + db.hearings.length).padStart(4, "0")}`,
+      disputeId: dispute.id,
+      parcelDagNo: dispute.parcelDagNo,
       mediatorId: me.id,
       status: "scheduled" as const,
-      parties: body.parties ?? [],
+      parties: dispute.parties.map((p) => p.name),
       hearingDate: body.hearingDate,
       sessions: [],
     };
@@ -2237,36 +2248,33 @@ export const handlers = [
     });
 
     // Convening a hearing moves the case, the same way booking a survey does.
-    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
-    if (dispute && !isClosed(dispute.status)) {
-      dispute.assignedMediatorId = me.id;
-      dispute.status = "hearing-scheduled";
-      dispute.hearingDate = hearing.hearingDate;
-      dispute.updatedAt = now;
-      db.disputeEvents.push({
-        id: `de-${Date.now()}`,
-        disputeId: dispute.id,
-        at: now,
-        type: "hearing",
-        title: "Hearing scheduled",
-        content: { code: "status-change", status: "hearing-scheduled" },
-        actorId: me.id,
-        actorName: me.name,
-      });
+    dispute.assignedMediatorId = me.id;
+    dispute.status = "hearing-scheduled";
+    dispute.hearingDate = hearing.hearingDate;
+    dispute.updatedAt = now;
+    db.disputeEvents.push({
+      id: `de-${Date.now()}`,
+      disputeId: dispute.id,
+      at: now,
+      type: "hearing",
+      title: "Hearing scheduled",
+      content: { code: "status-change", status: "hearing-scheduled" },
+      actorId: me.id,
+      actorName: me.name,
+    });
 
-      for (const userId of disputeAudience(dispute, me.id)) {
-        db.notifications.unshift({
-          id: `n-${Date.now()}-${userId}`,
-          userId,
-          at: now,
-          severity: "info",
-          title: "Hearing scheduled",
-          body: `Case ${dispute.caseNumber} has been listed for hearing by the mediator.`,
-          content: { code: "hearing-scheduled", caseNumber: dispute.caseNumber },
-          read: false,
-          href: `/disputes/${dispute.id}`,
-        });
-      }
+    for (const userId of disputeAudience(dispute, me.id)) {
+      db.notifications.unshift({
+        id: `n-${Date.now()}-${userId}`,
+        userId,
+        at: now,
+        severity: "info",
+        title: "Hearing scheduled",
+        body: `Case ${dispute.caseNumber} has been listed for hearing by the mediator.`,
+        content: { code: "hearing-scheduled", caseNumber: dispute.caseNumber },
+        read: false,
+        href: `/disputes/${dispute.id}`,
+      });
     }
 
     return HttpResponse.json(hearing, { status: 201 });

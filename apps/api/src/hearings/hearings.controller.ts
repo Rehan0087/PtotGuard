@@ -1,16 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
-import { rulingGate, type Hearing, type HearingSession } from "@plotguard/rules";
+import {
+  rulingGate,
+  type DisputeParty,
+  type Hearing,
+  type HearingSession,
+} from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import { NotFoundError, ValidationError } from "../common/domain-exceptions";
+import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
 import { pageParams, paginate } from "../common/pagination";
 import { currentUserId } from "../auth/dev-current-user";
 import { CLOSED_DISPUTE_STATUSES } from "../parcels/parcel-view";
 import { disputeAudience } from "../disputes/dispute-audience";
+import { ConveneHearingDto } from "./convene-hearing.dto";
 import { IssueRulingDto } from "./issue-ruling.dto";
 import { RecordSessionDto } from "./record-session.dto";
+
+/** A hearing still open to sittings — one of these blocks convening another. */
+const OPEN_HEARING_STATUSES = ["scheduled", "in-hearing", "deliberation"];
 
 @Controller("hearings")
 export class HearingsController {
@@ -36,6 +45,113 @@ export class HearingsController {
     if (!hearing) throw new NotFoundError("Hearing not found");
     const dispute = await this.prisma.dispute.findUnique({ where: { id: hearing.disputeId } });
     return { hearing, dispute };
+  }
+
+  /**
+   * Listing a referred case for hearing — the write the mediator's board
+   * opened with and the real API never had, so Convene worked against the
+   * mock and 404'd against Postgres.
+   *
+   * The parcel and the parties come off the dispute, not the request body:
+   * the hearing is over that record, so re-sending them would only create a
+   * way for the two to disagree.
+   */
+  @Post()
+  @HttpCode(201)
+  async convene(@Body() body: ConveneHearingDto, @Req() req: Request) {
+    const mediatorId = currentUserId(req);
+    const dispute = await this.prisma.dispute.findUnique({ where: { id: body.disputeId } });
+    if (!dispute) throw new NotFoundError("Dispute not found");
+    if (CLOSED_DISPUTE_STATUSES.includes(dispute.status)) {
+      throw new ConflictError("This case is closed and cannot be listed for hearing.");
+    }
+
+    // The board already hides a case a colleague has listed; this is what
+    // makes it true of the record rather than only of one mediator's screen.
+    const existing = await this.prisma.hearing.findMany({ where: { disputeId: dispute.id } });
+    if (existing.some((h) => OPEN_HEARING_STATUSES.includes(h.status))) {
+      throw new ConflictError("This case is already listed for hearing.");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const hearingDate = new Date(body.hearingDate);
+      // Disjoint from the seeded case numbers (which run up to HRG-2026-0044)
+      // — same running-count-plus-base-offset scheme as disputes/mutations.
+      const count = await tx.hearing.count();
+      const caseNumber = `HRG-2026-${String(1000 + count).padStart(4, "0")}`;
+      const parties = (dispute.parties as unknown as DisputeParty[]).map((p) => p.name);
+
+      const created = await tx.hearing.create({
+        data: {
+          id: `h-${randomUUID()}`,
+          caseNumber,
+          disputeId: dispute.id,
+          parcelDagNo: dispute.parcelDagNo,
+          mediatorId,
+          status: "scheduled",
+          parties: parties as never,
+          hearingDate,
+          sessions: [],
+        },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "hearing",
+        entityId: created.id,
+        action: "create",
+        actorId: mediatorId,
+        payload: { caseNumber: created.caseNumber, parcelDagNo: created.parcelDagNo },
+      });
+
+      // Convening moves the case itself, the same way booking a survey does —
+      // and claims it for this mediator, which is what puts it on their board.
+      await tx.dispute.update({
+        where: { id: dispute.id },
+        data: {
+          assignedMediatorId: mediatorId,
+          status: "hearing-scheduled",
+          hearingDate,
+          updatedAt: now,
+        },
+      });
+
+      await tx.disputeEvent.create({
+        data: {
+          id: `de-${randomUUID()}`,
+          disputeId: dispute.id,
+          at: now,
+          type: "hearing",
+          title: "Hearing scheduled",
+          content: { code: "status-change", status: "hearing-scheduled" },
+          actorId: mediatorId,
+        },
+      });
+
+      // The parties learn their case has been listed from the app, not from
+      // the mediator's own screen.
+      const audience = disputeAudience(
+        { filedById: dispute.filedById, parties: dispute.parties as never },
+        mediatorId,
+      );
+      if (audience.length > 0) {
+        await tx.appNotification.createMany({
+          data: audience.map((userId) => ({
+            id: `n-${randomUUID()}`,
+            userId,
+            at: now,
+            severity: "info",
+            title: "Hearing scheduled",
+            body: `Case ${dispute.caseNumber} has been listed for hearing by the mediator.`,
+            content: { code: "hearing-scheduled", caseNumber: dispute.caseNumber },
+            read: false,
+            href: `/disputes/${dispute.id}`,
+          })),
+        });
+      }
+
+      return created;
+    });
   }
 
   /**
