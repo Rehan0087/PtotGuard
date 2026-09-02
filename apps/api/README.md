@@ -91,35 +91,42 @@ transaction → resolve a dispute → timeline entry → notify → audit).
 
 ## Endpoint status
 
-Every `GET` in the frozen spec is implemented and verified against a real
-seeded database. Writes are landing gate-by-gate; unchecked rows still
-serve from the mock only.
+Every endpoint below is implemented and verified against a real seeded
+database. Only real auth remains unbuilt.
 
 | Resource | Reads | Writes |
 | --- | --- | --- |
 | `jurisdictions` | ✅ list | ✅ create, update, delete (`reviewDraft`/`deletionGate`) |
 | `parcels` | ✅ list, detail (+restrictions/transfer), history, neighbours, ULPIN lookup, public view | — (read-only resource) |
-| `users` | ✅ list | — |
-| `documents` | ✅ list, detail | ⬜ create, decision, fields, reprocess |
-| `disputes` | ✅ list, detail | ⬜ create, status, assign-agent |
+| `users` | ✅ list, search | ✅ update (status, jurisdiction) |
+| `documents` | ✅ list, detail | ✅ create, decision (`extractionReview`), fields, reprocess |
+| `disputes` | ✅ list, detail | ✅ create (`routeDisputeToOfficer`), execute (`executionGate`) |
 | `policies` | ✅ get | ✅ update |
 | `mutations` | ✅ list, detail | ✅ create (`transferReview`), decision (`approvalGate`) |
 | `service-applications` | ✅ list, detail | ✅ create, submit, pay, decision — shared foundation (see below) |
 | `land-tax` | ✅ holdings (+assessment) | ✅ pay (`assessLandTax`) |
-| `field-reports` | ✅ list, detail, assigned | ✅ update/file (`filingReview`) · ⬜ create, media |
-| `hearings` | ✅ list, detail | ✅ ruling (`rulingGate`), sessions · ⬜ create |
+| `land-admin` | — | ✅ apply |
+| `revenue-cases` | — | ✅ file, schedule-hearing |
+| `lease-settlement` | — | ✅ apply |
+| `acquisition` | — | ✅ notice, object |
+| `land-info-bank` | ✅ list (approved acquisitions) | — (read-only resource) |
+| `appointments` | — | ✅ book, reschedule |
+| `inheritance` | — | ✅ calculate (`calcInheritance`, stateless) |
+| `field-reports` | ✅ list, detail, assigned | ✅ create (`rankCandidates`), media, update/file (`filingReview`) |
+| `hearings` | ✅ list, detail | ✅ create, sessions, ruling (`rulingGate`) |
 | `notifications` | ✅ list (own inbox) | ✅ mark read, mark all read |
 | `audit` | ✅ list, per-entity, verify | — (append-only, written by other endpoints) |
 | `auth` | ✅ me (dev stand-in) | ⬜ login, refresh (real auth — see below) |
 
-`service-applications` is the shared model behind six land services —
-apply → pay → track → decide is the same workflow for all of them, so this
-is one controller instead of six, with `details` (`Json`) holding whatever
-each service differs on. Land Development Tax is the first built on it;
-Acquisition & Requisition, Lease & Settlement, Land Administration, Revenue
-Cases, and Land Information Bank still have no screen. Mutation (e-Namjari)
-predates this model and keeps its own table rather than folding in — see the
-`ServiceApplication` doc comment in `@plotguard/rules`.
+`service-applications` is the shared model behind seven land services —
+apply → pay → track → decide is the same workflow for all of them, so the
+lifecycle lives in one controller instead of seven, with `details` (`Json`)
+holding whatever each service differs on. Each service adds only the one
+bespoke write it genuinely needs (`land-admin/apply`, `revenue-cases/file`,
+`acquisition/notice`, …) and reuses `.../pay` and `.../decision` from the
+shared controller unchanged. Mutation (e-Namjari) predates this model and
+keeps its own table rather than folding in — see the `ServiceApplication`
+doc comment in `@plotguard/rules`.
 
 `land-tax` shows how a service sits on that foundation: it computes each
 holding's bill with `assessLandTax()` and records payment as a
