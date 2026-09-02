@@ -18,6 +18,7 @@ import { LeaseSettlementModule } from "./lease-settlement/lease-settlement.modul
 import { AcquisitionModule } from "./acquisition/acquisition.module";
 import { LandInfoBankModule } from "./land-info-bank/land-info-bank.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
+import { InheritanceModule } from "./inheritance/inheritance.module";
 import { FieldReportsModule } from "./field-reports/field-reports.module";
 import { HearingsModule } from "./hearings/hearings.module";
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -46,6 +47,7 @@ import { AuthModule } from "./auth/auth.module";
     AcquisitionModule,
     LandInfoBankModule,
     AppointmentsModule,
+    InheritanceModule,
     FieldReportsModule,
     HearingsModule,
     NotificationsModule,
