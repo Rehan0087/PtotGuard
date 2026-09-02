@@ -37,12 +37,10 @@ function ConveneRow({ dispute }: { dispute: Dispute }) {
   const [when, setWhen] = useState(defaultHearingDate);
 
   const convene = async () => {
+    // Only the case and the date — the parcel and the parties are read off
+    // the dispute server-side, so a name can't be keyed in twice and differ.
     await createHearing.mutateAsync({
       disputeId: dispute.id,
-      parcelDagNo: dispute.parcelDagNo,
-      // Parties come off the dispute rather than being retyped: the hearing is
-      // over that record, and a name keyed in twice is a name that can differ.
-      parties: dispute.parties.map((p) => p.name),
       hearingDate: new Date(when).toISOString(),
     });
     toast.success(t.pages.cases.convened(dispute.caseNumber));

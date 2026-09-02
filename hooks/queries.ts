@@ -665,12 +665,10 @@ export function useHearingRuling(id: string) {
 export function useCreateHearing() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: {
-      disputeId: string;
-      parcelDagNo: string;
-      parties: string[];
-      hearingDate: string;
-    }) => api.post<Hearing>("/hearings", body),
+    // Only the case and the date: the parcel and the parties are read off
+    // the dispute server-side, so they can't drift from the record.
+    mutationFn: (body: { disputeId: string; hearingDate: string }) =>
+      api.post<Hearing>("/hearings", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hearings"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
