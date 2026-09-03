@@ -190,7 +190,7 @@ export function LandServicesSection() {
 
                 {/* Card Icon */}
                 <div className={cn("w-14 h-14 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-105 shadow-sm", card.iconBg)}>
-                  {card.isTakaIcon ? (
+                  {card.isTakaIcon || !Icon ? (
                     <span className="text-2xl font-black text-[#ff9800] leading-none">৳</span>
                   ) : (
                     <Icon className={cn("w-7 h-7", card.iconColor)} />
