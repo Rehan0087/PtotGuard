@@ -108,7 +108,7 @@ export function GovNavbar() {
         const monthName = monthsBn[now.getMonth()];
         const yearNum = toBnDigits(now.getFullYear());
 
-        setFormattedDate(`${dayName}, ৩ ভাদ্র ১৪৩৩ ${dateNum} ${monthName} ${yearNum}`);
+        setFormattedDate(`${dayName}, ৩ ভাদ্র ১৪৩৩ | ${dateNum} ${monthName} ${yearNum}`);
       } else {
         const options: Intl.DateTimeFormatOptions = { 
           weekday: 'long', 
