@@ -116,27 +116,35 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Right: Support Callout */}
-        <div className="flex w-full flex-col justify-center bg-muted px-8 py-12 md:w-80 lg:w-96 lg:px-12 border-l border-border shrink-0">
-          <div className="space-y-6">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                {landing?.supportCall}
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0B6B3A]/10 text-[#0B6B3A]">
-                  <HelpCircle className="h-6 w-6" />
-                </div>
-                <div className="font-heading text-3xl font-bold tracking-tight text-[#0B6B3A]">
-                  {landing?.helpline}
-                </div>
-              </div>
-            </div>
-            
-            <div className="space-y-4 pt-4 border-t border-border">
-              <Button className="w-full landing-accent-bg hover:bg-[#B58813] text-white font-medium" size="lg">
-                {landing?.liveChat}
-              </Button>
+        {/* Right: Support Callout (Hotline Card) */}
+        <div className="flex w-full flex-col justify-center items-center relative overflow-hidden bg-white px-8 py-12 md:w-80 lg:w-96 lg:px-12 border-l border-slate-200 shrink-0 min-h-[400px]">
+          {/* Smriti Soudho Watermark SVG */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.16] text-[#074726] scale-125">
+            <svg viewBox="0 0 200 160" className="w-full h-full max-w-[460px]">
+              <g stroke="currentColor" strokeWidth="0.75" fill="none">
+                <path d="M100 10 L94 140 L106 140 Z" fill="currentColor" fillOpacity="0.3" />
+                <path d="M100 25 L84 140 L116 140 Z" fill="currentColor" fillOpacity="0.15" />
+                <path d="M100 40 L70 140 L130 140 Z" />
+                <path d="M100 55 L55 140 L145 140 Z" fill="currentColor" fillOpacity="0.08" />
+                <path d="M100 70 L40 140 L160 140 Z" />
+                <path d="M100 85 L25 140 L175 140 Z" fill="currentColor" fillOpacity="0.04" />
+                <path d="M100 100 L10 140 L190 140 Z" />
+                <line x1="5" y1="140" x2="195" y2="140" strokeWidth="1.5" />
+                <line x1="100" y1="10" x2="100" y2="140" strokeWidth="1" opacity="0.5" />
+              </g>
+            </svg>
+          </div>
+          
+          {/* Content */}
+          <div className="relative z-10 flex flex-col items-center justify-center text-center">
+            <h3 className="text-[26px] md:text-3xl font-medium text-[#1c4532] tracking-tight mb-2 md:mb-3">
+              {locale === "bn" ? "ভূমিসেবা সহায়তার জন্য" : "For Land Service Help"}
+            </h3>
+            <p className="text-lg md:text-xl font-medium text-[#1c4532] mb-3 md:mb-4">
+              {locale === "bn" ? "কল করুন" : "Call"}
+            </p>
+            <div className="text-[4rem] md:text-[5rem] leading-none font-bold text-[#1c4532] tracking-tight">
+              {locale === "bn" ? "১৬১২২" : "16122"}
             </div>
           </div>
         </div>
