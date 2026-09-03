@@ -11,7 +11,6 @@ import {
   ocrStatusTone,
   priorityTone,
   registryStatusTone,
-  serviceApplicationStatusTone,
   userStatusTone,
   verificationStatusTone,
 } from "@/lib/status";
@@ -46,7 +45,6 @@ export function useStatusMeta() {
       fieldReport: pair(fieldReportStatusTone, t.status.fieldReport),
       hearing: pair(hearingStatusTone, t.status.hearing),
       user: pair(userStatusTone, t.status.user),
-      serviceApplication: pair(serviceApplicationStatusTone, t.status.serviceApplication),
     }),
     [t],
   );
