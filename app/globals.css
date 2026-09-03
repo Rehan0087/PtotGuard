@@ -251,4 +251,26 @@
     font-feature-settings: "tnum" 1;
     letter-spacing: -0.01em;
   }
+
+  /* Landing page specific */
+  .landing-nav {
+    background-color: #0B6B3A;
+    color: #ffffff;
+  }
+  .service-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  .service-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+  .landing-accent {
+    color: #D4A017;
+  }
+  .landing-accent-bg {
+    background-color: #D4A017;
+  }
+  .hero-slide {
+    transition: opacity 1s ease-in-out;
+  }
 }
