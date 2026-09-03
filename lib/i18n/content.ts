@@ -45,6 +45,8 @@ export function useNotificationText() {
           return t.notifications["mutation-verification"](c.mutationNumber, c.dagNo);
         case "welcome":
           return t.notifications.welcome();
+        default:
+          return { title: notification.title, body: notification.body };
       }
     },
     [t],
@@ -77,6 +79,8 @@ export function useDisputeEventTitle() {
           return t.disputeEvents["field-visit-completed"];
         case "ruled":
           return t.disputeEvents.ruled;
+        default:
+          return event.title;
       }
     },
     [t],

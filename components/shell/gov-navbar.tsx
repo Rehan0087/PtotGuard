@@ -11,20 +11,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// Optional store and nav imports with fallback
-let useSessionStore: any = () => ({ isAuthenticated: false, hasHydrated: true, role: "citizen" });
-let roleHome = (_role?: string) => "/dashboard";
-
-try {
-  useSessionStore = require("@/store/session").useSessionStore;
-} catch (e) {
-  // Store fallback for standalone project copy
-}
-try {
-  roleHome = require("@/lib/nav").roleHome;
-} catch (e) {
-  // Nav fallback for standalone project copy
-}
+import { useSessionStore } from "@/store/session";
+import { roleHome } from "@/lib/nav";
 
 /**
  * Bangladesh Government Seal / Emblem SVG

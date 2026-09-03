@@ -52,15 +52,14 @@ const CLOSED_STATUSES = new Set(["approved", "rejected"]);
 
 /** Built per locale — every message here is read by whoever is issuing. */
 function makeNoticeSchema(t: Dictionary) {
-  const pages: any = t.pages;
   return z
     .object({
-      parcelId: z.string().min(1, pages.acquisition?.errors?.parcelRequired || "Required"),
-      purpose: z.string().min(1, pages.acquisition?.errors?.purposeRequired || "Required"),
+      parcelId: z.string().min(1, t.pages.acquisition.errors.parcelRequired),
+      purpose: z.string().min(1, t.pages.acquisition.errors.purposeRequired),
       awardAmount: z.string(),
     })
     .refine((d) => Number(d.awardAmount) > 0, {
-      message: pages.acquisition?.errors?.awardAmountRequired || "Required",
+      message: t.pages.acquisition.errors.awardAmountRequired,
       path: ["awardAmount"],
     });
 }
