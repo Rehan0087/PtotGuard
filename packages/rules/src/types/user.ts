@@ -39,6 +39,7 @@ export interface User {
   /** Masked in the UI, e.g. "•••• •••• 4821". Never store the raw value client-side. */
   nationalId?: string;
   avatarUrl?: string;
+  profileDetails?: Record<string, string>;
   status: UserStatus;
   /** Official designation, e.g. "Sub-Registrar", "Survey Officer". */
   title?: string;

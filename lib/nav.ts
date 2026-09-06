@@ -22,6 +22,8 @@ import {
   FileStack,
   Receipt,
   CalendarClock,
+  HelpCircle,
+  BookOpen,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -67,22 +69,11 @@ export const NAV: Record<Role, PortalNav> = {
     portalKey: "citizen",
     home: "/portal",
     items: [
-      { labelKey: "portal", href: "/portal", icon: LayoutGrid, group: "myLand" },
-      { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard, group: "myLand" },
-      { labelKey: "myProperties", href: "/properties", icon: MapPin, group: "myLand" },
-      { labelKey: "searchRecords", href: "/search", icon: Search, group: "myLand" },
-      { labelKey: "mutations", href: "/mutations", icon: GitBranch, group: "services" },
-      { labelKey: "landTax", href: "/land-tax", icon: Banknote, group: "services" },
-      { labelKey: "landAdmin", href: "/land-admin", icon: Building2, group: "services" },
-      { labelKey: "revenueCases", href: "/revenue-cases", icon: Scale, group: "services" },
-      { labelKey: "leaseSettlement", href: "/lease-settlement", icon: Sprout, group: "services" },
-      { labelKey: "acquisition", href: "/acquisition", icon: Landmark, group: "services" },
-      { labelKey: "infoBank", href: "/land-info-bank", icon: FileStack, group: "services" },
-      { labelKey: "inheritance", href: "/inheritance", icon: GitBranch, group: "tools" },
-      { labelKey: "myDocuments", href: "/documents", icon: FileText, group: "tools" },
-      { labelKey: "disputes", href: "/disputes", icon: Scale, group: "tools" },
-      { labelKey: "appointments", href: "/appointments", icon: CalendarClock, group: "tools" },
-      { labelKey: "payments", href: "/payments", icon: Receipt, group: "tools" },
+      { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { labelKey: "profile", href: "/profile", icon: UserCog },
+      { labelKey: "citizenServices", href: "/portal", icon: LayoutGrid },
+      { labelKey: "faq", href: "/support#faq", icon: HelpCircle },
+      { labelKey: "manual", href: "/support", icon: BookOpen },
     ],
   },
   "land-office": {
