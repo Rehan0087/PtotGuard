@@ -62,6 +62,7 @@ model User {
   /// Masked in every response the frontend already sees — see LandDocument note.
   nationalId     String?
   avatarUrl      String?
+  profileDetails Json?
   /// UserStatus: "active" | "suspended" | "invited"
   status         String       @default("active")
   title          String?
