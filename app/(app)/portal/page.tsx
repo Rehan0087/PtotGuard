@@ -48,8 +48,8 @@ export default function PortalPage() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-slate-200 rounded-md p-4 shadow-sm">
-        <h1 className="text-xl font-medium text-slate-800">{t.nav.citizenServices}</h1>
+      <div className="bg-card border border-border rounded-md p-4 shadow-sm">
+        <h1 className="text-xl font-medium text-card-foreground">{t.nav.citizenServices}</h1>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -58,11 +58,11 @@ export default function PortalPage() {
           const title = t.nav[service.navKey] as string;
           return (
             <Link key={service.navKey} href={service.href} className="block focus-visible:outline-none">
-              <div className="bg-white rounded-md border border-slate-200 p-8 flex flex-col items-center justify-center text-center transition-all hover:shadow-md hover:-translate-y-1 h-[220px]">
+              <div className="bg-card rounded-md border border-border p-8 flex flex-col items-center justify-center text-center transition-all hover:shadow-md hover:-translate-y-1 h-[220px]">
                 <div className={cn("w-16 h-16 rounded-md border-2 flex items-center justify-center mb-6", service.iconColor)}>
                   <Icon className="w-8 h-8" strokeWidth={2} />
                 </div>
-                <h3 className="text-slate-800 font-medium">{title}</h3>
+                <h3 className="text-card-foreground font-medium">{title}</h3>
               </div>
             </Link>
           );
@@ -71,9 +71,9 @@ export default function PortalPage() {
 
       {/* Pagination Dots */}
       <div className="flex items-center justify-center gap-2 pt-4">
-        <div className="w-2.5 h-2.5 rounded-full bg-slate-400"></div>
-        <div className="w-2.5 h-2.5 rounded-full bg-slate-200"></div>
-        <div className="w-2.5 h-2.5 rounded-full bg-slate-200"></div>
+        <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground"></div>
+        <div className="w-2.5 h-2.5 rounded-full bg-muted"></div>
+        <div className="w-2.5 h-2.5 rounded-full bg-muted"></div>
       </div>
     </div>
   );
