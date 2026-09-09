@@ -11,6 +11,7 @@ import {
   ocrStatusTone,
   priorityTone,
   registryStatusTone,
+  serviceApplicationStatusTone,
   userStatusTone,
   verificationStatusTone,
 } from "@/lib/status";
@@ -38,6 +39,7 @@ export function useStatusMeta() {
     () => ({
       registry: pair(registryStatusTone, t.status.registry),
       dispute: pair(disputeStatusTone, t.status.dispute),
+      serviceApplication: pair(serviceApplicationStatusTone, t.status.serviceApplication),
       priority: pair(priorityTone, t.status.priority),
       mutation: pair(mutationStatusTone, t.status.mutation),
       ocr: pair(ocrStatusTone, t.status.ocr),
