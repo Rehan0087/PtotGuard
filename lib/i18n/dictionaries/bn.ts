@@ -225,6 +225,10 @@ export const bn: Dictionary = {
       title: "রায় দেওয়া হয়েছে",
       body: `${caseNumber} মামলায় রায় দেওয়া হয়েছে। পড়তে মামলাটি খুলুন।`,
     }),
+    "dispute-executed": (caseNumber: string) => ({
+      title: "রায় কার্যকর হয়েছে",
+      body: `${caseNumber} মামলার রায় কার্যকর করা হয়েছে এবং রেকর্ড হালনাগাদ হয়েছে।`,
+    }),
     "hearing-scheduled": (caseNumber: string) => ({
       title: "শুনানি নির্ধারিত হয়েছে",
       body: `মধ্যস্থতাকারী ${caseNumber} মামলার শুনানির দিন ধার্য করেছেন।`,

@@ -247,6 +247,10 @@ export const en = {
       title: "Ruling issued",
       body: `A ruling has been issued on case ${caseNumber}. Open the case to read it.`,
     }),
+    "dispute-executed": (caseNumber: string) => ({
+      title: "Ruling executed",
+      body: `The ruling for case ${caseNumber} has been executed and the record updated.`,
+    }),
     "hearing-scheduled": (caseNumber: string) => ({
       title: "Hearing scheduled",
       body: `Case ${caseNumber} has been listed for hearing by the mediator.`,

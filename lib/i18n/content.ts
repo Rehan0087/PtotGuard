@@ -31,6 +31,8 @@ export function useNotificationText() {
           return t.notifications["dispute-assigned"](c.caseNumber);
         case "dispute-ruled":
           return t.notifications["dispute-ruled"](c.caseNumber);
+        case "dispute-executed":
+          return t.notifications["dispute-executed"](c.caseNumber);
         case "hearing-scheduled":
           return t.notifications["hearing-scheduled"](c.caseNumber);
         case "document-verified":
