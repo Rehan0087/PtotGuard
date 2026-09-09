@@ -23,7 +23,7 @@ export class DocumentsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-  ) {}
+  ) { }
 
   private scheduleOcrWorker(documentId: string, parcelId?: string, delayMs = OCR_WORKER_MS) {
     setTimeout(() => {
@@ -186,6 +186,28 @@ export class DocumentsController {
               title: "Document verified",
               body: `Your ${updated.type.replace(/-/g, " ")} for dag ${dagNo} passed verification.`,
               content: { code: "document-verified", dagNo },
+              read: false,
+              href: "/documents",
+            },
+          });
+        }
+      } else if (
+        (body.decision === "reject" || body.decision === "flag") &&
+        updated.ownerId &&
+        updated.ownerId !== actorId
+      ) {
+        const dagNo = doc.parcelId
+          ? (await tx.parcel.findUnique({ where: { id: doc.parcelId } }))?.dagNo
+          : undefined;
+        if (dagNo) {
+          await tx.appNotification.create({
+            data: {
+              id: `n-${randomUUID()}`,
+              userId: updated.ownerId,
+              at: new Date(),
+              severity: body.decision === "reject" ? "critical" : "warning",
+              title: body.decision === "reject" ? "Document rejected" : "Action needed: scan unclear",
+              body: `Your ${updated.type.replace(/-/g, " ")} for dag ${dagNo} requires attention.`,
               read: false,
               href: "/documents",
             },

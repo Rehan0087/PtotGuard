@@ -193,6 +193,25 @@ export class DisputesController {
         },
       });
 
+      // Notify the citizen that their dispute was filed.
+      // We omit `content` here so it falls back to the exact title/body strings below,
+      // avoiding translation dictionary mismatches (like "updated by land office").
+      const filer = await tx.user.findUnique({ where: { id: actorId } });
+      if (filer && filer.role === "citizen") {
+        await tx.appNotification.create({
+          data: {
+            id: `n-${randomUUID()}`,
+            userId: filer.id,
+            at: now,
+            severity: "success",
+            title: "Dispute submitted",
+            body: `Your dispute ${created.caseNumber} has been successfully submitted and is under review.`,
+            read: false,
+            href: `/disputes/${created.id}`,
+          },
+        });
+      }
+
       if (officer) {
         await tx.appNotification.create({
           data: {
