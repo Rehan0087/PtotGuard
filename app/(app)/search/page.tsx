@@ -1,12 +1,12 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import { MapPin, Search, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { ParcelCard } from "@/components/parcel-card";
-import { ParcelMap } from "@/components/parcel-map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,12 @@ import { useStatusMeta } from "@/lib/i18n/status";
 import { registryStatusTone } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { RegistryStatus } from "@/lib/types";
+
+const SearchLiveMap = dynamic(
+  () => import("@/components/search-live-map").then((m) => m.SearchLiveMap),
+  { ssr: false, loading: () => <Skeleton className="h-72 w-full rounded-lg" /> },
+);
+
 
 const REGISTRY_STATUSES = Object.keys(registryStatusTone) as RegistryStatus[];
 const STATUS_FILTERS = ["all", ...REGISTRY_STATUSES] as const;
@@ -244,17 +250,20 @@ function SearchScreen() {
         </div>
 
         {!isLoading && parcels.length > 0 ? (
-          <aside className="xl:sticky xl:top-6 xl:w-72 xl:shrink-0">
+          <aside className="xl:sticky xl:top-6 xl:w-96 xl:shrink-0">
             <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
               <h2 className="mb-3 inline-flex items-center gap-1.5 font-heading text-sm font-semibold text-foreground">
                 <MapPin className="size-3.5 text-marker" />
                 {t.pages.search.whereThese}
               </h2>
-              <ParcelMap
+              <SearchLiveMap
                 parcels={parcels}
                 activeId={activeId}
                 onActiveChange={setActiveId}
               />
+              <p className="mt-2 text-xs text-muted-foreground">
+                {parcels.length} {parcels.length === 1 ? "plot" : "plots"} shown · hover a card to highlight
+              </p>
             </div>
           </aside>
         ) : null}

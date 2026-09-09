@@ -117,7 +117,7 @@ export function GovNavbar() {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           
           {/* Left Brand Lockup */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 hover:opacity-90 transition-opacity">
             {/* Government Seal */}
             <BangladeshGovSeal className="h-10 w-10 sm:h-11 sm:w-11 shrink-0 drop-shadow-sm" />
             
@@ -138,7 +138,7 @@ export function GovNavbar() {
                 {locale === "bn" ? "স্মার্ট ভূমিসেবায় বাংলাদেশ" : "Smart Land Services Bangladesh"}
               </span>
             </div>
-          </div>
+          </Link>
 
           {/* Right Controls: Date & Language Pill */}
           <div className="flex items-center gap-3 sm:gap-6">
