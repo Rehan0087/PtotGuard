@@ -249,6 +249,18 @@ export const handlers = [
     return HttpResponse.json({ user, jurisdiction });
   }),
 
+  http.patch(`${API}/auth/me`, async ({ request }) => {
+    await latency();
+    const user = currentUser(request);
+    const body = (await request.json()) as any;
+    
+    if (body.phone !== undefined) user.phone = body.phone;
+    if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
+    if (body.profileDetails !== undefined) user.profileDetails = body.profileDetails;
+
+    return HttpResponse.json(user);
+  }),
+
   // Jurisdictions ----------------------------------------------------------
   // The frozen spec has only the GET; the admin screen needs to edit the tree,
   // so the three writes below are additive. They run the same rules the client

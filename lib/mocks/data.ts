@@ -66,6 +66,7 @@ export const users: User[] = [
   {
     id: "usr-ayesha", name: "Ayesha Siddika", email: "ayesha.siddika@example.bd", phone: "+8801711-4xxxxx",
     role: "citizen", jurisdictionId: "j-rajamehar", nationalId: "•••• •••• 4821", status: "active",
+    profileDetails: { fatherName: "Mohammad Ali", motherName: "Fatema Begum", birthDate: "1990-05-12", bloodGroup: "O+", gender: "Female", occupation: "Teacher" },
     createdAt: "2024-02-11T09:00:00Z",
   },
   {
