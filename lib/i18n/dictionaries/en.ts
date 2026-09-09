@@ -1471,6 +1471,64 @@ export const en = {
       passwordSent: "Password reset link sent to your email.",
     },
 
+    faq: {
+      heading: "Frequently Asked Questions",
+      description:
+        "Answers to common questions about land registration, services, and PlotGuard features.",
+      items: [
+        {
+          id: "1",
+          q: "Can I register in the system using email?",
+          a: "Yes, you can register using your email address. However, you must also verify your National ID (NID) to access all services.",
+        },
+        {
+          id: "2",
+          q: "Is NID verification mandatory after registering in the system?",
+          a: "Yes, NID verification is mandatory. Without it, you will not be able to file mutations, view land records, or access most citizen services.",
+        },
+        {
+          id: "3",
+          q: "What services can I get after registering in the system?",
+          a: "After registration you can file mutations (e-Namjari), pay land development tax, search records and maps, file disputes, manage documents, check inheritance, and access the land information bank.",
+        },
+        {
+          id: "4",
+          q: "Do I need to re-register if I forget my password?",
+          a: "No, you do not need to register again. Click 'Forgot Password' on the login page and enter the OTP sent to your registered mobile number to reset your password.",
+        },
+        {
+          id: "5",
+          q: "What is the land service hotline number?",
+          a: "For land service support, call 16122 from anywhere in Bangladesh. Overseas citizens can call +8809612316122.",
+        },
+        {
+          id: "6",
+          q: "When will my profile progress reach 100%?",
+          a: "Your profile progress reaches 100% once NID verification is complete and you have linked your email, current address, and at least one khatian or decimal land record.",
+        },
+        {
+          id: "7",
+          q: "Is any specific document needed for registration?",
+          a: "You need your National ID (NID) number and a registered mobile number. For full access, you may also need scanned copies of your khatian, deed, or other land documents.",
+        },
+        {
+          id: "8",
+          q: "How do non-resident Bangladeshis register for land development tax?",
+          a: "Non-resident Bangladeshis can register using their passport and NID. Tax payment and namjari services are available online through the citizen portal.",
+        },
+        {
+          id: "9",
+          q: "Do I need to visit the land office to get land-related services?",
+          a: "For most services — including mutation filing, tax payment, record search, and document upload — you can use the online portal without visiting the land office. Field visits may be required for survey verification.",
+        },
+        {
+          id: "10",
+          q: "If land previously developed in the system is re-registered by the owner, will it need to be registered again in the system?",
+          a: "No. Once a parcel is registered in the system, ownership transfers (via mutation) update the existing record. The land itself does not need to be re-registered.",
+        },
+      ],
+    },
+
     // <<PAGES-END>>
   },
 
