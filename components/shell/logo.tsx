@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
 
@@ -42,7 +43,7 @@ export function Logo({
 }) {
   const t = useT();
   return (
-    <div className={cn("flex items-center gap-2.5", className)}>
+    <Link href="/" className={cn("flex items-center gap-2.5 hover:opacity-90 transition-opacity", className)}>
       <PlotGuardMark className="size-7 shrink-0 text-sidebar-foreground" />
       <div className="leading-none">
         <div className="font-heading text-[15px] font-semibold tracking-tight text-sidebar-foreground">
@@ -54,6 +55,6 @@ export function Logo({
           </div>
         ) : null}
       </div>
-    </div>
+    </Link>
   );
 }
