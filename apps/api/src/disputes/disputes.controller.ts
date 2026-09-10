@@ -196,8 +196,7 @@ export class DisputesController {
       // Notify the citizen that their dispute was filed.
       // We omit `content` here so it falls back to the exact title/body strings below,
       // avoiding translation dictionary mismatches (like "updated by land office").
-      const filer = await tx.user.findUnique({ where: { id: actorId } });
-      if (filer && filer.role === "citizen") {
+      if (filer.role === "citizen") {
         await tx.appNotification.create({
           data: {
             id: `n-${randomUUID()}`,

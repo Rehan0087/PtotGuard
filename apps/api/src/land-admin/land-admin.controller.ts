@@ -129,6 +129,19 @@ export class LandAdminController {
         },
       });
 
+      await tx.appNotification.create({
+        data: {
+          id: `ntf-${randomUUID()}`,
+          userId: me,
+          at: now,
+          severity: "info",
+          title: "Application submitted",
+          body: `Your application ${created.applicationNo} is under review.`,
+          read: false,
+          href: `/land-admin`,
+        },
+      });
+
       return created;
     });
   }
