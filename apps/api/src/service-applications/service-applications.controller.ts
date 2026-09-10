@@ -213,6 +213,19 @@ export class ServiceApplicationsController {
         },
       });
 
+      await tx.appNotification.create({
+        data: {
+          id: `ntf-${randomUUID()}`,
+          userId: updated.applicantId,
+          at: now,
+          severity: "success",
+          title: "Payment received",
+          body: `Payment for application ${updated.applicationNo} has been successfully recorded.`,
+          read: false,
+          href: `/${updated.serviceType === "revenue-case" ? "revenue-cases" : updated.serviceType === "lease-settlement" ? "lease-settlement" : updated.serviceType === "land-admin" ? "land-admin" : "portal"}`,
+        },
+      });
+
       return updated;
     });
   }
@@ -262,6 +275,19 @@ export class ServiceApplicationsController {
           type: "decided",
           title: body.decision === "approve" ? "Application approved" : "Application rejected",
           actorId,
+        },
+      });
+
+      await tx.appNotification.create({
+        data: {
+          id: `ntf-${randomUUID()}`,
+          userId: updated.applicantId,
+          at: now,
+          severity: body.decision === "approve" ? "success" : "critical",
+          title: body.decision === "approve" ? "Application approved" : "Application rejected",
+          body: `Your application ${updated.applicationNo} has been ${body.decision}d.`,
+          read: false,
+          href: `/${updated.serviceType === "revenue-case" ? "revenue-cases" : updated.serviceType === "lease-settlement" ? "lease-settlement" : updated.serviceType === "land-admin" ? "land-admin" : "portal"}`,
         },
       });
 
