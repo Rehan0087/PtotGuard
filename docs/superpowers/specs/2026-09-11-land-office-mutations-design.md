@@ -99,6 +99,7 @@ Legacy objections without a status are treated as open. This module displays obj
 
 ### 4.3 Decision and lifecycle fields
 
+- `fromOwnerId`
 - `approvedAt`
 - `approvedById`
 - `approvalNote`
@@ -112,7 +113,7 @@ The existing `decidedAt` remains populated for compatibility. Existing API field
 
 ### 4.4 Relationships
 
-Officer identifier fields reference the existing `User` model. Applicant, previous-owner snapshot, proposed-owner relationship, parcel relationship, and document identifiers continue to use the current model. Owner data is not duplicated beyond existing historical display snapshots.
+Officer identifier fields reference the existing `User` model. `fromOwnerId` records the parcel owner relation observed when the application is filed, while `fromOwnerName` remains the historical display snapshot. Applicant, proposed-owner relationship, parcel relationship, and document identifiers continue to use the current model. This identifier is required for new filings; legacy terminal rows may remain null, while active legacy rows are backfilled from the parcel owner during migration.
 
 ## 5. Authorization and Jurisdiction
 
@@ -224,7 +225,7 @@ Approval preconditions:
 - objection end is at or before the server’s current time
 - no objection is unresolved
 - proposed owner is linked to a valid citizen account
-- the parcel’s current owner still matches the mutation’s recorded source owner
+- the parcel’s current owner ID still matches the mutation’s recorded `fromOwnerId`
 
 Approval transaction effects:
 
@@ -392,7 +393,7 @@ Transactions re-read or conditionally update workflow state before committing, s
 
 ## 12. MSW and Production Parity
 
-The MSW layer gains the same workflow endpoints, role/jurisdiction checks, transition rules, detail aggregate, audit events, and ownership updates as NestJS. Its writes persist for the current browser session, matching the project’s established preview behavior. PostgreSQL remains the durable production persistence layer.
+The MSW layer gains the same workflow endpoints, role/jurisdiction checks, transition rules, detail aggregate, audit events, and ownership updates as NestJS. A focused session-storage adapter persists mutation rows, affected parcel ownership, ownership history, and appended audit events across browser refreshes for the current browser session. PostgreSQL remains the durable production persistence layer.
 
 Demo data will include examples for every status, an assigned and unassigned mutation, an open objection window, a closed unobstructed window, and a closed window with an unresolved objection.
 
