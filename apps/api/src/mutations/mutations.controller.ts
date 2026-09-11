@@ -135,6 +135,20 @@ export class MutationsController {
         },
       });
 
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: actorId,
+          at: new Date(),
+          severity: "info",
+          title: "Namjari in verification",
+          body: `Inheritance mutation ${created.mutationNumber} for dag ${created.parcelDagNo} is being verified.`,
+          content: { code: "mutation-verification", mutationNumber: created.mutationNumber, dagNo: created.parcelDagNo },
+          read: false,
+          href: `/inheritance`, // Since inheritance is where they track it based on the mock
+        },
+      });
+
       return created;
     });
   }
@@ -220,6 +234,19 @@ export class MutationsController {
           toOwnerName: updated.toOwnerName,
         },
       });
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: updated.requestedById,
+          at: new Date(),
+          severity: body.decision === "approve" ? "success" : "critical",
+          title: body.decision === "approve" ? "Mutation approved" : "Mutation rejected",
+          body: `Mutation ${updated.mutationNumber} for dag ${updated.parcelDagNo} has been ${body.decision}d.`,
+          read: false,
+          href: `/inheritance`,
+        },
+      });
+
       return updated;
     });
   }
