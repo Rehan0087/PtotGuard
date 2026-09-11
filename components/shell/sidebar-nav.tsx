@@ -16,9 +16,8 @@ export function SidebarNav({
   const pathname = usePathname();
   const t = useT();
 
-  // A portal is grouped only if its items say so. Ungrouped portals (every
-  // role but citizen today) render exactly as before — one flat list, no
-  // headings, no empty group shells.
+  // A portal is grouped only if its items say so. Ungrouped portals render
+  // as one flat list with no headings or empty group shells.
   const groups = NAV_GROUP_ORDER.map((key) => ({
     key,
     items: items.filter((i) => i.group === key),

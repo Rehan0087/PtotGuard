@@ -159,6 +159,7 @@ export const en = {
     citizenServices: "Citizen Friendly Services",
     faq: "FAQ",
     manual: "Manual",
+    landOfficerResponsibilities: "Land Officer Responsibilities",
   },
 
   roles: {
