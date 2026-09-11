@@ -295,6 +295,22 @@ export class FieldReportsController {
               actorId,
             },
           });
+
+          if (dispute.filedById !== actorId) {
+            await tx.appNotification.create({
+              data: {
+                id: `n-${randomUUID()}`,
+                userId: dispute.filedById,
+                at: now,
+                severity: "info",
+                title: "Dispute status updated",
+                body: `Case ${dispute.caseNumber} status was updated to under-review.`,
+                content: { code: "dispute-status", caseNumber: dispute.caseNumber, status: "under-review" },
+                read: false,
+                href: `/disputes/${dispute.id}`,
+              },
+            });
+          }
         }
       }
 

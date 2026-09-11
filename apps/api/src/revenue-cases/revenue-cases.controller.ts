@@ -99,8 +99,9 @@ export class RevenueCasesController {
           userId: me,
           at: now,
           title: `Revenue case filed: ${created.applicationNo}`,
-          isRead: false,
-          link: `/revenue-cases`,
+          body: `Revenue case filed: ${created.applicationNo}`,
+          read: false,
+          href: `/revenue-cases`,
         },
       });
 
@@ -163,8 +164,9 @@ export class RevenueCasesController {
           userId: updated.applicantId,
           at: now,
           title: `Hearing scheduled for ${updated.applicationNo}`,
-          isRead: false,
-          link: `/revenue-cases`,
+          body: `Hearing scheduled for ${updated.applicationNo}`,
+          read: false,
+          href: `/revenue-cases`,
         },
       });
 
