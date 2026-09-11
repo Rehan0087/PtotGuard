@@ -2,26 +2,12 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   LayoutGrid,
-  Search,
-  FileText,
-  Scale,
-  GitBranch,
-  BookMarked,
-  ScanLine,
-  ShieldAlert,
-  Users2,
   MapPin,
   Gavel,
   UserCog,
   Building2,
   SlidersHorizontal,
   ShieldCheck,
-  Banknote,
-  Sprout,
-  Landmark,
-  FileStack,
-  Receipt,
-  CalendarClock,
   HelpCircle,
   BookOpen,
 } from "lucide-react";
@@ -42,8 +28,7 @@ export interface NavItem {
   icon: LucideIcon;
   /**
    * Sidebar heading this item sits under. Portals with a handful of items
-   * leave it off and render as one flat list; the citizen portal has enough
-   * surface to need grouping (ILRDMS Level 2).
+   * leave it off and render as one flat list.
    */
   group?: NavGroupKey;
 }
@@ -80,16 +65,13 @@ export const NAV: Record<Role, PortalNav> = {
     portalKey: "landOffice",
     home: "/records",
     items: [
-      { labelKey: "records", href: "/records", icon: BookMarked },
-      { labelKey: "mutations", href: "/mutations", icon: GitBranch },
-      { labelKey: "landAdmin", href: "/land-admin", icon: Building2 },
-      { labelKey: "revenueCases", href: "/revenue-cases", icon: Scale },
-      { labelKey: "leaseSettlement", href: "/lease-settlement", icon: Sprout },
-      { labelKey: "acquisition", href: "/acquisition", icon: Landmark },
-      { labelKey: "appointments", href: "/appointments", icon: CalendarClock },
-      { labelKey: "ocrQueue", href: "/ocr-queue", icon: ScanLine },
-      { labelKey: "fraudReview", href: "/fraud-review", icon: ShieldAlert },
-      { labelKey: "fieldAgents", href: "/agents", icon: Users2 },
+      { labelKey: "dashboard", href: "/records", icon: LayoutDashboard },
+      { labelKey: "profile", href: "/profile", icon: UserCog },
+      {
+        labelKey: "landOfficerResponsibilities",
+        href: "/land-officer-responsibilities",
+        icon: LayoutGrid,
+      },
     ],
   },
   "field-agent": {

@@ -139,6 +139,7 @@ export const bn: Dictionary = {
     citizenServices: "জনবান্ধব সেবাসমূহ",
     faq: "সাধারণ জিজ্ঞাসা",
     manual: "ম্যানুয়াল",
+    landOfficerResponsibilities: "ভূমি কর্মকর্তার দায়িত্ব",
   },
 
   roles: {
