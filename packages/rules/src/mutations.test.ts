@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { approvalGate } from "./mutations";
-import type { Mutation, MutationObjection } from "./types";
+import {
+  approvalGate,
+  mutationActionGate,
+  verificationGate,
+} from "./mutations";
+import type {
+  Mutation,
+  MutationObjection,
+  MutationVerificationChecklist,
+} from "./types";
 
 const NOW = new Date("2026-07-20T10:00:00Z");
 
@@ -11,6 +19,18 @@ function fromNow(days: number): string {
 
 function objection(id = "o-1"): MutationObjection {
   return { id, by: "Sohel Rana", at: fromNow(-1), reason: "Boundary disputed." };
+}
+
+function completeChecklist(): MutationVerificationChecklist {
+  return {
+    applicantVerified: true,
+    previousOwnerVerified: true,
+    proposedOwnerVerified: true,
+    dagKhatianVerified: true,
+    deedVerified: true,
+    landRecordMatched: true,
+    documentsPresent: true,
+  };
 }
 
 function mutation(over: Partial<Mutation> = {}): Mutation {
@@ -137,5 +157,149 @@ describe("approvalGate", () => {
 
     expect(gate.daysToWindowClose).toBeNull();
     expect(gate.canApprove).toBe(true);
+  });
+});
+
+describe("mutationActionGate", () => {
+  it("allows an unassigned submitted mutation to start verification or be rejected", () => {
+    expect(mutationActionGate(mutation({ status: "submitted" }), "usr-officer", NOW)).toMatchObject({
+      canStartVerification: true,
+      canCompleteVerification: false,
+      canApprove: false,
+      canReject: true,
+    });
+  });
+
+  it("allows an assigned verification mutation to be completed or rejected", () => {
+    expect(
+      mutationActionGate(
+        mutation({ status: "verification", assignedOfficerId: "usr-officer" }),
+        "usr-officer",
+        NOW,
+      ),
+    ).toMatchObject({
+      canStartVerification: false,
+      canCompleteVerification: true,
+      canApprove: false,
+      canReject: true,
+    });
+  });
+
+  it("allows a closed objection period with only resolved objections to be approved", () => {
+    expect(
+      mutationActionGate(
+        mutation({
+          objectionWindowEndsAt: fromNow(-1),
+          objections: [{ ...objection(), status: "resolved", resolvedAt: fromNow(-0.5) }],
+        }),
+        "usr-officer",
+        NOW,
+      ),
+    ).toMatchObject({
+      canStartVerification: false,
+      canCompleteVerification: false,
+      canApprove: true,
+      canReject: true,
+      hold: null,
+    });
+  });
+
+  it.each(["submitted", "verification", "objection-period"] as const)(
+    "allows rejection from the active %s state",
+    (status) => {
+      expect(mutationActionGate(mutation({ status }), "usr-officer", NOW).canReject).toBe(true);
+    },
+  );
+
+  it("blocks every workflow action when another officer owns the assignment", () => {
+    expect(
+      mutationActionGate(
+        mutation({ status: "verification", assignedOfficerId: "usr-other-officer" }),
+        "usr-officer",
+        NOW,
+      ),
+    ).toMatchObject({
+      canStartVerification: false,
+      canCompleteVerification: false,
+      canApprove: false,
+      canReject: false,
+      hold: { code: "assigned-to-other-officer" },
+    });
+  });
+
+  it("holds approval while the objection window is open using whole-day rounding", () => {
+    expect(
+      mutationActionGate(
+        mutation({ objectionWindowEndsAt: fromNow(0.25) }),
+        "usr-officer",
+        NOW,
+      ),
+    ).toMatchObject({
+      canApprove: false,
+      canReject: true,
+      hold: { code: "objection-window", days: 1 },
+      daysToWindowClose: 1,
+    });
+  });
+
+  it("holds approval when an objection without a resolution status remains open", () => {
+    expect(
+      mutationActionGate(
+        mutation({ objectionWindowEndsAt: fromNow(-1), objections: [objection()] }),
+        "usr-officer",
+        NOW,
+      ),
+    ).toMatchObject({
+      canApprove: false,
+      canReject: true,
+      hold: { code: "objections", count: 1 },
+    });
+  });
+
+  it("holds approval when the proposed recipient is absent", () => {
+    expect(
+      mutationActionGate(
+        mutation({ objectionWindowEndsAt: fromNow(-1), toOwnerId: undefined }),
+        "usr-officer",
+        NOW,
+      ),
+    ).toMatchObject({
+      canApprove: false,
+      canReject: true,
+      hold: { code: "no-recipient" },
+    });
+  });
+
+  it.each(["approved", "rejected"] as const)(
+    "offers no workflow action on a terminal %s mutation",
+    (status) => {
+      expect(mutationActionGate(mutation({ status }), "usr-officer", NOW)).toMatchObject({
+        canStartVerification: false,
+        canCompleteVerification: false,
+        canApprove: false,
+        canReject: false,
+        hold: { code: "already-decided" },
+      });
+    },
+  );
+});
+
+describe("verificationGate", () => {
+  it("accepts a complete checklist with meaningful notes", () => {
+    expect(verificationGate(completeChecklist(), "Matched against deed")).toEqual({ ok: true });
+  });
+
+  it("reports each unchecked verification requirement", () => {
+    expect(verificationGate({ ...completeChecklist(), deedVerified: false }, "Checked")).toEqual({
+      ok: false,
+      reason: { code: "verification-incomplete", missing: ["deedVerified"] },
+    });
+  });
+
+  it("requires non-whitespace verification notes", () => {
+    expect(verificationGate(completeChecklist(), "   ")).toEqual({
+      ok: false,
+      reason: { code: "verification-notes-required" },
+    });
   });
 });
