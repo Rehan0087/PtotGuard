@@ -4,7 +4,15 @@
  * lib/inheritance.ts. The UI uses it to explain a hold, never as the only
  * thing standing between a request and an approval.
  */
-import type { AcquisitionType, Mutation, MutationType } from "./types";
+import type {
+  AcquisitionType,
+  ID,
+  Mutation,
+  MutationObjection,
+  MutationStatus,
+  MutationType,
+  MutationVerificationChecklist,
+} from "./types";
 
 const DAY_MS = 86_400_000;
 
@@ -23,19 +31,35 @@ export const ACQUISITION_TYPE_BY_MUTATION_TYPE: Record<MutationType, Acquisition
   correction: "correction",
 };
 
-/**
- * Why approval is held, as a code plus its numbers — not a sentence. The rule is
- * shared with the backend and the wording is not: the officer-facing string is
- * looked up per locale in the UI (`t.mutations.hold`), so the same gate explains
- * itself in English or Bangla without this module knowing either language.
- */
-export type MutationHold =
-  | { code: "objections"; count: number }
+export type MutationWorkflowHold =
+  | { code: "wrong-status"; expected: MutationStatus[] }
+  | { code: "already-decided" }
+  | { code: "assigned-to-other-officer" }
   | { code: "objection-window"; days: number }
-  /** A handful of pre-existing rows predate requiring a linked recipient —
-   * see Mutation.toOwnerId's own note. Nothing to key in fixes this from
-   * here; it can still be rejected, just never approved. */
+  | { code: "objections"; count: number }
   | { code: "no-recipient" };
+
+/** @deprecated Use MutationWorkflowHold through mutationActionGate instead. */
+export type MutationHold = Extract<
+  MutationWorkflowHold,
+  { code: "objections" | "objection-window" | "no-recipient" }
+>;
+
+export type MutationVerificationFailure =
+  | {
+      code: "verification-incomplete";
+      missing: (keyof MutationVerificationChecklist)[];
+    }
+  | { code: "verification-notes-required" };
+
+export interface MutationActionGate {
+  canStartVerification: boolean;
+  canCompleteVerification: boolean;
+  canApprove: boolean;
+  canReject: boolean;
+  hold: MutationWorkflowHold | null;
+  daysToWindowClose: number | null;
+}
 
 export interface ApprovalGate {
   canApprove: boolean;
@@ -46,45 +70,160 @@ export interface ApprovalGate {
   daysToWindowClose: number | null;
 }
 
-export function approvalGate(mutation: Mutation, now: Date = new Date()): ApprovalGate {
-  if (mutation.status === "approved" || mutation.status === "rejected") {
-    return { canApprove: false, canReject: false, hold: null, daysToWindowClose: null };
-  }
+const VERIFICATION_KEYS: (keyof MutationVerificationChecklist)[] = [
+  "applicantVerified",
+  "previousOwnerVerified",
+  "proposedOwnerVerified",
+  "dagKhatianVerified",
+  "deedVerified",
+  "landRecordMatched",
+  "documentsPresent",
+];
 
-  if (!mutation.toOwnerId) {
-    return {
-      canApprove: false,
-      canReject: true,
-      hold: { code: "no-recipient" },
-      daysToWindowClose: null,
-    };
-  }
+const ACTIVE_STATUSES: MutationStatus[] = [
+  "submitted",
+  "verification",
+  "objection-period",
+];
 
+function daysToWindowClose(mutation: Mutation, now: Date): number | null {
   const endsAt = mutation.objectionWindowEndsAt
     ? new Date(mutation.objectionWindowEndsAt)
     : null;
   const msLeft = endsAt ? endsAt.getTime() - now.getTime() : 0;
-  const daysToWindowClose = endsAt && msLeft > 0 ? Math.ceil(msLeft / DAY_MS) : null;
+
+  return endsAt && msLeft > 0 ? Math.ceil(msLeft / DAY_MS) : null;
+}
+
+export function unresolvedObjections(mutation: Mutation): MutationObjection[] {
+  return mutation.objections.filter((item) => item.status !== "resolved");
+}
+
+export function verificationGate(
+  checklist: MutationVerificationChecklist,
+  notes: string,
+): { ok: true } | { ok: false; reason: MutationVerificationFailure } {
+  const missing = VERIFICATION_KEYS.filter((key) => !checklist[key]);
+
+  if (missing.length) {
+    return { ok: false, reason: { code: "verification-incomplete", missing } };
+  }
+
+  if (!notes.trim()) {
+    return { ok: false, reason: { code: "verification-notes-required" } };
+  }
+
+  return { ok: true };
+}
+
+export function mutationActionGate(
+  mutation: Mutation,
+  actorId: ID,
+  now: Date = new Date(),
+): MutationActionGate {
+  if (mutation.status === "approved" || mutation.status === "rejected") {
+    return {
+      canStartVerification: false,
+      canCompleteVerification: false,
+      canApprove: false,
+      canReject: false,
+      hold: { code: "already-decided" },
+      daysToWindowClose: null,
+    };
+  }
+
+  const remainingDays = daysToWindowClose(mutation, now);
+
+  if (mutation.assignedOfficerId && mutation.assignedOfficerId !== actorId) {
+    return {
+      canStartVerification: false,
+      canCompleteVerification: false,
+      canApprove: false,
+      canReject: false,
+      hold: { code: "assigned-to-other-officer" },
+      daysToWindowClose: remainingDays,
+    };
+  }
+
+  const canStartVerification = mutation.status === "submitted";
+  const canCompleteVerification = mutation.status === "verification";
+  const canReject = ACTIVE_STATUSES.includes(mutation.status);
+
+  if (mutation.status !== "objection-period") {
+    return {
+      canStartVerification,
+      canCompleteVerification,
+      canApprove: false,
+      canReject,
+      hold: { code: "wrong-status", expected: ["objection-period"] },
+      daysToWindowClose: remainingDays,
+    };
+  }
+
+  if (!mutation.toOwnerId) {
+    return {
+      canStartVerification,
+      canCompleteVerification,
+      canApprove: false,
+      canReject,
+      hold: { code: "no-recipient" },
+      daysToWindowClose: remainingDays,
+    };
+  }
+
+  const objections = unresolvedObjections(mutation);
 
   // A standing objection outranks the clock: it has to be settled before the
   // record moves, even once the window has closed.
-  if (mutation.objections.length > 0) {
+  if (objections.length > 0) {
     return {
+      canStartVerification,
+      canCompleteVerification,
       canApprove: false,
-      canReject: true,
-      hold: { code: "objections", count: mutation.objections.length },
-      daysToWindowClose,
+      canReject,
+      hold: { code: "objections", count: objections.length },
+      daysToWindowClose: remainingDays,
     };
   }
 
-  if (daysToWindowClose !== null) {
+  if (remainingDays !== null) {
     return {
+      canStartVerification,
+      canCompleteVerification,
       canApprove: false,
-      canReject: true,
-      hold: { code: "objection-window", days: daysToWindowClose },
-      daysToWindowClose,
+      canReject,
+      hold: { code: "objection-window", days: remainingDays },
+      daysToWindowClose: remainingDays,
     };
   }
 
-  return { canApprove: true, canReject: true, hold: null, daysToWindowClose: null };
+  return {
+    canStartVerification,
+    canCompleteVerification,
+    canApprove: true,
+    canReject,
+    hold: null,
+    daysToWindowClose: null,
+  };
+}
+
+/**
+ * Compatibility projection for existing callers that only render approval
+ * state. New workflow consumers should use mutationActionGate.
+ */
+export function approvalGate(mutation: Mutation, now: Date = new Date()): ApprovalGate {
+  const gate = mutationActionGate(mutation, mutation.assignedOfficerId ?? "", now);
+  const hold =
+    gate.hold?.code === "objections" ||
+    gate.hold?.code === "objection-window" ||
+    gate.hold?.code === "no-recipient"
+      ? gate.hold
+      : null;
+
+  return {
+    canApprove: gate.canApprove,
+    canReject: gate.canReject,
+    hold,
+    daysToWindowClose: gate.daysToWindowClose,
+  };
 }
