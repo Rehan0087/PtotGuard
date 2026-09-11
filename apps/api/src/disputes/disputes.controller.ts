@@ -231,6 +231,71 @@ export class DisputesController {
     });
   }
 
+  @Patch(":id/status")
+  async updateStatus(
+    @Param("id") id: string,
+    @Body() body: { status: string },
+    @Req() req: Request,
+  ) {
+    const dispute = await this.prisma.dispute.findUnique({ where: { id } });
+    if (!dispute) throw new NotFoundError("Dispute not found");
+
+    const actorId = currentUserId(req);
+    const from = dispute.status;
+    const to = body.status as any;
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.dispute.update({
+        where: { id },
+        data: { status: to, updatedAt: now },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "dispute",
+        entityId: updated.id,
+        action: "status-change",
+        actorId,
+        payload: { from, to },
+      });
+
+      await tx.disputeEvent.create({
+        data: {
+          id: `de-${randomUUID()}`,
+          disputeId: updated.id,
+          at: now,
+          type: "status-change",
+          title: "Status updated",
+          content: { code: "status-change", status: to },
+          actorId,
+        },
+      });
+
+      const audience = disputeAudience(
+        { filedById: dispute.filedById, parties: dispute.parties as never },
+        actorId,
+      );
+      
+      if (audience.length > 0) {
+        await tx.appNotification.createMany({
+          data: audience.map((userId) => ({
+            id: `n-${randomUUID()}`,
+            userId,
+            at: now,
+            severity: "info",
+            title: "Dispute status updated",
+            body: `Case ${dispute.caseNumber} status was updated to ${to}.`,
+            content: { code: "dispute-status", caseNumber: dispute.caseNumber, status: to },
+            read: false,
+            href: `/disputes/${dispute.id}`,
+          })),
+        });
+      }
+
+      return updated;
+    });
+  }
+
   /**
    * The step a ruling used to stop short of: turning "resolved" into an
    * actual change on the parcel record. `executionGate()` is the same gate
