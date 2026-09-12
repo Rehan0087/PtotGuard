@@ -47,7 +47,7 @@ import {
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
-import { hydrateMutationState, persistMutationState } from "./mutation-store";
+import { hydrateMutationState } from "./mutation-store";
 
 // Restore mutation-owned preview state before any handler (including parcel
 // reads) can observe the in-memory seed after a hard refresh.
@@ -67,6 +67,10 @@ function getRole(request: Request): Role {
 function currentUser(request: Request): User {
   const id = db.CURRENT_USER_BY_ROLE[getRole(request)];
   return db.users.find((u) => u.id === id)!;
+}
+
+function badRequest(message = "Bad Request") {
+  return HttpResponse.json({ error: "bad_request", message }, { status: 400 });
 }
 
 function forbidden(message = "Forbidden") {
@@ -127,6 +131,105 @@ function transitionError(
     ? { code: "wrong-status", expected }
     : gate.hold;
   return unprocessable({ status: reason });
+}
+
+const MUTATION_TYPES = ["sale", "inheritance", "gift", "partition", "correction"] as const;
+const PAYMENT_METHODS = ["bkash", "nagad", "card"] as const;
+const VERIFICATION_FIELDS = [
+  "applicantVerified",
+  "previousOwnerVerified",
+  "proposedOwnerVerified",
+  "dagKhatianVerified",
+  "deedVerified",
+  "landRecordMatched",
+  "documentsPresent",
+] as const;
+
+type CreateMutationBody = {
+  parcelId: string;
+  type: Mutation["type"];
+  toOwnerId: string;
+  deedNumber?: string;
+  deedDate?: string;
+  documentIds?: string[];
+  paymentMethod: "bkash" | "nagad" | "card";
+};
+
+function recordBody(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function unexpectedProperty(body: Record<string, unknown>, allowed: readonly string[]): string | null {
+  return Object.keys(body).find((key) => !allowed.includes(key)) ?? null;
+}
+
+function validateCreateMutationBody(value: unknown) {
+  const body = recordBody(value);
+  if (!body) return { ok: false as const, response: badRequest("Request body must be an object.") };
+  const extra = unexpectedProperty(body, ["parcelId", "type", "toOwnerId", "deedNumber", "deedDate", "documentIds", "paymentMethod"]);
+  if (extra) return { ok: false as const, response: badRequest(`property ${extra} should not exist`) };
+  if (typeof body.parcelId !== "string") return { ok: false as const, response: badRequest("parcelId must be a string") };
+  if (!MUTATION_TYPES.includes(body.type as typeof MUTATION_TYPES[number])) {
+    return { ok: false as const, response: badRequest(`type must be one of the following values: ${MUTATION_TYPES.join(", ")}`) };
+  }
+  if (typeof body.toOwnerId !== "string") return { ok: false as const, response: badRequest("toOwnerId must be a string") };
+  if (!PAYMENT_METHODS.includes(body.paymentMethod as typeof PAYMENT_METHODS[number])) {
+    return { ok: false as const, response: badRequest(`paymentMethod must be one of the following values: ${PAYMENT_METHODS.join(", ")}`) };
+  }
+  if (body.deedNumber !== undefined && typeof body.deedNumber !== "string") {
+    return { ok: false as const, response: badRequest("deedNumber must be a string") };
+  }
+  if (body.deedDate !== undefined && typeof body.deedDate !== "string") {
+    return { ok: false as const, response: badRequest("deedDate must be a string") };
+  }
+  if (body.documentIds !== undefined && (!Array.isArray(body.documentIds) || body.documentIds.some((id) => typeof id !== "string"))) {
+    return { ok: false as const, response: badRequest("each value in documentIds must be a string") };
+  }
+  return { ok: true as const, value: body as CreateMutationBody };
+}
+
+function validateVerificationBody(value: unknown) {
+  const body = recordBody(value);
+  if (!body) return { ok: false as const, response: badRequest("Request body must be an object.") };
+  const extra = unexpectedProperty(body, [...VERIFICATION_FIELDS, "notes"]);
+  if (extra) return { ok: false as const, response: badRequest(`property ${extra} should not exist`) };
+  for (const field of VERIFICATION_FIELDS) {
+    if (typeof body[field] !== "boolean") {
+      return { ok: false as const, response: badRequest(`${field} must be a boolean value`) };
+    }
+  }
+  if (typeof body.notes !== "string") return { ok: false as const, response: badRequest("notes must be a string") };
+  if (!/\S/.test(body.notes)) return { ok: false as const, response: badRequest("notes must contain non-whitespace characters") };
+  const checklist = Object.fromEntries(VERIFICATION_FIELDS.map((field) => [field, body[field]])) as unknown as MutationVerificationChecklist;
+  return { ok: true as const, value: { checklist, notes: body.notes.trim() } };
+}
+
+function validateDecisionBody(value: unknown) {
+  const body = recordBody(value);
+  if (!body) return { ok: false as const, response: badRequest("Request body must be an object.") };
+  const extra = unexpectedProperty(body, ["decision", "rejectionReason", "approvalNote"]);
+  if (extra) return { ok: false as const, response: badRequest(`property ${extra} should not exist`) };
+  if (body.decision !== "approve" && body.decision !== "reject") {
+    return { ok: false as const, response: badRequest("decision must be one of the following values: approve, reject") };
+  }
+  if (body.decision === "reject") {
+    if (typeof body.rejectionReason !== "string") {
+      return { ok: false as const, response: badRequest("rejectionReason must be a string") };
+    }
+    if (!/\S/.test(body.rejectionReason)) {
+      return { ok: false as const, response: badRequest("rejectionReason must contain non-whitespace characters") };
+    }
+  }
+  if (body.decision === "approve" && body.approvalNote !== undefined && typeof body.approvalNote !== "string") {
+    return { ok: false as const, response: badRequest("approvalNote must be a string") };
+  }
+  return { ok: true as const, value: {
+    decision: body.decision,
+    rejectionReason: typeof body.rejectionReason === "string" ? body.rejectionReason : undefined,
+    approvalNote: typeof body.approvalNote === "string" ? body.approvalNote : undefined,
+  } };
 }
 
 function paginate<T>(items: T[], url: URL): Paginated<T> {
@@ -686,15 +789,9 @@ export const handlers = [
   http.post(`${API}/mutations`, async ({ request }) => {
     await latency();
     hydrateMutationState();
-    const body = (await request.json()) as Partial<{
-      parcelId: string;
-      type: string;
-      toOwnerId: string;
-      deedNumber: string;
-      deedDate: string;
-      documentIds: string[];
-      paymentMethod: string;
-    }>;
+    const parsed = validateCreateMutationBody(await request.json());
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.value;
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
     if (!parcel) return notFound("Parcel not found");
     const toOwner = db.users.find((u) => u.id === body.toOwnerId);
@@ -719,7 +816,7 @@ export const handlers = [
       mutationNumber: `MUT-2026-${String(seq).padStart(5, "0")}`,
       parcelId: parcel.id,
       parcelDagNo: parcel.dagNo,
-      type: (body.type ?? "sale") as never,
+      type: body.type,
       status: "submitted" as const,
       // The registry's own fact, not the applicant's claim.
       fromOwnerName: parcel.ownerName,
@@ -733,7 +830,7 @@ export const handlers = [
       deedNumber: body.deedNumber,
       deedDate: body.deedDate,
       fee: { amount: db.policies.mutationFeeBdt, currency: "BDT" as const },
-      paymentMethod: body.paymentMethod as never,
+      paymentMethod: body.paymentMethod,
       // Simulated — no gateway is called.
       transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
       createdAt: now,
@@ -754,8 +851,6 @@ export const handlers = [
         newStatus: "submitted",
       },
     });
-    persistMutationState();
-
     return HttpResponse.json(mutation, { status: 201 });
   }),
 
@@ -789,13 +884,15 @@ export const handlers = [
       actorName: actor.name,
       payload: { previousStatus, newStatus: mutation.status, actorRole: actor.role },
     });
-    persistMutationState();
     return HttpResponse.json(mutation);
   }),
 
   http.patch(`${API}/mutations/:id/complete-verification`, async ({ params, request }) => {
     await latency();
     hydrateMutationState();
+    const parsed = validateVerificationBody(await request.json());
+    if (!parsed.ok) return parsed.response;
+    const { checklist, notes } = parsed.value;
     const actor = currentUser(request);
     if (!isActiveLandOffice(actor)) return forbidden("Land Office Staff access required.");
     const mutation = db.mutations.find((item) => item.id === params.id);
@@ -803,17 +900,6 @@ export const handlers = [
     const accessError = mutationActionAccess(mutation, actor);
     if (accessError) return accessError;
 
-    const body = (await request.json()) as Partial<MutationVerificationChecklist & { notes: string }>;
-    const checklist: MutationVerificationChecklist = {
-      applicantVerified: body.applicantVerified === true,
-      previousOwnerVerified: body.previousOwnerVerified === true,
-      proposedOwnerVerified: body.proposedOwnerVerified === true,
-      dagKhatianVerified: body.dagKhatianVerified === true,
-      deedVerified: body.deedVerified === true,
-      landRecordMatched: body.landRecordMatched === true,
-      documentsPresent: body.documentsPresent === true,
-    };
-    const notes = typeof body.notes === "string" ? body.notes.trim() : "";
     const now = new Date();
     const gateError = transitionError(mutation, actor, now, "canCompleteVerification", ["verification"]);
     if (gateError) return gateError;
@@ -844,28 +930,21 @@ export const handlers = [
       actorName: actor.name,
       payload: { previousStatus, newStatus: mutation.status, actorRole: actor.role, note: notes },
     });
-    persistMutationState();
     return HttpResponse.json(mutation);
   }),
 
   http.patch(`${API}/mutations/:id/decision`, async ({ params, request }) => {
     await latency();
     hydrateMutationState();
+    const parsed = validateDecisionBody(await request.json());
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.value;
     const actor = currentUser(request);
     if (!isActiveLandOffice(actor)) return forbidden("Land Office Staff access required.");
     const mutation = db.mutations.find((item) => item.id === params.id);
     if (!mutation) return notFound("Mutation not found");
     const accessError = mutationActionAccess(mutation, actor);
     if (accessError) return accessError;
-    const body = (await request.json()) as Partial<{
-      decision: string;
-      rejectionReason: string;
-      approvalNote: string;
-    }>;
-    if (body.decision !== "approve" && body.decision !== "reject") {
-      return unprocessable({ decision: { code: "invalid-decision" } });
-    }
-
     const approving = body.decision === "approve";
     const now = new Date();
     const gateError = transitionError(
@@ -876,11 +955,8 @@ export const handlers = [
       approving ? ["objection-period"] : ["submitted", "verification", "objection-period"],
     );
     if (gateError) return gateError;
-    const reason = typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
-    const note = typeof body.approvalNote === "string" ? body.approvalNote.trim() : undefined;
-    if (!approving && !reason) {
-      return unprocessable({ rejectionReason: { code: "rejection-reason-required" } });
-    }
+    const reason = body.rejectionReason?.trim() ?? "";
+    const note = body.approvalNote?.trim();
 
     const parcel = mutationParcel(mutation)!;
     if (approving) {
@@ -948,7 +1024,6 @@ export const handlers = [
         ...(approving ? (note ? { note } : {}) : { reason }),
       },
     });
-    persistMutationState();
     return HttpResponse.json(mutation);
   }),
 
