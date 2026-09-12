@@ -1,8 +1,9 @@
 import "reflect-metadata";
-import { ForbiddenException, ValidationPipe } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, ValidationPipe } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConflictError, ValidationError } from "../common/domain-exceptions";
 import { CompleteVerificationDto } from "./complete-verification.dto";
+import { CreateMutationDto } from "./create-mutation.dto";
 import { MutationsController } from "./mutations.controller";
 import { MutationDecisionDto } from "./mutation-decision.dto";
 
@@ -71,6 +72,29 @@ function noWrites(f: ReturnType<typeof fixture>) {
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); });
 afterEach(() => vi.useRealTimers());
 
+describe("create mutation DTO", () => {
+  const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+  const validate = (value: object) => pipe.transform(value, { type: "body", metatype: CreateMutationDto });
+  const valid = { parcelId: "p-1", type: "sale", toOwnerId: "usr-new", paymentMethod: "bkash" };
+
+  it("accepts supporting document id arrays", async () => {
+    await expect(validate({ ...valid, documentIds: ["doc-1", "doc-2"] })).resolves.toMatchObject({
+      documentIds: ["doc-1", "doc-2"],
+    });
+  });
+
+  it("treats null optional filing fields as absent", async () => {
+    await expect(validate({ ...valid, deedNumber: null, deedDate: null, documentIds: null })).resolves.toMatchObject(valid);
+  });
+
+  it.each(["doc-1", ["doc-1", 2], [null]])("rejects malformed document ids with 400: %j", async (documentIds) => {
+    const error = await validate({ ...valid, documentIds }).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect(error.getStatus()).toBe(400);
+  });
+});
+
 describe("mutation decision DTO", () => {
   const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
   const validate = (value: object) => pipe.transform(value, { type: "body", metatype: MutationDecisionDto });
@@ -78,6 +102,7 @@ describe("mutation decision DTO", () => {
   it("accepts approval with an optional note", async () => {
     await expect(validate({ decision: "approve", approvalNote: "Checked" })).resolves.toMatchObject({ approvalNote: "Checked" });
     await expect(validate({ decision: "approve" })).resolves.toMatchObject({ decision: "approve" });
+    await expect(validate({ decision: "approve", approvalNote: null })).resolves.toMatchObject({ decision: "approve" });
   });
   it.each([undefined, "", "   ", 12])("requires a nonblank string rejection reason: %s", async (rejectionReason) => {
     await expect(validate({ decision: "reject", rejectionReason })).rejects.toThrow();
