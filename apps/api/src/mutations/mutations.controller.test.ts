@@ -28,6 +28,7 @@ function fixture(status = "submitted") {
     toOwnerId: "usr-new", toOwnerName: "New owner", requestedById: "usr-applicant",
     requestedAt: new Date("2026-08-01T10:00:00.000Z"), assignedOfficerId: null as string | null,
     documentIds: ["doc-1"], objections: [] as object[], objectionWindowEndsAt: new Date("2026-09-11T10:00:00.000Z"),
+    updatedAt: new Date("2026-09-01T10:00:00.000Z"),
   };
   const parcel = { id: "p-1", dagNo: "42", ownerId: "usr-old", owner: { name: "Old owner" }, jurisdictionId: "j-local" };
   const users = vi.fn().mockImplementation(async ({ where }: { where: { id: string } }) =>
@@ -120,7 +121,7 @@ describe("mutation workflow writes", () => {
     expect(result.status).toBe("verification");
     expect(f.tx.mutation.findUnique).toHaveBeenCalledWith({ where: { id: "m-1" } });
     expect(f.tx.mutation.update).toHaveBeenCalledWith({
-      where: expect.objectContaining({ id: "m-1", status: "submitted", assignedOfficerId: null }),
+      where: expect.objectContaining({ id: "m-1", status: "submitted", assignedOfficerId: null, updatedAt: f.mutation.updatedAt }),
       data: expect.objectContaining({ status: "verification", assignedOfficerId: "usr-officer", verificationStartedById: "usr-officer", verificationStartedAt: now }),
     });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({
@@ -135,7 +136,7 @@ describe("mutation workflow writes", () => {
     expect(f.tx.policy.findUnique).toHaveBeenCalledWith({ where: { id: "singleton" } });
     const { notes: _, ...checklist } = checks;
     expect(f.tx.mutation.update).toHaveBeenCalledWith({
-      where: expect.objectContaining({ id: "m-1", status: "verification" }),
+      where: expect.objectContaining({ id: "m-1", status: "verification", updatedAt: f.mutation.updatedAt }),
       data: expect.objectContaining({ status: "objection-period", assignedOfficerId: "usr-officer", verifiedById: "usr-officer", verifiedAt: now,
         verificationChecklist: checklist, verificationNotes: "Records verified", objectionStartDate: now,
         objectionWindowEndsAt: new Date("2026-09-27T10:00:00.000Z") }),
@@ -154,6 +155,20 @@ describe("mutation workflow writes", () => {
     await expect(f.controller.startVerification("m-1", request())).rejects.toThrow();
     noWrites(f);
   });
+  it.each(["verification", "objection-period"])("conflicts when verification start is stale at %s", async (status) => {
+    const f = fixture(status);
+    const error = await f.controller.startVerification("m-1", request()).catch((caught) => caught as ConflictError);
+    expect(error).toBeInstanceOf(ConflictError);
+    expect((error as ConflictError).getStatus()).toBe(409);
+    noWrites(f);
+  });
+  it("conflicts when verification has already completed", async () => {
+    const f = fixture("objection-period");
+    const error = await f.controller.completeVerification("m-1", checks, request()).catch((caught) => caught as ConflictError);
+    expect(error).toBeInstanceOf(ConflictError);
+    expect((error as ConflictError).getStatus()).toBe(409);
+    noWrites(f);
+  });
   it.each([{ ...checks, deedVerified: false }, { ...checks, notes: "   " }])("refuses incomplete verification: %j", async (body) => {
     const f = fixture("verification");
     await expect(f.controller.completeVerification("m-1", body, request())).rejects.toBeInstanceOf(ValidationError);
@@ -170,14 +185,18 @@ describe("mutation workflow writes", () => {
     const f = fixture("objection-period");
     f.mutation.objections = [{ id: "o-resolved", status: "resolved" }];
     await f.controller.decide("m-1", { decision: "approve", approvalNote: "  Cleared  " }, request());
-    expect(f.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
-    expect(f.tx.mutation.update).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "m-1", status: "objection-period" }),
+    expect(f.tx.mutation.update).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "m-1", status: "objection-period", updatedAt: f.mutation.updatedAt }),
       data: expect.objectContaining({ status: "approved", approvedAt: now, approvedById: "usr-officer", approvalNote: "Cleared", decidedAt: now }) });
     expect(f.tx.parcel.update).toHaveBeenCalledWith({ where: { id: "p-1", ownerId: "usr-old" }, data: { ownerId: "usr-new", lastMutationAt: now } });
     expect(f.tx.ownershipRecord.updateMany).toHaveBeenCalledWith({ where: { parcelId: "p-1", toDate: null }, data: { toDate: now } });
     expect(f.tx.ownershipRecord.create).toHaveBeenCalledWith({ data: expect.objectContaining({ parcelId: "p-1", ownerId: "usr-new", ownerName: "New owner", acquisitionType: "purchase", fromDate: now, mutationId: "m-1", documentId: "doc-1" }) });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ action: "approve", actorId: "usr-officer",
       payload: expect.objectContaining({ previousStatus: "objection-period", newStatus: "approved", note: "Cleared", actorRole: "land-office" }) }));
+  });
+  it("uses read-committed isolation so the audit tail read gets a post-lock statement snapshot", async () => {
+    const f = fixture("objection-period");
+    await f.controller.decide("m-1", { decision: "approve" }, request());
+    expect(f.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "ReadCommitted" });
   });
   it.each(["submitted", "verification"])("refuses approval from %s", async (status) => {
     const f = fixture(status);

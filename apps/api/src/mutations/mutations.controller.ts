@@ -218,7 +218,12 @@ export class MutationsController {
     return this.runAction(id, req, async (tx, { mutation, actor }, now) => {
       this.assertTransition(mutation, actor, now, "canStartVerification", ["submitted"]);
       const updated = await tx.mutation.update({
-        where: { id, status: "submitted", assignedOfficerId: mutation.assignedOfficerId },
+        where: {
+          id,
+          status: "submitted",
+          assignedOfficerId: mutation.assignedOfficerId,
+          updatedAt: mutation.updatedAt,
+        },
         data: {
           status: "verification", assignedOfficerId: actor.id,
           verificationStartedAt: now, verificationStartedById: actor.id,
@@ -253,7 +258,12 @@ export class MutationsController {
         throw new ValidationError({ code: "objection-policy-unavailable" }, "verification");
       }
       const updated = await tx.mutation.update({
-        where: { id, status: "verification", assignedOfficerId: mutation.assignedOfficerId },
+        where: {
+          id,
+          status: "verification",
+          assignedOfficerId: mutation.assignedOfficerId,
+          updatedAt: mutation.updatedAt,
+        },
         data: {
           status: "objection-period", assignedOfficerId: actor.id,
           verifiedAt: now, verifiedById: actor.id, verificationNotes: notes, verificationChecklist: checklist,
@@ -298,7 +308,12 @@ export class MutationsController {
         }
       }
       const updated = await tx.mutation.update({
-        where: { id, status: mutation.status, assignedOfficerId: mutation.assignedOfficerId },
+        where: {
+          id,
+          status: mutation.status,
+          assignedOfficerId: mutation.assignedOfficerId,
+          updatedAt: mutation.updatedAt,
+        },
         data: {
           assignedOfficerId: actor.id, decidedAt: now,
           ...(approving
@@ -360,6 +375,12 @@ export class MutationsController {
     const gate = mutationActionGate(mutation as unknown as Mutation, actor.id, now);
     if (gate.hold?.code === "already-decided") throw new ConflictError("This mutation has already been decided.");
     if (!gate[action]) {
+      const transitionAlreadyApplied =
+        (action === "canStartVerification" && ["verification", "objection-period"].includes(mutation.status)) ||
+        (action === "canCompleteVerification" && mutation.status === "objection-period");
+      if (transitionAlreadyApplied) {
+        throw new ConflictError("This mutation has already moved past that workflow transition.");
+      }
       throw new ValidationError(gate.hold?.code === "wrong-status" || !gate.hold
         ? { code: "wrong-status", expected } : gate.hold, "status");
     }
@@ -386,7 +407,7 @@ export class MutationsController {
   ): Promise<T> {
     const actor = await loadMutationActor(this.prisma, req);
     // Reject unauthorized writes before opening a transaction, then repeat
-    // the checks against its snapshot to close preflight races.
+    // the checks from transaction state to close preflight races.
     await this.actionContext(this.prisma, id, actor);
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -395,10 +416,12 @@ export class MutationsController {
         assertLandOfficeActor(currentActor);
         const context = await this.actionContext(tx, id, currentActor);
         return action(tx, context, new Date());
-      }, { isolationLevel: "Serializable" });
+      }, { isolationLevel: "ReadCommitted" });
     } catch (error) {
-      // Conditional updates protect transitions and parcel ownership; serializable
-      // isolation also protects reads of objections, jurisdiction, and user state.
+      // Conditional writes protect the full mutation snapshot (including
+      // objections) and parcel ownership without a transaction-wide snapshot.
+      // READ COMMITTED is intentional: AuditService takes the ledger
+      // lock before reading the tail, which then gets a fresh statement snapshot.
       if (error && typeof error === "object" && "code" in error && ["P2025", "P2034"].includes(String(error.code))) {
         throw new ConflictError("This mutation changed while the action was being processed. Reload and try again.");
       }
