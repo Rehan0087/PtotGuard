@@ -7,6 +7,16 @@ import type { AuditEvent, AuditVerifyResult } from "@/lib/types";
 import { auditSeed } from "./data";
 
 type RawEvent = Omit<AuditEvent, "prevHash" | "hash">;
+const STORAGE_KEY = "plotguard.mutation-audit.v1";
+
+function browserStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
 
 async function sha256(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
@@ -33,6 +43,19 @@ let chainCache: AuditEvent[] | null = null;
 /** The full, chained ledger (sorted by time), memoized for the session. */
 export async function getAuditChain(): Promise<AuditEvent[]> {
   if (chainCache) return chainCache;
+  const storage = browserStorage();
+  if (storage) {
+    try {
+      const raw = storage.getItem(STORAGE_KEY);
+      const stored: unknown = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(stored)) {
+        chainCache = stored as AuditEvent[];
+        return chainCache;
+      }
+    } catch {
+      // Fall back to the coherent seed if the preview snapshot is damaged.
+    }
+  }
   const sorted = [...auditSeed].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const chain: AuditEvent[] = [];
   let prevHash = "";
@@ -66,6 +89,14 @@ export async function appendAudit(
   const hash = await sha256(hashInput(prevHash, event));
   const linked = { ...event, prevHash, hash };
   chain.push(linked);
+  const storage = browserStorage();
+  if (storage) {
+    try {
+      storage.setItem(STORAGE_KEY, JSON.stringify(chain));
+    } catch {
+      // The in-memory ledger remains usable if browser storage is unavailable.
+    }
+  }
   return linked;
 }
 
