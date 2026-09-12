@@ -63,3 +63,15 @@ test("mutation document previews allow only usable same-app or http URLs", () =>
     assert.equal(isUsableMutationPreviewUrl(value), false, value);
   }
 });
+
+test("mutation detail labels authoritative identifiers and statuses", () => {
+  assert.match(detailSource, /detail\.data\?\.mutation\.mutationNumber \?\? mutationId/);
+  assert.match(
+    detailSource,
+    /label: t\.pages\.mutations\.currentStatus,\s*value: <StatusMetaBadge meta=\{s\.mutation\[mutation\.status\]\} \/>/,
+  );
+  assert.match(
+    detailSource,
+    /<StatusMetaBadge meta=\{s\.verification\[document\.verificationStatus\]\} \/>/,
+  );
+});
