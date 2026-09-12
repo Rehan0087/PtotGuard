@@ -532,7 +532,7 @@ function OfficerMutations() {
   const rawStatus = searchParams.get("status");
   const status: "all" | MutationStatus = isMutationStatus(rawStatus) ? rawStatus : "all";
 
-  const { data, isLoading, isError, refetch } = useMutations({
+  const { data, isLoading, isError, isFetching, refetch } = useMutations({
     scope: scope === "assigned" ? "assigned" : undefined,
     status: status === "all" ? undefined : status,
     pageSize: 50,
@@ -544,6 +544,7 @@ function OfficerMutations() {
   const actorId = session.data?.user.id;
   const loading = isLoading || session.isLoading;
   const failed = isError || session.isError || (!session.isLoading && !actorId);
+  const retrying = isFetching || session.isFetching;
   const selectedMutation = mutations.find((mutation) => mutation.id === selectedMutationId);
 
   function replaceFilter(name: "scope" | "status", value: Scope | "all" | MutationStatus) {
@@ -568,6 +569,10 @@ function OfficerMutations() {
   function closeDecision() {
     setDecision(null);
     setSelectedMutationId(undefined);
+  }
+
+  async function retryQueue() {
+    await Promise.all([session.refetch(), refetch()]);
   }
 
   return (
@@ -631,7 +636,14 @@ function OfficerMutations() {
             icon={AlertTriangle}
             title={t.pages.mutations.listFailed}
           >
-            <Button type="button" variant="secondary" size="sm" onClick={() => void refetch()}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={retrying}
+              onClick={() => void retryQueue()}
+            >
+              {retrying ? <Loader2 className="size-3.5 animate-spin" /> : null}
               {t.pages.mutations.retry}
             </Button>
           </EmptyState>
@@ -678,6 +690,10 @@ function OfficerMutations() {
           mutation={selectedMutation}
           decision={decision}
           open
+          onSuccess={() => {
+            setDecision(null);
+            setDetailOpen(true);
+          }}
           onOpenChange={(open) => {
             if (!open) closeDecision();
           }}

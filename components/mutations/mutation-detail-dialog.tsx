@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { IdChip } from "@/components/id-chip";
 import { MutationDecisionDialog } from "@/components/mutations/mutation-decision-dialog";
 import { MutationVerificationForm } from "@/components/mutations/mutation-verification-form";
+import { StatusMetaBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -115,6 +116,10 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
             <DefinitionList
               rows={[
                 { label: t.pages.mutations.mutationType, value: t.domain.mutationType[mutation.type] },
+                {
+                  label: t.pages.mutations.currentStatus,
+                  value: <StatusMetaBadge meta={s.mutation[mutation.status]} />,
+                },
                 { label: t.pages.mutations.requestedAt, value: f.dateTime(mutation.requestedAt) },
                 { label: t.pages.mutations.requestedBy, value: applicant?.name ?? t.common.notAvailable },
                 {
@@ -176,7 +181,8 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                           {t.pages.mutations.documentUploaded(f.date(document.uploadedAt))}
                         </p>
                       </div>
-                      <div className="shrink-0">
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <StatusMetaBadge meta={s.verification[document.verificationStatus]} />
                         {canPreview && previewUrl ? (
                           <a
                             href={previewUrl}
@@ -358,13 +364,16 @@ export function MutationDetailDialog({
   const t = useT();
   const detail = useMutationById(mutationId);
   const notFound = detail.error instanceof ApiError && detail.error.status === 404;
+  const headerIdentifier = detail.data?.mutation.mutationNumber ?? mutationId;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <DialogHeader className="border-b px-4 py-4 pr-12">
           <DialogTitle>{t.pages.mutations.detailTitle}</DialogTitle>
-          <DialogDescription>{mutationId ? <IdChip>{mutationId}</IdChip> : null}</DialogDescription>
+          <DialogDescription>
+            {headerIdentifier ? <IdChip>{headerIdentifier}</IdChip> : null}
+          </DialogDescription>
         </DialogHeader>
 
         {detail.isLoading ? (

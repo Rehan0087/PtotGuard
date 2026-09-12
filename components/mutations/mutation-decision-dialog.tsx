@@ -25,11 +25,13 @@ export function MutationDecisionDialog({
   decision,
   open,
   onOpenChange,
+  onSuccess,
 }: {
   mutation: Mutation;
   decision: "approve" | "reject";
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }) {
   const t = useT();
   const s = useStatusMeta();
@@ -65,7 +67,8 @@ export function MutationDecisionDialog({
                   ),
             },
           );
-          onOpenChange(false);
+          onSuccess?.();
+          if (!onSuccess) onOpenChange(false);
         },
         onError: () =>
           toast.error(t.pages.mutations.failedTitle, {

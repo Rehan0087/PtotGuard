@@ -11,6 +11,10 @@ const pageSource = await readFile(
   new URL("../../app/(app)/mutations/page.tsx", import.meta.url),
   "utf8",
 );
+const decisionSource = await readFile(
+  new URL("./mutation-decision-dialog.tsx", import.meta.url),
+  "utf8",
+);
 
 test("mutation query hooks expose the complete officer workflow", () => {
   for (const hook of [
@@ -59,4 +63,20 @@ test("mutations page integrates the complete URL-backed officer workflow", () =>
   assert.match(pageSource, /<MutationDetailDialog\b/);
   assert.match(pageSource, /<MutationDecisionDialog\b/);
   assert.match(pageSource, /href=\{`\/parcels\/\$\{mutation\.parcelId\}`\}/);
+});
+
+test("successful decisions switch from confirmation to refreshed selected detail", () => {
+  assert.match(decisionSource, /onSuccess\?: \(\) => void;/);
+  assert.match(decisionSource, /onSuccess\?\.\(\);/);
+  assert.match(decisionSource, /disabled=\{!canSubmit\}/);
+  assert.match(
+    pageSource,
+    /onSuccess=\{\(\) => \{\s*setDecision\(null\);\s*setDetailOpen\(true\);\s*}\}/,
+  );
+});
+
+test("queue retry refreshes auth and list through one pending action", () => {
+  assert.match(pageSource, /await Promise\.all\(\[session\.refetch\(\), refetch\(\)\]\)/);
+  assert.match(pageSource, /disabled=\{retrying\}/);
+  assert.match(pageSource, /onClick=\{\(\) => void retryQueue\(\)\}/);
 });
