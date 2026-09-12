@@ -204,6 +204,7 @@ export const bn: Dictionary = {
     },
     fieldReport: {
       assigned: "নির্ধারিত",
+      accepted: "গৃহীত",
       "en-route": "পথে",
       "in-progress": "চলমান",
       completed: "সম্পন্ন",
@@ -601,6 +602,11 @@ export const bn: Dictionary = {
       gpsCount: (count: number) => `${n(count)}টি জিপিএস`,
       photoCount: (count: number) => `${n(count)}টি ছবি`,
       openCapture: "সংগ্রহ শুরু করুন",
+      acceptCase: "মামলা গ্রহণ করুন",
+      acceptingCase: "গ্রহণ করা হচ্ছে…",
+      caseAccepted: "মামলাটি সফলভাবে গ্রহণ করা হয়েছে।",
+      loadFailedTitle: "বরাদ্দকৃত মামলাগুলো লোড করা যায়নি",
+      loadFailedBody: "ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।",
       submitted: (when: string) => `জমা ${when}`,
     },
 
@@ -610,6 +616,9 @@ export const bn: Dictionary = {
       backToVisits: "পরিদর্শন তালিকায় ফিরুন",
       scheduled: (when: string) => `নির্ধারিত ${when}`,
 
+      acceptCase: "মামলা গ্রহণ করুন",
+      acceptingCase: "গ্রহণ করা হচ্ছে…",
+      caseAccepted: "মামলাটি গ্রহণ করা হয়েছে।",
       markEnRoute: "রওনা হয়েছি",
       markOnSite: "ঘটনাস্থলে পৌঁছেছি",
 
@@ -641,7 +650,7 @@ export const bn: Dictionary = {
       required: (have: number, need: number) => `${n(need)}টির মধ্যে ${n(have)}টি`,
 
       blocker: {
-        notActionable: "এই প্রতিবেদনটি ইতিমধ্যে বন্ধ হয়ে গেছে।",
+        notActionable: "প্রতিবেদন জমা দেওয়ার আগে মামলাটি চলমান হিসেবে চিহ্নিত করুন।",
         needGps: (have: number, need: number) =>
           `${n(need)}টি জিপিএস পয়েন্ট নিন — আপনার আছে ${n(have)}টি।`,
         needPhotos: (have: number, need: number) =>

@@ -11,6 +11,28 @@
  * one blanket rule.
  */
 import type { FieldReport, FieldReportPurpose } from "./types";
+import type { FieldReportStatus } from "./types";
+
+export type FieldReportTransitionReview =
+  | { allowed: true }
+  | { allowed: false; code: "invalid-transition" };
+
+const NEXT_FIELD_REPORT_STATUS: Partial<Record<FieldReportStatus, FieldReportStatus>> = {
+  assigned: "accepted",
+  accepted: "en-route",
+  "en-route": "in-progress",
+  "in-progress": "completed",
+};
+
+/** The one-way field workflow. Acceptance is exposed through its own API action. */
+export function reviewFieldReportTransition(
+  from: FieldReportStatus,
+  to: FieldReportStatus,
+): FieldReportTransitionReview {
+  return NEXT_FIELD_REPORT_STATUS[from] === to
+    ? { allowed: true }
+    : { allowed: false, code: "invalid-transition" };
+}
 
 /**
  * What each survey has to come back with. `gps` is a count because a line needs
@@ -57,8 +79,9 @@ export function filingReview(report: FieldReport, notes: string): FilingReview {
 
   const blockers: FilingBlocker[] = [];
 
-  // A report already filed or called off is not a draft to add to.
-  if (report.status === "completed" || report.status === "cancelled") {
+  // Filing is the final transition from active field work. Assigned, accepted,
+  // and travelling reports must move through their explicit workflow first.
+  if (report.status !== "in-progress") {
     blockers.push({ code: "not-actionable" });
   }
   if (gpsHave < need.gps) {

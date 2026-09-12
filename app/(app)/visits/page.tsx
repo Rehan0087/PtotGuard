@@ -10,16 +10,19 @@ import { SurveyCorners } from "@/components/survey-corners";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAssignedFieldReports } from "@/hooks/queries";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAcceptFieldReport, useAssignedFieldReports } from "@/hooks/queries";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
+import { toast } from "sonner";
 
 export default function VisitsPage() {
   const t = useT();
   const f = useFmt();
   const s = useStatusMeta();
-  const { data, isLoading } = useAssignedFieldReports();
+  const { data, isLoading, isError, refetch } = useAssignedFieldReports();
+  const acceptCase = useAcceptFieldReport();
   const visits = data ?? [];
 
   return (
@@ -36,6 +39,16 @@ export default function VisitsPage() {
             <Skeleton key={i} className="h-40 rounded-xl" />
           ))}
         </div>
+      ) : isError ? (
+        <Alert variant="destructive">
+          <AlertTitle>{t.pages.visits.loadFailedTitle}</AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>{t.pages.visits.loadFailedBody}</p>
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              {t.common.retry}
+            </Button>
+          </AlertDescription>
+        </Alert>
       ) : visits.length === 0 ? (
         <EmptyState
           icon={MapPin}
@@ -45,7 +58,11 @@ export default function VisitsPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {visits.map((v) => {
-            const actionable = v.status === "assigned" || v.status === "en-route" || v.status === "in-progress";
+            const actionable =
+              v.status === "assigned" ||
+              v.status === "accepted" ||
+              v.status === "en-route" ||
+              v.status === "in-progress";
             return (
               <Card key={v.id} className="relative gap-3 px-4">
                 <div className="flex items-start justify-between gap-2">
@@ -81,12 +98,30 @@ export default function VisitsPage() {
                   </span>
                 </div>
 
-                {actionable ? (
+                {v.status === "assigned" ? (
+                  <Button
+                    size="sm"
+                    className="w-fit"
+                    disabled={acceptCase.isPending}
+                    onClick={() =>
+                      acceptCase.mutate(v.id, {
+                        onSuccess: () => toast.success(t.pages.visits.caseAccepted),
+                        onError: () => toast.error(t.common.somethingWentWrong),
+                      })
+                    }
+                  >
+                    <Ruler className="size-3.5" />
+                    {acceptCase.isPending
+                      ? t.pages.visits.acceptingCase
+                      : t.pages.visits.acceptCase}
+                    <ArrowRight className="size-3.5" />
+                  </Button>
+                ) : actionable ? (
                   <Button
                     size="sm"
                     className="w-fit"
                     nativeButton={false}
-                    render={<Link href={`/visits/${v.id}`} />}
+                    render={<Link href={`/field/${v.id}`} />}
                   >
                     <Ruler className="size-3.5" />
                     {t.pages.visits.openCapture}

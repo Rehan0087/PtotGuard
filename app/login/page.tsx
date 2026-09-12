@@ -18,8 +18,10 @@ import { useT } from "@/lib/i18n/provider";
 import type { Dictionary } from "@/lib/i18n";
 import { useSessionStore } from "@/store/session";
 import { roleHome } from "@/lib/nav";
-import { DEMO_ACCOUNTS, DEMO_PASSWORD, verifyDemoCredentials } from "@/lib/demo-accounts";
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, findDemoAccount } from "@/lib/demo-accounts";
 import type { LoginFailure } from "@/lib/demo-accounts";
+import { api, ApiError } from "@/lib/api-client";
+import type { LoginResponse } from "@/lib/types";
 
 /** Built per locale — every message here is read by whoever is signing in. */
 function makeSchema(t: Dictionary) {
@@ -38,7 +40,7 @@ export default function LoginPage() {
   const role = useSessionStore((s) => s.role);
   const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
   const hasHydrated = useSessionStore((s) => s.hasHydrated);
-  const [failure, setFailure] = useState<LoginFailure | null>(null);
+  const [failure, setFailure] = useState<LoginFailure | { code: "api" } | null>(null);
 
   useEffect(() => {
     if (hasHydrated && isAuthenticated) router.replace(roleHome(role));
@@ -54,15 +56,19 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
 
-  function onSubmit(values: FormValues) {
-    const result = verifyDemoCredentials(values.email, values.password);
-    if (!result.ok) {
-      setFailure(result);
-      return;
+  async function onSubmit(values: FormValues) {
+    try {
+      const result = await api.post<LoginResponse>("/auth/login", values);
+      setFailure(null);
+      login(result.user, result.tokens);
+      router.push(roleHome(result.user.role));
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setFailure({ code: findDemoAccount(values.email) ? "wrong-password" : "unknown-email" });
+      } else {
+        setFailure({ code: "api" });
+      }
     }
-    setFailure(null);
-    login(result.account.role);
-    router.push(roleHome(result.account.role));
   }
 
   function fillDemoAccount(email: string) {
@@ -96,12 +102,16 @@ export default function LoginPage() {
                 {failure ? (
                   <Alert variant="destructive">
                     <AlertTitle>
-                      {failure.code === "unknown-email"
+                      {failure.code === "api"
+                        ? t.common.somethingWentWrong
+                        : failure.code === "unknown-email"
                         ? t.login.errorTitle
                         : t.login.wrongPasswordTitle}
                     </AlertTitle>
                     <AlertDescription>
-                      {failure.code === "unknown-email"
+                      {failure.code === "api"
+                        ? t.common.tryAgain
+                        : failure.code === "unknown-email"
                         ? t.login.errorBody
                         : t.login.wrongPasswordBody}
                     </AlertDescription>

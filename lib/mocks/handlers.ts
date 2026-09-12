@@ -31,6 +31,7 @@ import {
   normaliseUlpin,
   rankCandidates,
   registryStatusAfter,
+  reviewFieldReportTransition,
   reviewDraft,
   routeDisputeToOfficer,
   rulingGate,
@@ -41,6 +42,7 @@ import {
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
+import { DEMO_PASSWORD, findDemoAccount } from "../demo-accounts";
 
 // --- helpers ---------------------------------------------------------------
 
@@ -54,8 +56,19 @@ function getRole(request: Request): Role {
 }
 
 function currentUser(request: Request): User {
+  const authenticated = authenticatedUser(request);
+  if (authenticated) return authenticated;
   const id = db.CURRENT_USER_BY_ROLE[getRole(request)];
   return db.users.find((u) => u.id === id)!;
+}
+
+function authenticatedUser(
+  request: Request,
+  expectedType: "access" | "refresh" = "access",
+): User | null {
+  const match = request.headers.get("authorization")?.match(/^Bearer mock\.([^.]+)\.(access|refresh)$/);
+  if (!match || match[2] !== expectedType) return null;
+  return db.users.find((user) => user.id === match[1]) ?? null;
 }
 
 function paginate<T>(items: T[], url: URL): Paginated<T> {
@@ -67,6 +80,14 @@ function paginate<T>(items: T[], url: URL): Paginated<T> {
 
 function notFound(message = "Not found") {
   return HttpResponse.json({ error: "not_found", message }, { status: 404 });
+}
+
+function unauthorized(message = "Authentication required") {
+  return HttpResponse.json({ error: "unauthorized", message }, { status: 401 });
+}
+
+function forbidden(message = "This portal is restricted to the assigned role") {
+  return HttpResponse.json({ error: "forbidden", message }, { status: 403 });
 }
 
 /**
@@ -222,7 +243,12 @@ export const handlers = [
   // Auth -------------------------------------------------------------------
   http.post(`${API}/auth/login`, async ({ request }) => {
     await latency();
-    const user = currentUser(request);
+    const body = (await request.json()) as { email?: string; password?: string };
+    const account = body.email ? findDemoAccount(body.email) : undefined;
+    const user = account ? db.users.find((candidate) => candidate.email === account.email) : undefined;
+    if (!user || user.status !== "active" || body.password !== DEMO_PASSWORD) {
+      return unauthorized("Invalid email or password");
+    }
     return HttpResponse.json({
       user,
       tokens: {
@@ -234,7 +260,12 @@ export const handlers = [
   }),
 
   http.post(`${API}/auth/refresh`, async ({ request }) => {
-    const user = currentUser(request);
+    const body = (await request.json()) as { refreshToken?: string };
+    const tokenRequest = new Request(request.url, {
+      headers: { authorization: `Bearer ${body.refreshToken ?? ""}` },
+    });
+    const user = authenticatedUser(tokenRequest, "refresh");
+    if (!user || !body.refreshToken?.endsWith(".refresh")) return unauthorized("Session expired or invalid");
     return HttpResponse.json({
       accessToken: `mock.${user.id}.access`,
       refreshToken: `mock.${user.id}.refresh`,
@@ -244,16 +275,20 @@ export const handlers = [
 
   http.get(`${API}/auth/me`, async ({ request }) => {
     await latency();
-    const user = currentUser(request);
+    const user = authenticatedUser(request);
+    if (!user) return unauthorized();
     const jurisdiction = db.jurisdictions.find((j) => j.id === user.jurisdictionId) ?? null;
     return HttpResponse.json({ user, jurisdiction });
   }),
 
   http.patch(`${API}/auth/me`, async ({ request }) => {
     await latency();
-    const user = currentUser(request);
-    const body = (await request.json()) as any;
-    
+    const user = authenticatedUser(request);
+    if (!user) return unauthorized();
+    const body = (await request.json()) as Partial<
+      Pick<User, "phone" | "avatarUrl" | "profileDetails">
+    >;
+
     if (body.phone !== undefined) user.phone = body.phone;
     if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
     if (body.profileDetails !== undefined) user.profileDetails = body.profileDetails;
@@ -1859,16 +1894,56 @@ export const handlers = [
   // Field reports ----------------------------------------------------------
   http.get(`${API}/field-reports/assigned`, async ({ request }) => {
     await latency();
-    const me = currentUser(request);
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
     const items = db.fieldReports
       .filter((v) => v.assignedAgentId === me.id)
       .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
     return HttpResponse.json(items);
   }),
 
+  http.post(`${API}/field-reports/:id/accept`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find(
+      (candidate) => candidate.id === params.id && candidate.assignedAgentId === me.id,
+    );
+    if (!report) return notFound("Field report not found");
+    if (report.status !== "assigned") {
+      return conflict("This case has already been accepted or changed");
+    }
+    const now = new Date().toISOString();
+    report.status = "accepted";
+    report.acceptedAt = now;
+    await appendAudit({
+      entityType: "field-report",
+      entityId: report.id,
+      action: "status-change",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        caseId: report.id,
+        agentId: me.id,
+        acceptedAt: now,
+        previousStatus: "assigned",
+        newStatus: "accepted",
+      },
+      createdAt: now,
+    });
+    return HttpResponse.json(report);
+  }),
+
   http.post(`${API}/field-reports/:id/media`, async ({ params, request }) => {
     await latency();
-    const report = db.fieldReports.find((v) => v.id === params.id);
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find(
+      (v) => v.id === params.id && v.assignedAgentId === me.id,
+    );
     if (!report) return notFound("Field report not found");
     const body = (await request.json()) as {
       photo?: { url: string; caption?: string };
@@ -1894,7 +1969,12 @@ export const handlers = [
   // client shows (lib/field-capture.ts) so a hand-rolled request can't skip it.
   http.patch(`${API}/field-reports/:id`, async ({ params, request }) => {
     await latency();
-    const report = db.fieldReports.find((v) => v.id === params.id);
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find(
+      (v) => v.id === params.id && v.assignedAgentId === me.id,
+    );
     if (!report) return notFound("Field report not found");
 
     const body = (await request.json()) as Partial<{
@@ -1903,6 +1983,14 @@ export const handlers = [
     }>;
 
     const notes = body.notes ?? report.notes ?? "";
+
+    if (body.status) {
+      if (!(["en-route", "in-progress", "completed"] as string[]).includes(body.status)) {
+        return unprocessable({ status: { code: "invalid-transition" } });
+      }
+      const transition = reviewFieldReportTransition(report.status, body.status);
+      if (!transition.allowed) return unprocessable({ status: transition });
+    }
 
     if (body.status === "completed") {
       const review = filingReview(report, notes);
@@ -1935,7 +2023,6 @@ export const handlers = [
         ? db.disputes.find((d) => d.id === report.disputeId)
         : undefined;
       if (dispute && dispute.status === "field-visit-scheduled") {
-        const me = currentUser(request);
         dispute.status = "under-review";
         dispute.updatedAt = now;
         db.disputeEvents.push({
@@ -1959,9 +2046,14 @@ export const handlers = [
     return HttpResponse.json(report);
   }),
 
-  http.get(`${API}/field-reports/:id`, async ({ params }) => {
+  http.get(`${API}/field-reports/:id`, async ({ params, request }) => {
     await latency();
-    const report = db.fieldReports.find((v) => v.id === params.id);
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find(
+      (v) => v.id === params.id && v.assignedAgentId === me.id,
+    );
     if (!report) return notFound("Field report not found");
     return HttpResponse.json({
       report,
@@ -1971,11 +2063,14 @@ export const handlers = [
 
   http.get(`${API}/field-reports`, async ({ request }) => {
     await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "land-office") return forbidden();
     const url = new URL(request.url);
     const agent = url.searchParams.get("agent");
     const status = url.searchParams.get("status");
     let items = db.fieldReports.slice();
-    if (agent === "me") items = items.filter((v) => v.assignedAgentId === currentUser(request).id);
+    if (agent === "me") items = items.filter((v) => v.assignedAgentId === me.id);
     else if (agent) items = items.filter((v) => v.assignedAgentId === agent);
     if (status) items = items.filter((v) => v.status === status);
     items.sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
@@ -1985,7 +2080,9 @@ export const handlers = [
   /** Mirrors FieldReportsController.create() — see its own note on the gate. */
   http.post(`${API}/field-reports`, async ({ request }) => {
     await latency();
-    const me = currentUser(request);
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "land-office") return forbidden();
     const body = (await request.json()) as Partial<{
       parcelId: string;
       disputeId: string;
@@ -2023,6 +2120,7 @@ export const handlers = [
       purpose: purpose as never,
       status: "assigned" as const,
       assignedAgentId: agent.id,
+      assignedAt: now,
       scheduledFor: body.scheduledFor || now,
       addressHint: body.addressHint || undefined,
       gpsCaptures: [],

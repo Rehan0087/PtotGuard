@@ -16,6 +16,10 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
+// scrypt hash of the documented local demo password: demo1234.
+const DEMO_PASSWORD_HASH =
+  "scrypt$00112233445566778899aabbccddeeff$f2d31dd4461c5a6fe9b09ec97830ac3071d4314ded688bad919900cc7f645f15f70fa942dccd598209270ae8510abe83c4e54a92b58d420f216cc9c7cefcbede";
+
 function square(c: { lat: number; lng: number }, d = 0.0009) {
   const { lat, lng } = c;
   return {
@@ -36,14 +40,16 @@ async function main(): Promise<void> {
   // --- Jurisdictions — parents before children, so the self-FK is always
   // satisfied on insert rather than needing a second deferred pass. ---------
   await prisma.jurisdiction.createMany({
-    data: [
+    data: ([
       { id: "j-chattogram", code: "CTG", name: "Chattogram Division", nameBn: "চট্টগ্রাম বিভাগ", level: "division", parentId: null },
       { id: "j-cumilla", code: "CTG-CUM", name: "Cumilla District", nameBn: "কুমিল্লা জেলা", level: "district", parentId: "j-chattogram" },
       { id: "j-debidwar", code: "CTG-CUM-DEB", name: "Debidwar Upazila", nameBn: "দেবিদ্বার উপজেলা", level: "upazila", parentId: "j-cumilla" },
       { id: "j-barura", code: "CTG-CUM-BAR", name: "Barura Upazila", nameBn: "বরুড়া উপজেলা", level: "upazila", parentId: "j-cumilla" },
       { id: "j-rajamehar", code: "CTG-CUM-DEB-RAJ", name: "Rajamehar Mouza", nameBn: "রাজামেহার মৌজা", level: "mouza", parentId: "j-debidwar" },
       { id: "j-payalgacha", code: "CTG-CUM-BAR-PAY", name: "Payalgacha Mouza", nameBn: "পয়ালগাছা মৌজা", level: "mouza", parentId: "j-barura" },
-    ],
+    ] as Prisma.UserCreateManyInput[]).map((user) =>
+      user.status === "active" ? { ...user, passwordHash: DEMO_PASSWORD_HASH } : user,
+    ),
   });
 
   // --- Users ------------------------------------------------------------
@@ -185,9 +191,9 @@ async function main(): Promise<void> {
   // --- Field reports --------------------------------------------------------
   await prisma.fieldReport.createMany({
     data: [
-      { id: "fr-1", parcelId: "p-205", parcelDagNo: "BS-205", disputeId: "ds-402", purpose: "encroachment-check", status: "assigned", assignedAgentId: "usr-agent", scheduledFor: new Date("2026-07-24T04:00:00Z"), addressHint: "NW corner, near canal road, Payalgacha", gpsCaptures: [], photos: [] },
+      { id: "fr-1", parcelId: "p-205", parcelDagNo: "BS-205", disputeId: "ds-402", purpose: "encroachment-check", status: "assigned", assignedAgentId: "usr-agent", assignedAt: new Date("2026-07-22T08:00:00Z"), scheduledFor: new Date("2026-07-24T04:00:00Z"), addressHint: "NW corner, near canal road, Payalgacha", gpsCaptures: [], photos: [] },
       {
-        id: "fr-2", parcelId: "p-142", parcelDagNo: "CS-142/3", disputeId: "ds-417", purpose: "boundary-survey", status: "completed", assignedAgentId: "usr-agent", scheduledFor: new Date("2026-07-19T04:30:00Z"), submittedAt: new Date("2026-07-19T07:10:00Z"), addressHint: "Eastern edge, paddy field, Rajamehar",
+        id: "fr-2", parcelId: "p-142", parcelDagNo: "CS-142/3", disputeId: "ds-417", purpose: "boundary-survey", status: "completed", assignedAgentId: "usr-agent", assignedAt: new Date("2026-07-17T09:00:00Z"), acceptedAt: new Date("2026-07-17T09:30:00Z"), scheduledFor: new Date("2026-07-19T04:30:00Z"), submittedAt: new Date("2026-07-19T07:10:00Z"), addressHint: "Eastern edge, paddy field, Rajamehar",
         gpsCaptures: [
           { id: "g-1", point: { lat: 23.5494, lng: 90.9895 }, accuracyMeters: 3.2, capturedAt: "2026-07-19T05:00:00Z", label: "NE corner pillar" },
           { id: "g-2", point: { lat: 23.5486, lng: 90.9896 }, accuracyMeters: 4.1, capturedAt: "2026-07-19T05:12:00Z", label: "SE corner pillar" },
@@ -195,8 +201,8 @@ async function main(): Promise<void> {
         photos: [{ id: "ph-1", url: "", caption: "Cultivated strip past the boundary pillar", capturedAt: "2026-07-19T05:05:00Z" }],
         notes: "NE corner pillar intact. Cultivation observed ~2.8m inside the recorded line on the eastern edge. Recommend re-demarcation.",
       },
-      { id: "fr-3", parcelId: "p-176", parcelDagNo: "CS-176", purpose: "possession-verify", status: "in-progress", assignedAgentId: "usr-agent2", scheduledFor: new Date("2026-07-23T05:00:00Z"), addressHint: "Hillfoot plot, Payalgacha", gpsCaptures: [], photos: [] },
-      { id: "fr-4", parcelId: "p-088", parcelDagNo: "RS-88", mutationId: "m-1192", purpose: "measurement", status: "assigned", assignedAgentId: "usr-agent", scheduledFor: new Date("2026-07-25T04:30:00Z"), addressHint: "Homestead plot, Rajamehar", gpsCaptures: [], photos: [] },
+      { id: "fr-3", parcelId: "p-176", parcelDagNo: "CS-176", purpose: "possession-verify", status: "in-progress", assignedAgentId: "usr-agent2", assignedAt: new Date("2026-07-21T10:00:00Z"), acceptedAt: new Date("2026-07-21T10:15:00Z"), scheduledFor: new Date("2026-07-23T05:00:00Z"), addressHint: "Hillfoot plot, Payalgacha", gpsCaptures: [], photos: [] },
+      { id: "fr-4", parcelId: "p-088", parcelDagNo: "RS-88", mutationId: "m-1192", purpose: "measurement", status: "assigned", assignedAgentId: "usr-agent", assignedAt: new Date("2026-07-23T08:30:00Z"), scheduledFor: new Date("2026-07-25T04:30:00Z"), addressHint: "Homestead plot, Rajamehar", gpsCaptures: [], photos: [] },
     ] as Prisma.FieldReportCreateManyInput[],
   });
 

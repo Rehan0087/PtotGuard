@@ -15,6 +15,7 @@ package this app is built on top of.
 podman run -d --name plotguard-pg -e POSTGRES_PASSWORD=plotguard \
   -e POSTGRES_DB=plotguard -p 55432:5432 docker.io/library/postgres:16-alpine
 cp .env.example .env   # already points at the container above
+# Replace AUTH_TOKEN_SECRET in .env with a long random value.
 pnpm --filter @plotguard/rules build
 pnpm exec prisma migrate dev
 pnpm exec prisma db seed
@@ -137,17 +138,20 @@ district, so the rule takes them as input. And **the amount is never
 accepted from the client**: `POST /land-tax/pay` carries only which holding
 and which method, and recomputes what is owed server-side.
 
-## What's still a stand-in
+## Authentication and Field Agent access
 
-- **Auth.** `src/auth/dev-current-user.ts` maps the `x-plotguard-role`
-  header to a fixed demo user per role — the same mechanism the mock uses.
-  It's isolated behind one function (`currentUserId(req)`) on purpose, so
-  swapping it for real JWT-derived identity later is a one-file change, not
-  a rewrite of every controller that calls it.
-- **`passwordHash`** exists on the `User` model for when real auth lands,
-  but is never populated and is globally excluded from every response via
-  Prisma's `omit` in `PrismaService` — see the comment there before adding
-  a query that needs it.
+`POST /auth/login` verifies the user's scrypt password and returns signed,
+expiring access and refresh tokens. `GET/PATCH /auth/me` require an access
+token. The Field Agent report endpoints also require the `field-agent` role
+and scope report reads and writes to the agent named in `assignedAgentId`.
+
+`POST /field-reports/:id/accept` performs an atomic `assigned` to `accepted`
+transition inside the same transaction as its audit entry. The conditional
+update prevents two requests from claiming the same assignment; subsequent
+or racing requests receive `409 Conflict`.
+
+`passwordHash` remains globally omitted by Prisma and is selected only by
+the login query for verification, so it cannot leak through normal user reads.
 
 ## Testing
 

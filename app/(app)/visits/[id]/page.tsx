@@ -20,7 +20,7 @@ import { EmptyState } from "@/components/empty-state";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { SurveyCorners } from "@/components/survey-corners";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   useFieldReport,
   useAddFieldReportMedia,
+  useAcceptFieldReport,
   useUpdateFieldReport,
 } from "@/hooks/queries";
 import { filingReview, type FilingBlocker } from "@plotguard/rules";
@@ -39,6 +40,7 @@ import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import type { Dictionary } from "@/lib/i18n";
 import type { GeoPoint } from "@/lib/types";
+import { ApiError } from "@/lib/api-client";
 
 /** Codes from the gate, worded per locale. See lib/field-capture.ts. */
 function blockerText(t: Dictionary, b: FilingBlocker): string {
@@ -99,8 +101,9 @@ export default function CapturePage() {
   const s = useStatusMeta();
   const { id } = useParams<{ id: string }>();
 
-  const { data, isLoading } = useFieldReport(id);
+  const { data, isLoading, isError, error, refetch } = useFieldReport(id);
   const addMedia = useAddFieldReportMedia(id);
+  const acceptCase = useAcceptFieldReport();
   const updateReport = useUpdateFieldReport(id);
 
   const [pointLabel, setPointLabel] = useState("");
@@ -116,10 +119,26 @@ export default function CapturePage() {
     );
   }
 
+  if (isError && !(error instanceof ApiError && error.status === 404)) {
+    return (
+      <div className="space-y-4">
+        <Alert variant="destructive">
+          <AlertTitle>{t.common.somethingWentWrong}</AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>{t.common.tryAgain}</p>
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              {t.common.retry}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   if (!data) {
     return (
       <EmptyState icon={Ruler} title={t.pages.capture.notFound}>
-        <Link href="/visits" className="text-sm text-primary hover:underline">
+        <Link href="/field" className="text-sm text-primary hover:underline">
           {t.pages.capture.backToVisits}
         </Link>
       </EmptyState>
@@ -162,7 +181,7 @@ export default function CapturePage() {
   return (
     <div className="space-y-6">
       <Link
-        href="/visits"
+        href="/field"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
@@ -197,6 +216,24 @@ export default function CapturePage() {
             <Button
               size="sm"
               variant="secondary"
+              disabled={acceptCase.isPending}
+              onClick={() =>
+                acceptCase.mutate(report.id, {
+                  onSuccess: () => toast.success(t.pages.capture.caseAccepted),
+                  onError: () => toast.error(t.common.somethingWentWrong),
+                })
+              }
+            >
+              <Ruler className="size-3.5" />
+              {acceptCase.isPending
+                ? t.pages.capture.acceptingCase
+                : t.pages.capture.acceptCase}
+            </Button>
+          ) : null}
+          {report.status === "accepted" ? (
+            <Button
+              size="sm"
+              variant="secondary"
               disabled={updateReport.isPending}
               onClick={() => updateReport.mutate({ status: "en-route" })}
             >
@@ -204,7 +241,7 @@ export default function CapturePage() {
               {t.pages.capture.markEnRoute}
             </Button>
           ) : null}
-          {report.status === "assigned" || report.status === "en-route" ? (
+          {report.status === "accepted" || report.status === "en-route" ? (
             <Button
               size="sm"
               variant="secondary"

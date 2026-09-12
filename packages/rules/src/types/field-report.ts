@@ -8,6 +8,7 @@ export type FieldReportPurpose =
 
 export type FieldReportStatus =
   | "assigned"
+  | "accepted"
   | "en-route"
   | "in-progress"
   | "completed"
@@ -40,6 +41,10 @@ export interface FieldReport {
   purpose: FieldReportPurpose;
   status: FieldReportStatus;
   assignedAgentId: ID;
+  /** When the land office assigned the case to this agent. */
+  assignedAt?: ISODateString;
+  /** When the assigned agent explicitly claimed the case. */
+  acceptedAt?: ISODateString;
   scheduledFor: ISODateString;
   addressHint?: string;
   gpsCaptures: GpsCapture[];

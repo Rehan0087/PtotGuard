@@ -603,6 +603,18 @@ export function useFieldReport(id: string | undefined) {
   });
 }
 
+export function useAcceptFieldReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<FieldReport>(`/field-reports/${id}/accept`),
+    onSettled: (_data, _error, id) => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+    },
+  });
+}
+
 export function useAddFieldReportMedia(id: string) {
   const qc = useQueryClient();
   return useMutation({
