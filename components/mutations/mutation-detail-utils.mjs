@@ -2,6 +2,23 @@
  * A preview may either stay within this app or point to a conventional web
  * endpoint. Everything else is an unavailable preview, not a navigation.
  */
+const AUDIT_ACTIONS = new Set(["create", "status-change", "approve", "reject"]);
+const WORKFLOW_ACTIONS = new Set([
+  "start-verification",
+  "verify",
+  "complete-verification",
+  "start-objection-period",
+  "file-objection",
+  "objection-added",
+  "objection-resolved",
+]);
+
+export function mutationTimelineActionGroup(action) {
+  if (AUDIT_ACTIONS.has(action)) return "audit";
+  if (WORKFLOW_ACTIONS.has(action)) return "workflow";
+  return "unknown";
+}
+
 export function isUsableMutationPreviewUrl(value) {
   if (typeof value !== "string") return false;
 
@@ -13,7 +30,9 @@ export function isUsableMutationPreviewUrl(value) {
   if (url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\")) {
     return true;
   }
-  if (!/^https?:\/\//i.test(url)) return false;
+  // `new URL()` normalizes a third slash into a hostname. Require exactly the
+  // scheme delimiter followed immediately by a real authority character.
+  if (!/^https?:\/\/(?![\\/])/i.test(url)) return false;
 
   try {
     const parsed = new URL(url);

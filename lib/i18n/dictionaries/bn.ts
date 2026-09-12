@@ -1008,8 +1008,10 @@ export const bn: Dictionary = {
       rejecting: "প্রত্যাখ্যান করা হচ্ছে…",
       timelineAction: {
         "start-verification": "যাচাই শুরু হয়েছে",
+        verify: "যাচাই সম্পন্ন হয়েছে",
         "complete-verification": "যাচাই সম্পন্ন হয়েছে",
         "start-objection-period": "আপত্তির সময়সীমা শুরু হয়েছে",
+        "file-objection": "আপত্তি নথিভুক্ত হয়েছে",
         "objection-added": "আপত্তি নথিভুক্ত হয়েছে",
         "objection-resolved": "আপত্তি নিষ্পত্তি হয়েছে",
         unknown: "কর্মপ্রবাহ হালনাগাদ",

@@ -24,7 +24,10 @@ import {
   useStartMutationVerification,
 } from "@/hooks/queries";
 import { mutationActionState } from "@/components/mutations/mutation-action-state";
-import { isUsableMutationPreviewUrl } from "@/components/mutations/mutation-detail-utils.mjs";
+import {
+  isUsableMutationPreviewUrl,
+  mutationTimelineActionGroup,
+} from "@/components/mutations/mutation-detail-utils.mjs";
 import { ApiError } from "@/lib/api-client";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
@@ -41,36 +44,18 @@ const CHECKLIST_KEYS: (keyof MutationVerificationChecklist)[] = [
   "documentsPresent",
 ];
 
-const STANDARD_AUDIT_ACTIONS = ["create", "status-change", "approve", "reject"] as const;
-const MUTATION_TIMELINE_ACTIONS = [
-  "start-verification",
-  "complete-verification",
-  "start-objection-period",
-  "objection-added",
-  "objection-resolved",
-] as const;
-
-function isStandardAuditAction(
-  action: string,
-): action is (typeof STANDARD_AUDIT_ACTIONS)[number] {
-  return (STANDARD_AUDIT_ACTIONS as readonly string[]).includes(action);
-}
-
-function isMutationTimelineAction(
-  action: string,
-): action is (typeof MUTATION_TIMELINE_ACTIONS)[number] {
-  return (MUTATION_TIMELINE_ACTIONS as readonly string[]).includes(action);
-}
-
 function timelineActionLabel(
   action: string,
   t: ReturnType<typeof useT>,
 ): string {
-  if (isStandardAuditAction(action)) {
-    return t.domain.auditAction[action];
+  const group = mutationTimelineActionGroup(action);
+  if (group === "audit") {
+    return t.domain.auditAction[action as keyof typeof t.domain.auditAction];
   }
-  if (isMutationTimelineAction(action)) {
-    return t.pages.mutations.timelineAction[action];
+  if (group === "workflow") {
+    return t.pages.mutations.timelineAction[
+      action as Exclude<keyof typeof t.pages.mutations.timelineAction, "unknown">
+    ];
   }
   return t.pages.mutations.timelineAction.unknown;
 }

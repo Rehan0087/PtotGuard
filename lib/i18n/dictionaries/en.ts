@@ -1056,8 +1056,10 @@ export const en = {
       rejecting: "Rejecting…",
       timelineAction: {
         "start-verification": "Verification started",
+        verify: "Verification completed",
         "complete-verification": "Verification completed",
         "start-objection-period": "Objection period started",
+        "file-objection": "Objection recorded",
         "objection-added": "Objection recorded",
         "objection-resolved": "Objection resolved",
         unknown: "Workflow update",
