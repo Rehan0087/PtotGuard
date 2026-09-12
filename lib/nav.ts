@@ -2,8 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   LayoutGrid,
-  Search,
-  FileText,
   Scale,
   GitBranch,
   BookMarked,
@@ -16,11 +14,8 @@ import {
   Building2,
   SlidersHorizontal,
   ShieldCheck,
-  Banknote,
   Sprout,
   Landmark,
-  FileStack,
-  Receipt,
   CalendarClock,
   HelpCircle,
   BookOpen,
@@ -94,8 +89,8 @@ export const NAV: Record<Role, PortalNav> = {
   },
   "field-agent": {
     portalKey: "fieldSurvey",
-    home: "/visits",
-    items: [{ labelKey: "assignedVisits", href: "/visits", icon: MapPin }],
+    home: "/field",
+    items: [{ labelKey: "assignedVisits", href: "/field", icon: MapPin }],
   },
   mediator: {
     portalKey: "mediation",

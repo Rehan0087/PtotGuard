@@ -164,6 +164,10 @@ describe("open visits", () => {
   it.each(["completed", "cancelled"] as const)("counts a %s visit as closed", (status) => {
     expect(isOpenVisit(visit("fr-1", "a-1", { status }))).toBe(false);
   });
+
+  it("keeps an accepted assignment in the active workload", () => {
+    expect(isOpenVisit(visit("fr-1", "a-1", { status: "accepted" as never }))).toBe(true);
+  });
 });
 
 describe("rankCandidates — who is blocked", () => {

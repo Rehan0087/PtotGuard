@@ -1,6 +1,6 @@
 import { IsIn, IsOptional, IsString } from "class-validator";
 
-const STATUSES = ["assigned", "en-route", "in-progress", "completed", "cancelled"] as const;
+const STATUSES = ["en-route", "in-progress", "completed"] as const;
 
 export class UpdateFieldReportDto {
   @IsOptional()

@@ -225,6 +225,7 @@ export const en = {
     },
     fieldReport: {
       assigned: "Assigned",
+      accepted: "Accepted",
       "en-route": "En route",
       "in-progress": "In progress",
       completed: "Completed",
@@ -636,6 +637,11 @@ export const en = {
       gpsCount: (count: number) => `${n(count)} GPS`,
       photoCount: (count: number) => `${n(count)} photos`,
       openCapture: "Open capture",
+      acceptCase: "Accept case",
+      acceptingCase: "Accepting…",
+      caseAccepted: "Case accepted successfully.",
+      loadFailedTitle: "Could not load assigned cases",
+      loadFailedBody: "Check your connection and try again.",
       submitted: (when: string) => `Submitted ${when}`,
     },
 
@@ -646,6 +652,9 @@ export const en = {
       scheduled: (when: string) => `Scheduled ${when}`,
 
       // Status ladder
+      acceptCase: "Accept case",
+      acceptingCase: "Accepting…",
+      caseAccepted: "Case accepted.",
       markEnRoute: "Mark en route",
       markOnSite: "Mark on site",
 
@@ -680,7 +689,7 @@ export const en = {
       required: (have: number, need: number) => `${n(have)} of ${n(need)}`,
 
       blocker: {
-        notActionable: "This report is already closed.",
+        notActionable: "Mark the case in progress before filing the report.",
         needGps: (have: number, need: number) =>
           `Capture ${n(need)} GPS point${need === 1 ? "" : "s"} — you have ${n(have)}.`,
         needPhotos: (have: number, need: number) =>

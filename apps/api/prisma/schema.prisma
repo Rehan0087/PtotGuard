@@ -424,10 +424,12 @@ model FieldReport {
   mutation        Mutation? @relation(fields: [mutationId], references: [id])
   /// FieldReportPurpose: "boundary-survey" | "encroachment-check" | "possession-verify" | "measurement"
   purpose         String
-  /// FieldReportStatus: "assigned" | "en-route" | "in-progress" | "completed" | "cancelled"
+  /// FieldReportStatus: "assigned" | "accepted" | "en-route" | "in-progress" | "completed" | "cancelled"
   status          String    @default("assigned")
   assignedAgentId String
   assignedAgent   User      @relation(fields: [assignedAgentId], references: [id])
+  assignedAt      DateTime  @default(now())
+  acceptedAt      DateTime?
   scheduledFor    DateTime
   addressHint     String?
   /// GpsCapture[] — accumulate via POST .../media, never addressed singly.

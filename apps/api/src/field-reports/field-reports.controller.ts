@@ -1,9 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import {
   filingReview,
   rankCandidates,
+  reviewFieldReportTransition,
   type FieldReport,
   type Jurisdiction,
   type Parcel,
@@ -11,9 +23,12 @@ import {
 } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import { NotFoundError, ValidationError } from "../common/domain-exceptions";
+import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
 import { pageParams, paginate } from "../common/pagination";
 import { currentUserId } from "../auth/dev-current-user";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { findParcelView } from "../parcels/parcel-view";
 import { AddFieldReportMediaDto } from "./add-field-report-media.dto";
 import { BookFieldSurveyDto } from "./book-field-survey.dto";
@@ -29,6 +44,8 @@ export class FieldReportsController {
   // Declared before ":id" — Nest matches routes in registration order, and a
   // dynamic segment would otherwise swallow the literal path "assigned".
   @Get("assigned")
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
   assigned(@Req() req: Request) {
     return this.prisma.fieldReport.findMany({
       where: { assignedAgentId: currentUserId(req) },
@@ -37,6 +54,8 @@ export class FieldReportsController {
   }
 
   @Get()
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   async list(@Query() query: Record<string, string>, @Req() req: Request) {
     const agent = query.agent === "me" ? currentUserId(req) : query.agent;
     const where = {
@@ -63,6 +82,8 @@ export class FieldReportsController {
    */
   @Post()
   @HttpCode(201)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   async create(@Body() body: BookFieldSurveyDto, @Req() req: Request) {
     const actorId = currentUserId(req);
 
@@ -172,8 +193,16 @@ export class FieldReportsController {
    */
   @Post(":id/media")
   @HttpCode(201)
-  async addMedia(@Param("id") id: string, @Body() body: AddFieldReportMediaDto) {
-    const report = await this.prisma.fieldReport.findUnique({ where: { id } });
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
+  async addMedia(
+    @Param("id") id: string,
+    @Body() body: AddFieldReportMediaDto,
+    @Req() req: Request,
+  ) {
+    const report = await this.prisma.fieldReport.findFirst({
+      where: { id, assignedAgentId: currentUserId(req) },
+    });
     if (!report) throw new NotFoundError("Field report not found");
 
     const now = new Date().toISOString();
@@ -210,10 +239,53 @@ export class FieldReportsController {
   }
 
   @Get(":id")
-  async detail(@Param("id") id: string) {
-    const report = await this.prisma.fieldReport.findUnique({ where: { id } });
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
+  async detail(@Param("id") id: string, @Req() req: Request) {
+    const report = await this.prisma.fieldReport.findFirst({
+      where: { id, assignedAgentId: currentUserId(req) },
+    });
     if (!report) throw new NotFoundError("Field report not found");
     return { report, parcel: await findParcelView(this.prisma, report.parcelId) };
+  }
+
+  @Post(":id/accept")
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
+  async accept(@Param("id") id: string, @Req() req: Request) {
+    const actorId = currentUserId(req);
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const claimed = await tx.fieldReport.updateMany({
+        where: { id, assignedAgentId: actorId, status: "assigned" },
+        data: { status: "accepted", acceptedAt: now },
+      });
+      if (claimed.count !== 1) {
+        const existing = await tx.fieldReport.findUnique({ where: { id } });
+        if (!existing || existing.assignedAgentId !== actorId) {
+          throw new NotFoundError("Field report not found");
+        }
+        throw new ConflictError("This case has already been accepted or changed");
+      }
+
+      const updated = await tx.fieldReport.findUnique({ where: { id } });
+      if (!updated) throw new NotFoundError("Field report not found");
+      await this.audit.append(tx, {
+        entityType: "field-report",
+        entityId: id,
+        action: "status-change",
+        actorId,
+        payload: {
+          caseId: id,
+          agentId: actorId,
+          acceptedAt: now.toISOString(),
+          previousStatus: "assigned",
+          newStatus: "accepted",
+        },
+      });
+      return updated;
+    });
   }
 
   /**
@@ -224,25 +296,45 @@ export class FieldReportsController {
    * skip it.
    */
   @Patch(":id")
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
   async update(
     @Param("id") id: string,
     @Body() body: UpdateFieldReportDto,
     @Req() req: Request,
   ) {
-    const report = await this.prisma.fieldReport.findUnique({ where: { id } });
+    const actorId = currentUserId(req);
+    const report = await this.prisma.fieldReport.findFirst({
+      where: { id, assignedAgentId: actorId },
+    });
     if (!report) throw new NotFoundError("Field report not found");
 
     const notes = body.notes ?? report.notes ?? "";
-    const actorId = currentUserId(req);
+
+    if (body.status) {
+      const transition = reviewFieldReportTransition(
+        report.status as FieldReport["status"],
+        body.status,
+      );
+      if (!transition.allowed) throw new ValidationError(transition, "status");
+    }
 
     if (body.status !== "completed") {
-      return this.prisma.fieldReport.update({
-        where: { id },
+      if (!body.status) {
+        return this.prisma.fieldReport.update({
+          where: { id },
+          data: { ...(body.notes !== undefined ? { notes: body.notes } : {}) },
+        });
+      }
+      const changed = await this.prisma.fieldReport.updateMany({
+        where: { id, assignedAgentId: actorId, status: report.status },
         data: {
+          status: body.status,
           ...(body.notes !== undefined ? { notes: body.notes } : {}),
-          ...(body.status ? { status: body.status } : {}),
         },
       });
+      if (changed.count !== 1) throw new ConflictError("This case changed; reload and try again");
+      return this.prisma.fieldReport.findUnique({ where: { id } });
     }
 
     const review = filingReview(report as unknown as FieldReport, notes);
@@ -250,14 +342,17 @@ export class FieldReportsController {
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
-      const updated = await tx.fieldReport.update({
-        where: { id },
+      const changed = await tx.fieldReport.updateMany({
+        where: { id, assignedAgentId: actorId, status: report.status },
         data: {
           status: "completed",
           submittedAt: now,
           ...(body.notes !== undefined ? { notes: body.notes } : {}),
         },
       });
+      if (changed.count !== 1) throw new ConflictError("This case changed; reload and try again");
+      const updated = await tx.fieldReport.findUnique({ where: { id } });
+      if (!updated) throw new NotFoundError("Field report not found");
 
       await this.audit.append(tx, {
         entityType: "field-report",

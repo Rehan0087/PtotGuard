@@ -2,14 +2,13 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Role } from "@/lib/types";
+import type { AuthTokens, Role, User } from "@/lib/types";
 
 /**
  * Client-only session state. `isAuthenticated` gates the app shell — false
- * until /login sets it. The "active role" it carries is still what every
- * request is scoped by (sent as a header; see api-client.ts), the same
- * stand-in as before login existed. When real auth lands, `login` becomes
- * where the server's session token gets stored instead of just a role.
+ * until /login stores the server response. The role and tokens always arrive
+ * together, so the portal shell and API client use the same authenticated
+ * identity.
  *
  * `hasHydrated` exists because persisted state loads from localStorage
  * *after* the first render, not before: on a hard refresh the store starts
@@ -20,10 +19,10 @@ import type { Role } from "@/lib/types";
  */
 interface SessionState {
   role: Role;
+  tokens: AuthTokens | null;
   isAuthenticated: boolean;
   hasHydrated: boolean;
-  setRole: (role: Role) => void;
-  login: (role: Role) => void;
+  login: (user: Pick<User, "role">, tokens: AuthTokens) => void;
   logout: () => void;
 }
 
@@ -31,11 +30,11 @@ export const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
       role: "citizen",
+      tokens: null,
       isAuthenticated: false,
       hasHydrated: false,
-      setRole: (role) => set({ role }),
-      login: (role) => set({ role, isAuthenticated: true }),
-      logout: () => set({ isAuthenticated: false }),
+      login: (user, tokens) => set({ role: user.role, tokens, isAuthenticated: true }),
+      logout: () => set({ role: "citizen", tokens: null, isAuthenticated: false }),
     }),
     { name: "plotguard-session" },
   ),
@@ -53,5 +52,6 @@ if (typeof window !== "undefined") {
   }
 }
 
-/** Read the active role outside React (used by the api-client). */
-export const getActiveRole = (): Role => useSessionStore.getState().role;
+/** Read the bearer token outside React (used by the api-client). */
+export const getAccessToken = (): string | null =>
+  useSessionStore.getState().tokens?.accessToken ?? null;
