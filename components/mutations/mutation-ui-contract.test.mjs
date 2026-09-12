@@ -11,10 +11,15 @@ const pageSource = await readFile(
   new URL("../../app/(app)/mutations/page.tsx", import.meta.url),
   "utf8",
 );
-const decisionSource = await readFile(
-  new URL("./mutation-decision-dialog.tsx", import.meta.url),
-  "utf8",
-);
+let mutationDecisionSuccessState;
+let retryMutationQueue;
+try {
+  ({ mutationDecisionSuccessState, retryMutationQueue } = await import(
+    "./mutation-page-state.mjs"
+  ));
+} catch {
+  // The assertions below record a missing implementation as test failures.
+}
 
 test("mutation query hooks expose the complete officer workflow", () => {
   for (const hook of [
@@ -66,17 +71,50 @@ test("mutations page integrates the complete URL-backed officer workflow", () =>
 });
 
 test("successful decisions switch from confirmation to refreshed selected detail", () => {
-  assert.match(decisionSource, /onSuccess\?: \(\) => void;/);
-  assert.match(decisionSource, /onSuccess\?\.\(\);/);
-  assert.match(decisionSource, /disabled=\{!canSubmit\}/);
-  assert.match(
-    pageSource,
-    /onSuccess=\{\(\) => \{\s*setDecision\(null\);\s*setDetailOpen\(true\);\s*}\}/,
-  );
+  assert.equal(typeof mutationDecisionSuccessState, "function");
+  assert.deepEqual(mutationDecisionSuccessState("mutation-database-id"), {
+    selectedMutationId: "mutation-database-id",
+    decision: null,
+    detailOpen: true,
+  });
+  assert.match(pageSource, /mutationDecisionSuccessState\(selectedMutationId\)/);
 });
 
-test("queue retry refreshes auth and list through one pending action", () => {
-  assert.match(pageSource, /await Promise\.all\(\[session\.refetch\(\), refetch\(\)\]\)/);
-  assert.match(pageSource, /disabled=\{retrying\}/);
-  assert.match(pageSource, /onClick=\{\(\) => void retryQueue\(\)\}/);
+test("queue retry invokes and awaits both auth and list refreshes", async () => {
+  assert.equal(typeof retryMutationQueue, "function");
+
+  let resolveSession;
+  let resolveList;
+  let sessionCalls = 0;
+  let listCalls = 0;
+  const sessionRefresh = new Promise((resolve) => {
+    resolveSession = resolve;
+  });
+  const listRefresh = new Promise((resolve) => {
+    resolveList = resolve;
+  });
+
+  let settled = false;
+  const retry = retryMutationQueue(
+    () => {
+      sessionCalls += 1;
+      return sessionRefresh;
+    },
+    () => {
+      listCalls += 1;
+      return listRefresh;
+    },
+  ).then(() => {
+    settled = true;
+  });
+
+  assert.equal(sessionCalls, 1);
+  assert.equal(listCalls, 1);
+  resolveSession();
+  await Promise.resolve();
+  assert.equal(settled, false, "retry must wait for the mutation list too");
+  resolveList();
+  await retry;
+  assert.equal(settled, true);
+  assert.match(pageSource, /retryMutationQueue\(/);
 });

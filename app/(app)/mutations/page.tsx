@@ -21,6 +21,10 @@ import { IdChip } from "@/components/id-chip";
 import { mutationActionState } from "@/components/mutations/mutation-action-state";
 import { MutationDecisionDialog } from "@/components/mutations/mutation-decision-dialog";
 import { MutationDetailDialog } from "@/components/mutations/mutation-detail-dialog";
+import {
+  mutationDecisionSuccessState,
+  retryMutationQueue,
+} from "@/components/mutations/mutation-page-state.mjs";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -572,7 +576,14 @@ function OfficerMutations() {
   }
 
   async function retryQueue() {
-    await Promise.all([session.refetch(), refetch()]);
+    await retryMutationQueue(() => session.refetch(), () => refetch());
+  }
+
+  function showSuccessfulDecisionDetail() {
+    const next = mutationDecisionSuccessState(selectedMutationId);
+    setSelectedMutationId(next.selectedMutationId);
+    setDecision(next.decision);
+    setDetailOpen(next.detailOpen);
   }
 
   return (
@@ -690,10 +701,7 @@ function OfficerMutations() {
           mutation={selectedMutation}
           decision={decision}
           open
-          onSuccess={() => {
-            setDecision(null);
-            setDetailOpen(true);
-          }}
+          onSuccess={showSuccessfulDecisionDetail}
           onOpenChange={(open) => {
             if (!open) closeDecision();
           }}
