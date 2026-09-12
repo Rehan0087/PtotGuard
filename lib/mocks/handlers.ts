@@ -11,6 +11,10 @@ import type {
   FieldReportStatus,
   Jurisdiction,
   JurisdictionLevel,
+  Mutation,
+  MutationStatus,
+  MutationVerificationChecklist,
+  OwnershipRecord,
   Paginated,
   Policy,
   RestrictionType,
@@ -21,14 +25,15 @@ import { ROLES } from "@/lib/types";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
   activeRestrictions,
-  approvalGate,
   assessLandTax,
   calcInheritance,
   deletionGate,
+  descendantIds,
   executionGate,
   extractionReview,
   filingReview,
   normaliseUlpin,
+  mutationActionGate,
   rankCandidates,
   registryStatusAfter,
   reviewDraft,
@@ -36,11 +41,17 @@ import {
   rulingGate,
   toPublicParcel,
   transferReview,
+  verificationGate,
   type LandTaxRates,
   type RulingOutcome,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
+import { hydrateMutationState, persistMutationState } from "./mutation-store";
+
+// Restore mutation-owned preview state before any handler (including parcel
+// reads) can observe the in-memory seed after a hard refresh.
+hydrateMutationState();
 
 // --- helpers ---------------------------------------------------------------
 
@@ -56,6 +67,66 @@ function getRole(request: Request): Role {
 function currentUser(request: Request): User {
   const id = db.CURRENT_USER_BY_ROLE[getRole(request)];
   return db.users.find((u) => u.id === id)!;
+}
+
+function forbidden(message = "Forbidden") {
+  return HttpResponse.json({ error: "forbidden", message }, { status: 403 });
+}
+
+function isActiveLandOffice(user: User): boolean {
+  return user.role === "land-office" && user.status === "active";
+}
+
+function coveredJurisdictionIds(user: User): Set<string> {
+  return new Set([
+    user.jurisdictionId,
+    ...descendantIds(user.jurisdictionId, db.jurisdictions),
+  ]);
+}
+
+function mutationParcel(mutation: Mutation) {
+  return db.parcels.find((parcel) => parcel.id === mutation.parcelId);
+}
+
+function mutationActionAccess(mutation: Mutation, actor: User) {
+  if (!isActiveLandOffice(actor)) {
+    return forbidden("Land Office Staff access required.");
+  }
+  if (mutation.assignedOfficerId && mutation.assignedOfficerId !== actor.id) {
+    return forbidden("This mutation is assigned to another officer.");
+  }
+  const parcel = mutationParcel(mutation);
+  if (!parcel) return notFound("Parcel not found");
+  if (!coveredJurisdictionIds(actor).has(parcel.jurisdictionId)) {
+    return forbidden("This mutation is outside your jurisdiction.");
+  }
+  return null;
+}
+
+function transitionError(
+  mutation: Mutation,
+  actor: User,
+  now: Date,
+  action: "canStartVerification" | "canCompleteVerification" | "canApprove" | "canReject",
+  expected: MutationStatus[],
+) {
+  const gate = mutationActionGate(mutation, actor.id, now);
+  if (gate.hold?.code === "already-decided") {
+    return conflict("This mutation has already been decided.");
+  }
+  if (gate[action]) return null;
+
+  const transitionAlreadyApplied =
+    (action === "canStartVerification" && ["verification", "objection-period"].includes(mutation.status))
+    || (action === "canCompleteVerification" && mutation.status === "objection-period");
+  if (transitionAlreadyApplied) {
+    return conflict("This mutation has already moved past that workflow transition.");
+  }
+
+  const reason = gate.hold?.code === "wrong-status" || !gate.hold
+    ? { code: "wrong-status", expected }
+    : gate.hold;
+  return unprocessable({ status: reason });
 }
 
 function paginate<T>(items: T[], url: URL): Paginated<T> {
@@ -614,6 +685,7 @@ export const handlers = [
   /** Mirrors MutationsController.create() — toOwnerId names a registered account. */
   http.post(`${API}/mutations`, async ({ request }) => {
     await latency();
+    hydrateMutationState();
     const body = (await request.json()) as Partial<{
       parcelId: string;
       type: string;
@@ -642,7 +714,7 @@ export const handlers = [
     const me = currentUser(request);
     const seq = 1300 + db.mutations.length;
     const now = new Date().toISOString();
-    const mutation = {
+    const mutation: Mutation = {
       id: `m-${Date.now()}`,
       mutationNumber: `MUT-2026-${String(seq).padStart(5, "0")}`,
       parcelId: parcel.id,
@@ -651,6 +723,7 @@ export const handlers = [
       status: "submitted" as const,
       // The registry's own fact, not the applicant's claim.
       fromOwnerName: parcel.ownerName,
+      fromOwnerId: parcel.ownerId,
       toOwnerId: toOwner.id,
       toOwnerName: toOwner.name,
       requestedById: me.id,
@@ -663,6 +736,8 @@ export const handlers = [
       paymentMethod: body.paymentMethod as never,
       // Simulated — no gateway is called.
       transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+      createdAt: now,
+      updatedAt: now,
     };
     db.mutations.unshift(mutation);
 
@@ -676,94 +751,271 @@ export const handlers = [
         mutationNumber: mutation.mutationNumber,
         parcelDagNo: mutation.parcelDagNo,
         toOwnerName: mutation.toOwnerName,
+        newStatus: "submitted",
       },
     });
+    persistMutationState();
 
     return HttpResponse.json(mutation, { status: 201 });
   }),
 
-  // approvalGate() used to run client-side only (the button disables, but
-  // nothing here checked it) — exactly the gap this file's own header says
-  // this project avoids: a UI that explains a hold is not a server that
-  // enforces one. A request that bypassed the disabled button would have
-  // gone straight through.
-  http.patch(`${API}/mutations/:id/decision`, async ({ params, request }) => {
+  http.patch(`${API}/mutations/:id/start-verification`, async ({ params, request }) => {
     await latency();
-    const mutation = db.mutations.find((m) => m.id === params.id);
+    hydrateMutationState();
+    const actor = currentUser(request);
+    if (!isActiveLandOffice(actor)) return forbidden("Land Office Staff access required.");
+    const mutation = db.mutations.find((item) => item.id === params.id);
     if (!mutation) return notFound("Mutation not found");
-    const { decision } = (await request.json()) as { decision: "approve" | "reject" };
+    const accessError = mutationActionAccess(mutation, actor);
+    if (accessError) return accessError;
 
-    if (mutation.status === "approved" || mutation.status === "rejected") {
-      return conflict("This mutation has already been decided.");
-    }
-    const gate = approvalGate(mutation);
-    const allowed = decision === "approve" ? gate.canApprove : gate.canReject;
-    if (!allowed) return unprocessable({ decision: gate.hold ?? undefined });
-
-    const now = new Date().toISOString();
-    mutation.status = decision === "approve" ? "approved" : "rejected";
-    mutation.decidedAt = now;
-
-    if (decision === "approve" && mutation.toOwnerId) {
-      const parcel = db.parcels.find((p) => p.id === mutation.parcelId);
-      if (parcel) {
-        parcel.ownerId = mutation.toOwnerId;
-        parcel.ownerName = mutation.toOwnerName;
-        parcel.lastMutationAt = now;
-      }
-      for (const r of db.ownershipRecords) {
-        if (r.parcelId === mutation.parcelId && r.toDate === null) r.toDate = now;
-      }
-      db.ownershipRecords.unshift({
-        id: `own-${Date.now()}`,
-        parcelId: mutation.parcelId,
-        ownerId: mutation.toOwnerId,
-        ownerName: mutation.toOwnerName,
-        acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type],
-        fromDate: now,
-        toDate: null,
-        documentId: mutation.documentIds[0],
-      });
-    }
-
-    const me = currentUser(request);
+    const now = new Date();
+    const gateError = transitionError(mutation, actor, now, "canStartVerification", ["submitted"]);
+    if (gateError) return gateError;
+    const previousStatus = mutation.status;
+    const at = now.toISOString();
+    Object.assign(mutation, {
+      status: "verification" as const,
+      assignedOfficerId: actor.id,
+      verificationStartedAt: at,
+      verificationStartedById: actor.id,
+      updatedAt: at,
+    });
     await appendAudit({
       entityType: "mutation",
       entityId: mutation.id,
-      action: decision,
-      actorId: me.id,
-      actorName: me.name,
+      action: "status-change",
+      actorId: actor.id,
+      actorName: actor.name,
+      payload: { previousStatus, newStatus: mutation.status, actorRole: actor.role },
+    });
+    persistMutationState();
+    return HttpResponse.json(mutation);
+  }),
+
+  http.patch(`${API}/mutations/:id/complete-verification`, async ({ params, request }) => {
+    await latency();
+    hydrateMutationState();
+    const actor = currentUser(request);
+    if (!isActiveLandOffice(actor)) return forbidden("Land Office Staff access required.");
+    const mutation = db.mutations.find((item) => item.id === params.id);
+    if (!mutation) return notFound("Mutation not found");
+    const accessError = mutationActionAccess(mutation, actor);
+    if (accessError) return accessError;
+
+    const body = (await request.json()) as Partial<MutationVerificationChecklist & { notes: string }>;
+    const checklist: MutationVerificationChecklist = {
+      applicantVerified: body.applicantVerified === true,
+      previousOwnerVerified: body.previousOwnerVerified === true,
+      proposedOwnerVerified: body.proposedOwnerVerified === true,
+      dagKhatianVerified: body.dagKhatianVerified === true,
+      deedVerified: body.deedVerified === true,
+      landRecordMatched: body.landRecordMatched === true,
+      documentsPresent: body.documentsPresent === true,
+    };
+    const notes = typeof body.notes === "string" ? body.notes.trim() : "";
+    const now = new Date();
+    const gateError = transitionError(mutation, actor, now, "canCompleteVerification", ["verification"]);
+    if (gateError) return gateError;
+    const verification = verificationGate(checklist, notes);
+    if (!verification.ok) return unprocessable({ verification: verification.reason });
+    if (!Number.isInteger(db.policies.objectionWindowDays) || db.policies.objectionWindowDays < 0) {
+      return unprocessable({ verification: { code: "objection-policy-unavailable" } });
+    }
+
+    const previousStatus = mutation.status;
+    const at = now.toISOString();
+    Object.assign(mutation, {
+      status: "objection-period" as const,
+      assignedOfficerId: actor.id,
+      verifiedAt: at,
+      verifiedById: actor.id,
+      verificationNotes: notes,
+      verificationChecklist: checklist,
+      objectionStartDate: at,
+      objectionWindowEndsAt: new Date(now.getTime() + db.policies.objectionWindowDays * 86_400_000).toISOString(),
+      updatedAt: at,
+    });
+    await appendAudit({
+      entityType: "mutation",
+      entityId: mutation.id,
+      action: "status-change",
+      actorId: actor.id,
+      actorName: actor.name,
+      payload: { previousStatus, newStatus: mutation.status, actorRole: actor.role, note: notes },
+    });
+    persistMutationState();
+    return HttpResponse.json(mutation);
+  }),
+
+  http.patch(`${API}/mutations/:id/decision`, async ({ params, request }) => {
+    await latency();
+    hydrateMutationState();
+    const actor = currentUser(request);
+    if (!isActiveLandOffice(actor)) return forbidden("Land Office Staff access required.");
+    const mutation = db.mutations.find((item) => item.id === params.id);
+    if (!mutation) return notFound("Mutation not found");
+    const accessError = mutationActionAccess(mutation, actor);
+    if (accessError) return accessError;
+    const body = (await request.json()) as Partial<{
+      decision: string;
+      rejectionReason: string;
+      approvalNote: string;
+    }>;
+    if (body.decision !== "approve" && body.decision !== "reject") {
+      return unprocessable({ decision: { code: "invalid-decision" } });
+    }
+
+    const approving = body.decision === "approve";
+    const now = new Date();
+    const gateError = transitionError(
+      mutation,
+      actor,
+      now,
+      approving ? "canApprove" : "canReject",
+      approving ? ["objection-period"] : ["submitted", "verification", "objection-period"],
+    );
+    if (gateError) return gateError;
+    const reason = typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
+    const note = typeof body.approvalNote === "string" ? body.approvalNote.trim() : undefined;
+    if (!approving && !reason) {
+      return unprocessable({ rejectionReason: { code: "rejection-reason-required" } });
+    }
+
+    const parcel = mutationParcel(mutation)!;
+    if (approving) {
+      if (!mutation.objectionWindowEndsAt) {
+        return unprocessable({ decision: { code: "objection-window-missing" } });
+      }
+      if (!mutation.fromOwnerId || parcel.ownerId !== mutation.fromOwnerId) {
+        return conflict("The parcel owner has changed since this mutation was filed.");
+      }
+      const recipient = db.users.find((user) => user.id === mutation.toOwnerId);
+      if (!recipient || recipient.role !== "citizen" || recipient.status !== "active") {
+        return unprocessable({ toOwnerId: { code: "invalid-recipient" } });
+      }
+    }
+
+    const previousStatus = mutation.status;
+    const at = now.toISOString();
+    mutation.assignedOfficerId = actor.id;
+    mutation.decidedAt = at;
+    mutation.updatedAt = at;
+    if (approving) {
+      mutation.status = "approved";
+      mutation.approvedAt = at;
+      mutation.approvedById = actor.id;
+      mutation.approvalNote = note;
+      const toOwnerId = mutation.toOwnerId!;
+      parcel.ownerId = toOwnerId;
+      parcel.ownerName = mutation.toOwnerName;
+      parcel.lastMutationAt = at;
+      for (const record of db.ownershipRecords) {
+        if (record.parcelId === mutation.parcelId && record.toDate === null) record.toDate = at;
+      }
+      const ownershipRecord = {
+        id: `own-${Date.now()}`,
+        parcelId: mutation.parcelId,
+        ownerId: toOwnerId,
+        ownerName: mutation.toOwnerName,
+        acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type],
+        fromDate: at,
+        toDate: null,
+        documentId: mutation.documentIds[0],
+        mutationId: mutation.id,
+      } satisfies OwnershipRecord & { mutationId: string };
+      db.ownershipRecords.unshift(ownershipRecord);
+    } else {
+      mutation.status = "rejected";
+      mutation.rejectedAt = at;
+      mutation.rejectedById = actor.id;
+      mutation.rejectionReason = reason;
+    }
+
+    await appendAudit({
+      entityType: "mutation",
+      entityId: mutation.id,
+      action: body.decision,
+      actorId: actor.id,
+      actorName: actor.name,
       payload: {
         mutationNumber: mutation.mutationNumber,
         parcelDagNo: mutation.parcelDagNo,
         toOwnerName: mutation.toOwnerName,
+        previousStatus,
+        newStatus: mutation.status,
+        actorRole: actor.role,
+        ...(approving ? (note ? { note } : {}) : { reason }),
       },
     });
-
+    persistMutationState();
     return HttpResponse.json(mutation);
   }),
 
-  http.get(`${API}/mutations/:id`, async ({ params }) => {
+  http.get(`${API}/mutations/:id`, async ({ params, request }) => {
     await latency();
-    const mutation = db.mutations.find((m) => m.id === params.id);
+    hydrateMutationState();
+    const mutation = db.mutations.find((item) => item.id === params.id);
     if (!mutation) return notFound("Mutation not found");
+    if (getRole(request) === "land-office") {
+      const actor = currentUser(request);
+      if (!isActiveLandOffice(actor)) return forbidden("Land Office Staff access required.");
+      const parcel = mutationParcel(mutation);
+      if (parcel && !coveredJurisdictionIds(actor).has(parcel.jurisdictionId)) {
+        return forbidden("This mutation is outside your jurisdiction.");
+      }
+    }
+
+    const chain = await getAuditChain();
+    const summary = (id: string | undefined) => {
+      const user = id ? db.users.find((item) => item.id === id) : undefined;
+      return user ? { id: user.id, name: user.name, ...(user.title ? { title: user.title } : {}) } : null;
+    };
+    const statuses: MutationStatus[] = ["submitted", "verification", "objection-period", "approved", "rejected"];
+    const asStatus = (value: unknown): MutationStatus | undefined =>
+      typeof value === "string" && statuses.includes(value as MutationStatus) ? value as MutationStatus : undefined;
+    const asString = (value: unknown): string | undefined => typeof value === "string" ? value : undefined;
     return HttpResponse.json({
       mutation,
-      parcel: db.parcels.find((p) => p.id === mutation.parcelId) ?? null,
-      documents: db.documents.filter((d) => mutation.documentIds.includes(d.id)),
+      parcel: mutationParcel(mutation) ?? null,
+      documents: db.documents.filter((document) => mutation.documentIds.includes(document.id)),
+      applicant: summary(mutation.requestedById),
+      assignedOfficer: summary(mutation.assignedOfficerId),
+      timeline: chain
+        .filter((event) => event.entityType === "mutation" && event.entityId === mutation.id)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .map((event) => ({
+          id: event.id,
+          action: event.action,
+          at: event.createdAt,
+          actorName: event.actorName ?? "System",
+          actorRole: asString(event.payload.actorRole),
+          previousStatus: asStatus(event.payload.previousStatus),
+          newStatus: asStatus(event.payload.newStatus),
+          note: asString(event.payload.note ?? event.payload.reason),
+        })),
     });
   }),
 
   http.get(`${API}/mutations`, async ({ request }) => {
     await latency();
+    hydrateMutationState();
     const url = new URL(request.url);
     const scope = url.searchParams.get("scope");
     const status = url.searchParams.get("status");
     const me = currentUser(request);
     let items = db.mutations.slice();
-    if (scope === "mine") items = items.filter((m) => m.requestedById === me.id);
-    else if (scope === "assigned") items = items.filter((m) => m.assignedOfficerId === me.id);
-    if (status) items = items.filter((m) => m.status === status);
+    if (getRole(request) === "land-office") {
+      if (!isActiveLandOffice(me)) return forbidden("Land Office Staff access required.");
+      const covered = coveredJurisdictionIds(me);
+      items = items.filter((mutation) => {
+        const parcel = mutationParcel(mutation);
+        return parcel ? covered.has(parcel.jurisdictionId) : false;
+      });
+      if (scope === "assigned") items = items.filter((mutation) => mutation.assignedOfficerId === me.id);
+    } else if (scope === "mine") items = items.filter((mutation) => mutation.requestedById === me.id);
+    else if (scope === "assigned") items = items.filter((mutation) => mutation.assignedOfficerId === me.id);
+    if (status) items = items.filter((mutation) => mutation.status === status);
     items.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return HttpResponse.json(paginate(items, url));
   }),
