@@ -7,6 +7,10 @@ const actionStateSource = await readFile(
   new URL("./mutation-action-state.ts", import.meta.url),
   "utf8",
 );
+const pageSource = await readFile(
+  new URL("../../app/(app)/mutations/page.tsx", import.meta.url),
+  "utf8",
+);
 
 test("mutation query hooks expose the complete officer workflow", () => {
   for (const hook of [
@@ -28,4 +32,31 @@ test("mutation action presentation delegates workflow decisions to the shared ga
   assert.doesNotMatch(actionStateSource, /mutation\.status\s*===\s*["']submitted["']/);
   assert.doesNotMatch(actionStateSource, /mutation\.status\s*===\s*["']verification["']/);
   assert.doesNotMatch(actionStateSource, /mutation\.status\s*===\s*["']objection-period["']/);
+});
+
+test("mutations page integrates the complete URL-backed officer workflow", () => {
+  const queryHookImport = pageSource.match(
+    /import\s*{(?<imports>[^}]*)}\s*from\s*["']@\/hooks\/queries["'];/,
+  );
+  assert.ok(queryHookImport?.groups?.imports, "expected a named import from @/hooks/queries");
+
+  for (const hook of [
+    "useStartMutationVerification",
+    "useCompleteMutationVerification",
+    "useMutationDecision",
+  ]) {
+    assert.match(queryHookImport.groups.imports, new RegExp(`\\b${hook}\\b`));
+  }
+
+  assert.match(pageSource, /const SCOPE_FILTERS = \["all", "assigned"\] as const;/);
+  assert.match(
+    pageSource,
+    /const STATUS_FILTERS = \[\s*"all",\s*"submitted",\s*"verification",\s*"objection-period",\s*"approved",\s*"rejected",?\s*\] as const;/,
+  );
+  assert.match(pageSource, /useSearchParams\(\)/);
+  assert.match(pageSource, /router\.replace\(/);
+  assert.match(pageSource, /<Suspense\s+fallback=/);
+  assert.match(pageSource, /<MutationDetailDialog\b/);
+  assert.match(pageSource, /<MutationDecisionDialog\b/);
+  assert.match(pageSource, /href=\{`\/parcels\/\$\{mutation\.parcelId\}`\}/);
 });
