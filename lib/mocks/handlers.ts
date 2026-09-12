@@ -178,16 +178,24 @@ function validateCreateMutationBody(value: unknown) {
   if (!PAYMENT_METHODS.includes(body.paymentMethod as typeof PAYMENT_METHODS[number])) {
     return { ok: false as const, response: badRequest(`paymentMethod must be one of the following values: ${PAYMENT_METHODS.join(", ")}`) };
   }
-  if (body.deedNumber !== undefined && typeof body.deedNumber !== "string") {
+  if (body.deedNumber !== undefined && body.deedNumber !== null && typeof body.deedNumber !== "string") {
     return { ok: false as const, response: badRequest("deedNumber must be a string") };
   }
-  if (body.deedDate !== undefined && typeof body.deedDate !== "string") {
+  if (body.deedDate !== undefined && body.deedDate !== null && typeof body.deedDate !== "string") {
     return { ok: false as const, response: badRequest("deedDate must be a string") };
   }
-  if (body.documentIds !== undefined && (!Array.isArray(body.documentIds) || body.documentIds.some((id) => typeof id !== "string"))) {
+  if (body.documentIds !== undefined && body.documentIds !== null && (!Array.isArray(body.documentIds) || body.documentIds.some((id) => typeof id !== "string"))) {
     return { ok: false as const, response: badRequest("each value in documentIds must be a string") };
   }
-  return { ok: true as const, value: body as CreateMutationBody };
+  return { ok: true as const, value: {
+    parcelId: body.parcelId,
+    type: body.type,
+    toOwnerId: body.toOwnerId,
+    deedNumber: typeof body.deedNumber === "string" ? body.deedNumber : undefined,
+    deedDate: typeof body.deedDate === "string" ? body.deedDate : undefined,
+    documentIds: Array.isArray(body.documentIds) ? body.documentIds as string[] : undefined,
+    paymentMethod: body.paymentMethod,
+  } as CreateMutationBody };
 }
 
 function validateVerificationBody(value: unknown) {
@@ -222,7 +230,7 @@ function validateDecisionBody(value: unknown) {
       return { ok: false as const, response: badRequest("rejectionReason must contain non-whitespace characters") };
     }
   }
-  if (body.decision === "approve" && body.approvalNote !== undefined && typeof body.approvalNote !== "string") {
+  if (body.decision === "approve" && body.approvalNote !== undefined && body.approvalNote !== null && typeof body.approvalNote !== "string") {
     return { ok: false as const, response: badRequest("approvalNote must be a string") };
   }
   return { ok: true as const, value: {
