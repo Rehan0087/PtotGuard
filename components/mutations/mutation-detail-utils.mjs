@@ -19,6 +19,21 @@ export function mutationTimelineActionGroup(action) {
   return "unknown";
 }
 
+/**
+ * @param {import("../../lib/types").MutationDetail | undefined} detail
+ * @param {string | undefined} [fallbackIdentifier]
+ */
+export function mutationDetailPresentation(detail, fallbackIdentifier) {
+  return {
+    identifier: detail?.mutation.mutationNumber ?? fallbackIdentifier,
+    currentStatus: detail?.mutation.status ?? null,
+    documents: (detail?.documents ?? []).map((document) => ({
+      document,
+      verificationStatus: document.verificationStatus,
+    })),
+  };
+}
+
 export function isUsableMutationPreviewUrl(value) {
   if (typeof value !== "string") return false;
 

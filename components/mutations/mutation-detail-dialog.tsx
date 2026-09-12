@@ -27,6 +27,7 @@ import {
 import { mutationActionState } from "@/components/mutations/mutation-action-state";
 import {
   isUsableMutationPreviewUrl,
+  mutationDetailPresentation,
   mutationTimelineActionGroup,
 } from "@/components/mutations/mutation-detail-utils.mjs";
 import { ApiError } from "@/lib/api-client";
@@ -91,7 +92,8 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
   const session = useSession();
   const start = useStartMutationVerification(detail.mutation.id);
   const [decision, setDecision] = useState<"approve" | "reject" | null>(null);
-  const { mutation, parcel, documents, applicant, assignedOfficer, timeline } = detail;
+  const { mutation, parcel, applicant, assignedOfficer, timeline } = detail;
+  const presentation = mutationDetailPresentation(detail);
   const actorId = session.data?.user.id;
   const action = actorId ? mutationActionState(mutation, actorId) : null;
 
@@ -118,7 +120,11 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                 { label: t.pages.mutations.mutationType, value: t.domain.mutationType[mutation.type] },
                 {
                   label: t.pages.mutations.currentStatus,
-                  value: <StatusMetaBadge meta={s.mutation[mutation.status]} />,
+                  value: (
+                    <StatusMetaBadge
+                      meta={s.mutation[presentation.currentStatus ?? mutation.status]}
+                    />
+                  ),
                 },
                 { label: t.pages.mutations.requestedAt, value: f.dateTime(mutation.requestedAt) },
                 { label: t.pages.mutations.requestedBy, value: applicant?.name ?? t.common.notAvailable },
@@ -161,9 +167,9 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
           </DetailSection>
 
           <DetailSection title={t.pages.mutations.documents}>
-            {documents.length ? (
+            {presentation.documents.length ? (
               <ul className="divide-y divide-border">
-                {documents.map((document) => {
+                {presentation.documents.map(({ document, verificationStatus }) => {
                   const previewUrl = document.thumbnailUrl?.trim();
                   const canPreview = isUsableMutationPreviewUrl(previewUrl);
                   return (
@@ -182,7 +188,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
-                        <StatusMetaBadge meta={s.verification[document.verificationStatus]} />
+                        <StatusMetaBadge meta={s.verification[verificationStatus]} />
                         {canPreview && previewUrl ? (
                           <a
                             href={previewUrl}
@@ -364,7 +370,7 @@ export function MutationDetailDialog({
   const t = useT();
   const detail = useMutationById(mutationId);
   const notFound = detail.error instanceof ApiError && detail.error.status === 404;
-  const headerIdentifier = detail.data?.mutation.mutationNumber ?? mutationId;
+  const presentation = mutationDetailPresentation(detail.data, mutationId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -372,7 +378,7 @@ export function MutationDetailDialog({
         <DialogHeader className="border-b px-4 py-4 pr-12">
           <DialogTitle>{t.pages.mutations.detailTitle}</DialogTitle>
           <DialogDescription>
-            {headerIdentifier ? <IdChip>{headerIdentifier}</IdChip> : null}
+            {presentation.identifier ? <IdChip>{presentation.identifier}</IdChip> : null}
           </DialogDescription>
         </DialogHeader>
 

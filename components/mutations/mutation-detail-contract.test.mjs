@@ -5,9 +5,11 @@ import test from "node:test";
 const detailSource = await readFile(new URL("./mutation-detail-dialog.tsx", import.meta.url), "utf8");
 
 let isUsableMutationPreviewUrl;
+let mutationDetailPresentation;
 let mutationTimelineActionGroup;
 try {
-  ({ isUsableMutationPreviewUrl, mutationTimelineActionGroup } = await import("./mutation-detail-utils.mjs"));
+  ({ isUsableMutationPreviewUrl, mutationDetailPresentation, mutationTimelineActionGroup } =
+    await import("./mutation-detail-utils.mjs"));
 } catch {
   // The assertion below records the missing implementation as a test failure.
 }
@@ -65,13 +67,34 @@ test("mutation document previews allow only usable same-app or http URLs", () =>
 });
 
 test("mutation detail labels authoritative identifiers and statuses", () => {
-  assert.match(detailSource, /detail\.data\?\.mutation\.mutationNumber \?\? mutationId/);
-  assert.match(
-    detailSource,
-    /label: t\.pages\.mutations\.currentStatus,\s*value: <StatusMetaBadge meta=\{s\.mutation\[mutation\.status\]\} \/>/,
+  assert.equal(typeof mutationDetailPresentation, "function");
+
+  const presentation = mutationDetailPresentation(
+    {
+      mutation: {
+        id: "internal-database-id",
+        mutationNumber: "MUT-2026-0042",
+        status: "approved",
+      },
+      documents: [
+        { id: "document-1", verificationStatus: "verified" },
+        { id: "document-2", verificationStatus: "rejected" },
+      ],
+    },
+    "loading-fallback-id",
   );
-  assert.match(
-    detailSource,
-    /<StatusMetaBadge meta=\{s\.verification\[document\.verificationStatus\]\} \/>/,
+
+  assert.equal(presentation.identifier, "MUT-2026-0042");
+  assert.equal(presentation.currentStatus, "approved");
+  assert.deepEqual(
+    presentation.documents.map(({ document, verificationStatus }) => ({
+      id: document.id,
+      verificationStatus,
+    })),
+    [
+      { id: "document-1", verificationStatus: "verified" },
+      { id: "document-2", verificationStatus: "rejected" },
+    ],
   );
+  assert.match(detailSource, /mutationDetailPresentation\(/);
 });
