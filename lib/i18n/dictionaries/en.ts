@@ -1054,6 +1054,14 @@ export const en = {
       rejectionReasonRequired: "A rejection reason is required.",
       approving: "Approving…",
       rejecting: "Rejecting…",
+      timelineAction: {
+        "start-verification": "Verification started",
+        "complete-verification": "Verification completed",
+        "start-objection-period": "Objection period started",
+        "objection-added": "Objection recorded",
+        "objection-resolved": "Objection resolved",
+        unknown: "Workflow update",
+      },
     },
 
     newDispute: {

@@ -24,8 +24,8 @@ import {
   useStartMutationVerification,
 } from "@/hooks/queries";
 import { mutationActionState } from "@/components/mutations/mutation-action-state";
+import { isUsableMutationPreviewUrl } from "@/components/mutations/mutation-detail-utils.mjs";
 import { ApiError } from "@/lib/api-client";
-import { sentenceCase } from "@/lib/format";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
@@ -40,6 +40,40 @@ const CHECKLIST_KEYS: (keyof MutationVerificationChecklist)[] = [
   "landRecordMatched",
   "documentsPresent",
 ];
+
+const STANDARD_AUDIT_ACTIONS = ["create", "status-change", "approve", "reject"] as const;
+const MUTATION_TIMELINE_ACTIONS = [
+  "start-verification",
+  "complete-verification",
+  "start-objection-period",
+  "objection-added",
+  "objection-resolved",
+] as const;
+
+function isStandardAuditAction(
+  action: string,
+): action is (typeof STANDARD_AUDIT_ACTIONS)[number] {
+  return (STANDARD_AUDIT_ACTIONS as readonly string[]).includes(action);
+}
+
+function isMutationTimelineAction(
+  action: string,
+): action is (typeof MUTATION_TIMELINE_ACTIONS)[number] {
+  return (MUTATION_TIMELINE_ACTIONS as readonly string[]).includes(action);
+}
+
+function timelineActionLabel(
+  action: string,
+  t: ReturnType<typeof useT>,
+): string {
+  if (isStandardAuditAction(action)) {
+    return t.domain.auditAction[action];
+  }
+  if (isMutationTimelineAction(action)) {
+    return t.pages.mutations.timelineAction[action];
+  }
+  return t.pages.mutations.timelineAction.unknown;
+}
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -141,6 +175,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
               <ul className="divide-y divide-border">
                 {documents.map((document) => {
                   const previewUrl = document.thumbnailUrl?.trim();
+                  const canPreview = isUsableMutationPreviewUrl(previewUrl);
                   return (
                     <li key={document.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                       <div className="min-w-0">
@@ -157,7 +192,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                         </p>
                       </div>
                       <div className="shrink-0">
-                        {previewUrl ? (
+                        {canPreview && previewUrl ? (
                           <a
                             href={previewUrl}
                             target="_blank"
@@ -288,7 +323,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                 {timeline.map((event) => (
                   <li key={event.id} className="relative">
                     <span className="absolute top-1.5 -left-[1.32rem] size-2 rounded-full bg-marker" />
-                    <p className="font-medium text-foreground">{sentenceCase(event.action)}</p>
+                    <p className="font-medium text-foreground">{timelineActionLabel(event.action, t)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {t.pages.mutations.timelineBy(event.actorName, f.dateTime(event.at))}
                     </p>
