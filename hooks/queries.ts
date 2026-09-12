@@ -6,6 +6,7 @@ import {
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { api, qs } from "@/lib/api-client";
 import { useSessionStore } from "@/store/session";
 import type {
@@ -35,6 +36,7 @@ import type {
   AuditEvent,
   AuditVerifyResult,
   Policy,
+  MutationVerificationChecklist,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
 
@@ -215,6 +217,34 @@ export function useCreateMutation() {
   });
 }
 
+function invalidateMutationWorkflow(qc: QueryClient, id: string, includeParcel = false) {
+  qc.invalidateQueries({ queryKey: ["mutation", id] });
+  qc.invalidateQueries({ queryKey: ["mutations"] });
+  qc.invalidateQueries({ queryKey: ["audit", "mutation", id] });
+  if (includeParcel) qc.invalidateQueries({ queryKey: ["parcel"] });
+}
+
+export type CompleteMutationVerificationInput = MutationVerificationChecklist & {
+  notes: string;
+};
+
+export function useStartMutationVerification(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.patch<LandMutation>(`/mutations/${id}/start-verification`),
+    onSuccess: () => invalidateMutationWorkflow(qc, id),
+  });
+}
+
+export function useCompleteMutationVerification(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CompleteMutationVerificationInput) =>
+      api.patch<LandMutation>(`/mutations/${id}/complete-verification`, body),
+    onSuccess: () => invalidateMutationWorkflow(qc, id),
+  });
+}
+
 /** The mutation wizard's recipient picker — a citizen found by email/phone,
  * never browsed. Short-circuits below the server's own minimum length so a
  * half-typed query never fires a request. */
@@ -228,15 +258,28 @@ export function useSearchCitizens(query: string) {
   });
 }
 
+export type MutationDecisionBody =
+  | { decision: "approve"; approvalNote?: string }
+  | { decision: "reject"; rejectionReason: string };
+
+export type MutationDecisionInput = MutationDecisionBody | MutationDecisionBody["decision"];
+
+function normalizeMutationDecision(input: MutationDecisionInput): MutationDecisionBody {
+  if (typeof input === "string") {
+    return input === "approve"
+      ? { decision: "approve" }
+      : { decision: "reject", rejectionReason: "" };
+  }
+  return input;
+}
+
 export function useMutationDecision(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (decision: "approve" | "reject") =>
-      api.patch<LandMutation>(`/mutations/${id}/decision`, { decision }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["mutation", id] });
-      qc.invalidateQueries({ queryKey: ["mutations"] });
-    },
+    mutationFn: (input: MutationDecisionInput) =>
+      api.patch<LandMutation>(`/mutations/${id}/decision`, normalizeMutationDecision(input)),
+    onSuccess: (_mutation, input) =>
+      invalidateMutationWorkflow(qc, id, normalizeMutationDecision(input).decision === "approve"),
   });
 }
 
