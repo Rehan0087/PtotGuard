@@ -120,6 +120,14 @@ export const users: User[] = [
     role: "admin", jurisdictionId: "j-cumilla", title: "Registry Administrator", status: "active",
     createdAt: "2020-01-01T09:00:00Z",
   },
+  {
+    id: "usr-legacy-1", name: "Abdul Jalil Sarkar", email: "legacy-1@example.bd",
+    role: "citizen", jurisdictionId: "j-rajamehar", status: "invited", createdAt: "1998-03-01T00:00:00Z",
+  },
+  {
+    id: "usr-legacy-2", name: "Late Fazlul Haque", email: "legacy-2@example.bd",
+    role: "citizen", jurisdictionId: "j-rajamehar", status: "invited", createdAt: "1990-04-02T00:00:00Z",
+  },
 ];
 
 /** The canonical signed-in user for each role (used by the dev role switcher). */
@@ -144,8 +152,8 @@ export const parcels: Parcel[] = [
   },
   {
     id: "p-088", ulpin: "ILR-CUM-DEB-000002", dagNo: "RS-88", khatianNo: "217", title: "Homestead plot, Rajamehar", jurisdictionId: "j-rajamehar",
-    landUse: "residential", area: { value: 8, unit: "katha" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
-    ownershipType: "inherited", registryStatus: "under-mutation", centroid: { lat: 23.5502, lng: 90.9871 },
+    landUse: "residential", area: { value: 8, unit: "katha" }, ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque",
+    ownershipType: "sole", registryStatus: "under-mutation", centroid: { lat: 23.5502, lng: 90.9871 },
     boundary: square({ lat: 23.5502, lng: 90.9871 }, 0.0005), marketValue: { amount: 3200000, currency: "BDT" },
     registeredAt: "1990-04-02T00:00:00Z", openDisputeCount: 0,
   },
@@ -192,8 +200,7 @@ export const parcelRestrictions: ParcelRestriction[] = [
 export const ownershipRecords: OwnershipRecord[] = [
   { id: "own-1", parcelId: "p-142", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "purchase", fromDate: "2015-07-20T00:00:00Z", toDate: null, documentId: "d-2" },
   { id: "own-2", parcelId: "p-142", ownerId: "usr-legacy-1", ownerName: "Abdul Jalil Sarkar", acquisitionType: "grant", fromDate: "1998-03-01T00:00:00Z", toDate: "2015-07-20T00:00:00Z" },
-  { id: "own-3", parcelId: "p-088", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "inheritance", fromDate: "2026-05-01T00:00:00Z", toDate: null, documentId: "d-3" },
-  { id: "own-4", parcelId: "p-088", ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque", acquisitionType: "inheritance", fromDate: "1990-04-02T00:00:00Z", toDate: "2026-05-01T00:00:00Z" },
+  { id: "own-4", parcelId: "p-088", ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque", acquisitionType: "inheritance", fromDate: "1990-04-02T00:00:00Z", toDate: null },
 ];
 
 // ---------------------------------------------------------------------------

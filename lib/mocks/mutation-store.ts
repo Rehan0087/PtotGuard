@@ -4,7 +4,7 @@
  * Keep this deliberately narrow: mutations may change parcel ownership, but
  * they must not turn sessionStorage into a second copy of the entire mock DB.
  */
-import type { Mutation, OwnershipRecord } from "@/lib/types";
+import type { AuditEvent, Mutation, OwnershipRecord } from "@/lib/types";
 import * as db from "./data";
 
 const STORAGE_KEY = "plotguard.mutation-workflow.v1";
@@ -20,9 +20,11 @@ interface StoredMutationState {
   mutations: Mutation[];
   parcels: StoredParcelOwnership[];
   ownershipRecords: OwnershipRecord[];
+  auditChain: AuditEvent[];
 }
 
 let hydrated = false;
+let hydratedAuditChain: AuditEvent[] | null = null;
 
 function browserStorage(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -38,20 +40,22 @@ function isStoredState(value: unknown): value is StoredMutationState {
   const candidate = value as Partial<StoredMutationState>;
   return Array.isArray(candidate.mutations)
     && Array.isArray(candidate.parcels)
-    && Array.isArray(candidate.ownershipRecords);
+    && Array.isArray(candidate.ownershipRecords)
+    && Array.isArray(candidate.auditChain);
 }
 
 /** Restore the workflow snapshot at most once in a browser module lifetime. */
-export function hydrateMutationState(): void {
+export function hydrateMutationState(): AuditEvent[] | null {
   const storage = browserStorage();
-  if (!storage || hydrated) return;
+  if (!storage) return null;
+  if (hydrated) return hydratedAuditChain;
   hydrated = true;
 
   try {
     const raw = storage.getItem(STORAGE_KEY);
-    if (!raw) return;
+    if (!raw) return null;
     const state: unknown = JSON.parse(raw);
-    if (!isStoredState(state)) return;
+    if (!isStoredState(state)) return null;
 
     db.mutations.splice(0, db.mutations.length, ...state.mutations);
     db.ownershipRecords.splice(0, db.ownershipRecords.length, ...state.ownershipRecords);
@@ -63,13 +67,15 @@ export function hydrateMutationState(): void {
       if (typeof stored.lastMutationAt === "string") parcel.lastMutationAt = stored.lastMutationAt;
       else delete parcel.lastMutationAt;
     }
+    hydratedAuditChain = state.auditChain;
   } catch {
     // A damaged or unavailable preview snapshot must never stop the mock API.
   }
+  return hydratedAuditChain;
 }
 
 /** Persist only workflow-owned state and the parcel fields an approval changes. */
-export function persistMutationState(): void {
+export function persistMutationState(auditChain: AuditEvent[]): void {
   const storage = browserStorage();
   if (!storage) return;
   const affectedParcelIds = new Set(db.mutations.map((mutation) => mutation.parcelId));
@@ -85,6 +91,7 @@ export function persistMutationState(): void {
         ...(lastMutationAt ? { lastMutationAt } : {}),
       })),
     ownershipRecords: db.ownershipRecords,
+    auditChain,
   };
 
   try {
