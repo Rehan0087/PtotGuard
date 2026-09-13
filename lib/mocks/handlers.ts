@@ -25,6 +25,7 @@ import { ROLES } from "@/lib/types";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
   activeRestrictions,
+  ancestryOf,
   assessLandTax,
   calcInheritance,
   deletionGate,
@@ -33,6 +34,7 @@ import {
   extractionReview,
   filingReview,
   normaliseUlpin,
+  maskNationalId,
   mutationActionGate,
   mutationObjectionSummary,
   mutationVerificationReferences,
@@ -51,6 +53,7 @@ import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 import { hydrateMutationState } from "./mutation-store";
 import { filterMutationReads } from "./mutation-contract.mjs";
+import { filterLandOfficeRecords, recordAuditEvents } from "./records-contract.mjs";
 
 // Restore mutation-owned preview state before any handler (including parcel
 // reads) can observe the in-memory seed after a hard refresh.
@@ -580,6 +583,102 @@ export const handlers = [
     );
   }),
 
+  http.get(`${API}/parcels/:id/record`, async ({ params, request }) => {
+    await latency();
+    hydrateMutationState();
+    const me = currentUser(request);
+    if (!isActiveLandOffice(me)) return forbidden("Land Office Staff access required.");
+
+    const parcel = db.parcels.find((item) => item.id === params.id);
+    if (!parcel) return notFound("Parcel not found");
+    if (!coveredJurisdictionIds(me).has(parcel.jurisdictionId)) {
+      return forbidden("This land record is outside your jurisdiction.");
+    }
+
+    const owner = db.users.find((user) => user.id === parcel.ownerId);
+    if (!owner) return notFound("Recorded owner not found");
+    const documents = db.documents
+      .filter((document) => document.parcelId === parcel.id)
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+    const documentById = new Map(documents.map((document) => [document.id, document]));
+    const ownership = db.ownershipRecords
+      .filter((entry) => entry.parcelId === parcel.id)
+      .sort((a, b) => b.fromDate.localeCompare(a.fromDate))
+      .map((entry) => {
+        const mutation = entry.mutationId
+          ? db.mutations.find((item) => item.id === entry.mutationId)
+          : undefined;
+        const document = entry.documentId ? documentById.get(entry.documentId) : undefined;
+        return {
+          ...entry,
+          ...(mutation
+            ? {
+                mutation: {
+                  id: mutation.id,
+                  mutationNumber: mutation.mutationNumber,
+                  status: mutation.status,
+                  type: mutation.type,
+                },
+              }
+            : {}),
+          ...(document
+            ? {
+                document: {
+                  id: document.id,
+                  fileName: document.fileName,
+                  type: document.type,
+                  verificationStatus: document.verificationStatus,
+                },
+              }
+            : {}),
+        };
+      });
+    const mutations = db.mutations
+      .filter((mutation) => mutation.parcelId === parcel.id)
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))
+      .map((mutation) => {
+        const applicant = db.users.find((user) => user.id === mutation.requestedById);
+        const officerId = mutation.approvedById ?? mutation.rejectedById ?? mutation.assignedOfficerId;
+        const officer = officerId ? db.users.find((user) => user.id === officerId) : undefined;
+        return {
+          mutation,
+          ...(applicant ? { applicantName: applicant.name } : {}),
+          ...(officer ? { responsibleOfficerName: officer.name } : {}),
+        };
+      });
+    const mutationIds = mutations.map(({ mutation }) => mutation.id);
+    const disputes = db.disputes
+      .filter((dispute) => dispute.parcelId === parcel.id)
+      .sort((a, b) => b.filedAt.localeCompare(a.filedAt));
+    const chain = await getAuditChain();
+    const referenceId = maskNationalId(owner.nationalId);
+
+    return HttpResponse.json({
+      parcel,
+      owner: {
+        id: owner.id,
+        name: owner.name,
+        ...(referenceId ? { referenceId } : {}),
+        ...(owner.profileDetails?.address ? { address: owner.profileDetails.address } : {}),
+      },
+      jurisdiction: ancestryOf(parcel.jurisdictionId, db.jurisdictions),
+      ownership,
+      mutations,
+      disputes,
+      documents,
+      restrictions: db.parcelRestrictions
+        .filter((restriction) => restriction.parcelId === parcel.id)
+        .sort((a, b) => b.fromDate.localeCompare(a.fromDate)),
+      audit: recordAuditEvents({
+        events: chain,
+        parcelId: parcel.id,
+        mutationIds,
+        disputeIds: disputes.map((dispute) => dispute.id),
+        documentIds: documents.map((document) => document.id),
+      }),
+    });
+  }),
+
   http.get(`${API}/parcels/:id/neighbours`, async ({ params }) => {
     await latency();
     const parcel = db.parcels.find((p) => p.id === params.id);
@@ -627,13 +726,27 @@ export const handlers = [
     const dag = url.searchParams.get("dag")?.toLowerCase();
     const khatian = url.searchParams.get("khatian")?.toLowerCase();
     const bbox = url.searchParams.get("bbox");
-    const q = url.searchParams.get("q")?.toLowerCase();
+    const q = url.searchParams.get("q")?.trim().toLowerCase();
     const ulpin = url.searchParams.get("ulpin");
 
     let items = db.parcels.slice();
+    const isLandOffice = getRole(request) === "land-office";
+    if (isLandOffice) {
+      try {
+        items = filterLandOfficeRecords({
+          actor: currentUser(request),
+          jurisdictions: db.jurisdictions,
+          parcels: items,
+          q,
+          status,
+        });
+      } catch {
+        return forbidden("Land Office Staff access required.");
+      }
+    }
     if (owner === "me") items = items.filter((p) => p.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((p) => p.ownerId === owner);
-    if (status) items = items.filter((p) => p.registryStatus === status);
+    if (status && !isLandOffice) items = items.filter((p) => p.registryStatus === status);
     // Exact, not a substring: a ULPIN is an identifier being cited, so a
     // near-miss returns nothing rather than a plausible wrong plot.
     if (ulpin) items = items.filter((p) => p.ulpin === normaliseUlpin(ulpin));
@@ -649,7 +762,7 @@ export const handlers = [
           p.centroid.lat <= maxLat,
       );
     }
-    if (q)
+    if (q && !isLandOffice)
       items = items.filter(
         (p) =>
           p.dagNo.toLowerCase().includes(q) ||
