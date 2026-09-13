@@ -143,11 +143,23 @@ describe("field report status transitions", () => {
       ) => { allowed: boolean; code?: string };
     }).reviewFieldReportTransition;
 
-  it("allows the backend-controlled field workflow in order", () => {
-    expect(transition()("assigned", "accepted")).toEqual({ allowed: true });
+  it("allows the optional travel marker after acceptance", () => {
     expect(transition()("accepted", "en-route")).toEqual({ allowed: true });
-    expect(transition()("en-route", "in-progress")).toEqual({ allowed: true });
-    expect(transition()("in-progress", "completed")).toEqual({ allowed: true });
+  });
+
+  it("reserves active and complete states for survey session actions", () => {
+    expect(transition()("accepted", "in-progress")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
+    expect(transition()("en-route", "in-progress")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
+    expect(transition()("in-progress", "completed")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
   });
 
   it("rejects skipping acceptance or moving a case backwards", () => {
