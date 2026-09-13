@@ -18,6 +18,7 @@ export * from "./ocr";
 export * from "./assignment";
 export * from "./jurisdictions";
 export * from "./field-capture";
+export * from "./field-survey";
 export * from "./hearings";
 export * from "./ulpin";
 export * from "./restrictions";
