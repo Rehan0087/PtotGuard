@@ -615,6 +615,35 @@ export function useAcceptFieldReport() {
   });
 }
 
+type FieldSurveyMutationResult = Pick<FieldReportDetail, "report" | "survey">;
+
+export function useStartFieldSurvey(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<FieldSurveyMutationResult>(`/field-reports/${id}/survey/start`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+    },
+  });
+}
+
+export function useCompleteFieldSurvey(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (notes: string) =>
+      api.post<FieldSurveyMutationResult>(`/field-reports/${id}/survey/complete`, { notes }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
 export function useAddFieldReportMedia(id: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -633,7 +662,7 @@ export function useAddFieldReportMedia(id: string) {
 export function useUpdateFieldReport(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { status?: FieldReportStatus; notes?: string }) =>
+    mutationFn: (body: { status?: Extract<FieldReportStatus, "en-route">; notes?: string }) =>
       api.patch<FieldReport>(`/field-reports/${id}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["field-report", id] });

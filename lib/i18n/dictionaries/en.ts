@@ -656,7 +656,18 @@ export const en = {
       acceptingCase: "Accepting…",
       caseAccepted: "Case accepted.",
       markEnRoute: "Mark en route",
-      markOnSite: "Mark on site",
+      startVerification: "Start field verification",
+      startingVerification: "Starting…",
+      verificationStarted: "Field verification started.",
+      surveyStatus: (status: string) => `Survey status: ${status}`,
+      surveyStarted: (when: string) => `Started ${when}`,
+      surveyCompleted: (when: string) => `Completed ${when}`,
+      surveyState: {
+        "in-progress": "In progress",
+        completed: "Completed",
+        failed: "Failed",
+        cancelled: "Cancelled",
+      },
 
       // Evidence
       evidence: "Evidence",

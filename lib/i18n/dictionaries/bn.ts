@@ -611,6 +611,18 @@ export const bn: Dictionary = {
     },
 
     capture: {
+      startVerification: "মাঠ যাচাই শুরু করুন",
+      startingVerification: "শুরু হচ্ছে…",
+      verificationStarted: "মাঠ যাচাই শুরু হয়েছে।",
+      surveyStatus: (status: string) => `জরিপের অবস্থা: ${status}`,
+      surveyStarted: (when: string) => `শুরু ${when}`,
+      surveyCompleted: (when: string) => `সম্পন্ন ${when}`,
+      surveyState: {
+        "in-progress": "চলমান",
+        completed: "সম্পন্ন",
+        failed: "ব্যর্থ",
+        cancelled: "বাতিল",
+      },
       eyebrow: "সরেজমিন জরিপ",
       notFound: "এই পরিদর্শনটি পাওয়া যায়নি।",
       backToVisits: "পরিদর্শন তালিকায় ফিরুন",
@@ -620,7 +632,6 @@ export const bn: Dictionary = {
       acceptingCase: "গ্রহণ করা হচ্ছে…",
       caseAccepted: "মামলাটি গ্রহণ করা হয়েছে।",
       markEnRoute: "রওনা হয়েছি",
-      markOnSite: "ঘটনাস্থলে পৌঁছেছি",
 
       evidence: "প্রমাণ",
       gpsPoints: "জিপিএস পয়েন্ট",

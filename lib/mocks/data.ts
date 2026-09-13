@@ -21,6 +21,7 @@ import type {
   ServiceApplication,
   ServiceApplicationEvent,
   FieldReport,
+  FieldSurveySession,
   Hearing,
   AppNotification,
   AuditEvent,
@@ -331,6 +332,26 @@ export const fieldReports: FieldReport[] = [
   },
   { id: "fr-3", parcelId: "p-176", parcelDagNo: "CS-176", purpose: "possession-verify", status: "in-progress", assignedAgentId: "usr-agent2", assignedAt: "2026-07-21T10:00:00Z", acceptedAt: "2026-07-21T10:15:00Z", scheduledFor: "2026-07-23T05:00:00Z", addressHint: "Hillfoot plot, Payalgacha", gpsCaptures: [], photos: [] },
   { id: "fr-4", parcelId: "p-088", parcelDagNo: "RS-88", mutationId: "m-1192", purpose: "measurement", status: "assigned", assignedAgentId: "usr-agent", assignedAt: "2026-07-23T08:30:00Z", scheduledFor: "2026-07-25T04:30:00Z", addressHint: "Homestead plot, Rajamehar", gpsCaptures: [], photos: [] },
+];
+
+export const fieldSurveySessions: FieldSurveySession[] = [
+  {
+    id: "fs-2",
+    fieldReportId: "fr-2",
+    bhumiId: parcels.find((parcel) => parcel.id === "p-142")?.ulpin,
+    assignedAgentId: "usr-agent",
+    status: "completed",
+    startedAt: "2026-07-19T04:45:00Z",
+    completedAt: "2026-07-19T07:10:00Z",
+  },
+  {
+    id: "fs-3",
+    fieldReportId: "fr-3",
+    bhumiId: parcels.find((parcel) => parcel.id === "p-176")?.ulpin,
+    assignedAgentId: "usr-agent2",
+    status: "in-progress",
+    startedAt: "2026-07-23T05:05:00Z",
+  },
 ];
 
 // ---------------------------------------------------------------------------

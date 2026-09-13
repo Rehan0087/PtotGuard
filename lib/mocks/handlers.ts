@@ -32,6 +32,7 @@ import {
   rankCandidates,
   registryStatusAfter,
   reviewFieldReportTransition,
+  reviewFieldSurveyTransition,
   reviewDraft,
   routeDisputeToOfficer,
   rulingGate,
@@ -1936,6 +1937,51 @@ export const handlers = [
     return HttpResponse.json(report);
   }),
 
+  http.post(`${API}/field-reports/:id/survey/start`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find(
+      (candidate) => candidate.id === params.id && candidate.assignedAgentId === me.id,
+    );
+    if (!report) return notFound("Field report not found");
+    if (db.fieldSurveySessions.some((candidate) => candidate.fieldReportId === report.id)) {
+      return conflict("A field survey already exists for this case");
+    }
+    if (report.status !== "accepted" && report.status !== "en-route") {
+      return conflict("This case cannot start field verification in its current state");
+    }
+    const transition = reviewFieldSurveyTransition("not-started", "in-progress");
+    if (!transition.allowed) return conflict("This field survey cannot be started", transition);
+
+    const now = new Date().toISOString();
+    const survey = {
+      id: `fs-${Date.now()}`,
+      fieldReportId: report.id,
+      bhumiId: db.parcels.find((parcel) => parcel.id === report.parcelId)?.ulpin,
+      assignedAgentId: me.id,
+      status: "in-progress" as const,
+      startedAt: now,
+    };
+    report.status = "in-progress";
+    db.fieldSurveySessions.push(survey);
+    await appendAudit({
+      entityType: "field-survey",
+      entityId: survey.id,
+      action: "start",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        fieldReportId: report.id,
+        bhumiId: survey.bhumiId,
+        startedAt: now,
+      },
+      createdAt: now,
+    });
+    return HttpResponse.json({ report, survey }, { status: 201 });
+  }),
+
   http.post(`${API}/field-reports/:id/media`, async ({ params, request }) => {
     await latency();
     const me = authenticatedUser(request);
@@ -1945,6 +1991,13 @@ export const handlers = [
       (v) => v.id === params.id && v.assignedAgentId === me.id,
     );
     if (!report) return notFound("Field report not found");
+    const activeSurvey = db.fieldSurveySessions.find(
+      (candidate) =>
+        candidate.fieldReportId === report.id &&
+        candidate.assignedAgentId === me.id &&
+        candidate.status === "in-progress",
+    );
+    if (!activeSurvey) return conflict("Start field verification before adding evidence");
     const body = (await request.json()) as {
       photo?: { url: string; caption?: string };
       gps?: { lat: number; lng: number; accuracyMeters: number; label?: string };
@@ -1963,10 +2016,76 @@ export const handlers = [
     return HttpResponse.json(report);
   }),
 
-  // Additive to the frozen spec: the agent's own edits to a report they are
-  // carrying out — moving it along the status ladder, saving notes, and filing
-  // it. `status: "completed"` is the filing, and it runs the same gate the
-  // client shows (lib/field-capture.ts) so a hand-rolled request can't skip it.
+  http.post(`${API}/field-reports/:id/survey/complete`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find(
+      (candidate) => candidate.id === params.id && candidate.assignedAgentId === me.id,
+    );
+    if (!report) return notFound("Field report not found");
+    const survey = db.fieldSurveySessions.find(
+      (candidate) => candidate.fieldReportId === report.id && candidate.assignedAgentId === me.id,
+    );
+    if (!survey || report.status !== "in-progress" || survey.status !== "in-progress") {
+      return conflict("This case has no active field survey to complete");
+    }
+
+    const body = (await request.json()) as { notes?: string };
+    const notes = body.notes ?? "";
+    const transition = reviewFieldSurveyTransition("in-progress", "completed");
+    if (!transition.allowed) {
+      return conflict("This field survey cannot be completed in its current state", transition);
+    }
+    const review = filingReview(report, notes);
+    if (!review.canFile) return unprocessable({ status: review.blockers[0] });
+
+    const now = new Date().toISOString();
+    report.status = "completed";
+    report.submittedAt = now;
+    report.notes = notes;
+    survey.status = "completed";
+    survey.completedAt = now;
+
+    const dispute = report.disputeId
+      ? db.disputes.find((candidate) => candidate.id === report.disputeId)
+      : undefined;
+    if (dispute && dispute.status === "field-visit-scheduled") {
+      dispute.status = "under-review";
+      dispute.updatedAt = now;
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "field-visit",
+        title: "Field survey filed",
+        content: { code: "field-visit-completed" },
+        description: notes,
+        actorId: me.id,
+        actorName: me.name,
+      });
+    }
+
+    await appendAudit({
+      entityType: "field-survey",
+      entityId: survey.id,
+      action: "complete",
+      actorId: me.id,
+      actorName: me.name,
+      payload: {
+        fieldReportId: report.id,
+        completedAt: now,
+        gpsCount: report.gpsCaptures.length,
+        photoCount: report.photos.length,
+      },
+      createdAt: now,
+    });
+    return HttpResponse.json({ report, survey });
+  }),
+
+  // Notes and the optional travel marker. Survey start/completion use the
+  // dedicated actions above so this generic patch cannot bypass their gates.
   http.patch(`${API}/field-reports/:id`, async ({ params, request }) => {
     await latency();
     const me = authenticatedUser(request);
@@ -1982,62 +2101,15 @@ export const handlers = [
       notes: string;
     }>;
 
-    const notes = body.notes ?? report.notes ?? "";
-
     if (body.status) {
-      if (!(["en-route", "in-progress", "completed"] as string[]).includes(body.status)) {
-        return unprocessable({ status: { code: "invalid-transition" } });
+      if (body.status !== "en-route") {
+        return HttpResponse.json(
+          { error: "bad_request", message: "That status is not accepted by this endpoint." },
+          { status: 400 },
+        );
       }
       const transition = reviewFieldReportTransition(report.status, body.status);
       if (!transition.allowed) return unprocessable({ status: transition });
-    }
-
-    if (body.status === "completed") {
-      const review = filingReview(report, notes);
-      if (!review.canFile) {
-        return unprocessable({ status: review.blockers[0] });
-      }
-      const now = new Date().toISOString();
-      report.submittedAt = now;
-
-      const actor = currentUser(request);
-      await appendAudit({
-        entityType: "field-report",
-        entityId: report.id,
-        action: "create",
-        actorId: actor.id,
-        actorName: actor.name,
-        payload: {
-          parcelDagNo: report.parcelDagNo,
-          purpose: report.purpose,
-          gpsCount: report.gpsCaptures.length,
-          photoCount: report.photos.length,
-        },
-        createdAt: now,
-      });
-
-      // The booking moved the case to `field-visit-scheduled`; filing is what
-      // it was waiting on, so it goes back to an officer. Only when the visit
-      // is what held it up — a case that moved on since is left alone.
-      const dispute = report.disputeId
-        ? db.disputes.find((d) => d.id === report.disputeId)
-        : undefined;
-      if (dispute && dispute.status === "field-visit-scheduled") {
-        dispute.status = "under-review";
-        dispute.updatedAt = now;
-        db.disputeEvents.push({
-          id: `de-${Date.now()}`,
-          disputeId: dispute.id,
-          at: now,
-          type: "field-visit",
-          title: "Field survey filed",
-          content: { code: "field-visit-completed" },
-          // The agent's findings are record content — carried across as typed.
-          description: notes,
-          actorId: me.id,
-          actorName: me.name,
-        });
-      }
     }
 
     if (body.notes !== undefined) report.notes = body.notes;
@@ -2058,6 +2130,8 @@ export const handlers = [
     return HttpResponse.json({
       report,
       parcel: db.parcels.find((p) => p.id === report.parcelId) ?? null,
+      survey:
+        db.fieldSurveySessions.find((candidate) => candidate.fieldReportId === report.id) ?? null,
     });
   }),
 
