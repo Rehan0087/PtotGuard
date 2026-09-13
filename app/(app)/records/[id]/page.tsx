@@ -7,7 +7,6 @@ import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   ClipboardList,
-  Download,
   FileText,
   History,
   MapPin,
@@ -304,15 +303,9 @@ export default function LandRecordDetailPage() {
                         </div>
                         <StatusMetaBadge meta={s.verification[document.verificationStatus]} dot={false} />
                         {url ? (
-                          <div className="flex items-center gap-1">
-                            <a href={url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
-                              {t.common.view}
-                            </a>
-                            <a href={url} download className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
-                              <Download className="size-4" />
-                              {t.pages.records.downloadFile}
-                            </a>
-                          </div>
+                          <a href={url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+                            {t.common.view}
+                          </a>
                         ) : (
                           <Button variant="ghost" size="sm" disabled>{t.pages.records.fileUnavailable}</Button>
                         )}

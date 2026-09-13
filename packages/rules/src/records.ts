@@ -5,6 +5,6 @@
 export function maskNationalId(value: string | null | undefined): string | undefined {
   const identifier = value?.trim();
   if (!identifier) return undefined;
-  if (identifier.includes("•")) return identifier;
+  if (/^•••• •••• \d{4}$/u.test(identifier)) return identifier;
   return `•••• •••• ${identifier.slice(-4)}`;
 }
