@@ -93,6 +93,18 @@ export class RevenueCasesController {
         },
       });
 
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: me,
+          at: now,
+          title: `Revenue case filed: ${created.applicationNo}`,
+          body: `Revenue case filed: ${created.applicationNo}`,
+          read: false,
+          href: `/revenue-cases`,
+        },
+      });
+
       return created;
     });
   }
@@ -143,6 +155,18 @@ export class RevenueCasesController {
           type: "status-change",
           title: "Hearing scheduled",
           actorId,
+        },
+      });
+
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: updated.applicantId,
+          at: now,
+          title: `Hearing scheduled for ${updated.applicationNo}`,
+          body: `Hearing scheduled for ${updated.applicationNo}`,
+          read: false,
+          href: `/revenue-cases`,
         },
       });
 
