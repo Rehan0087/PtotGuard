@@ -31,6 +31,8 @@ import {
   useFieldReport,
   useAddFieldReportMedia,
   useAcceptFieldReport,
+  useCompleteFieldSurvey,
+  useStartFieldSurvey,
   useUpdateFieldReport,
 } from "@/hooks/queries";
 import { filingReview, type FilingBlocker } from "@plotguard/rules";
@@ -104,6 +106,8 @@ export default function CapturePage() {
   const { data, isLoading, isError, error, refetch } = useFieldReport(id);
   const addMedia = useAddFieldReportMedia(id);
   const acceptCase = useAcceptFieldReport();
+  const startSurvey = useStartFieldSurvey(id);
+  const completeSurvey = useCompleteFieldSurvey(id);
   const updateReport = useUpdateFieldReport(id);
 
   const [pointLabel, setPointLabel] = useState("");
@@ -145,11 +149,12 @@ export default function CapturePage() {
     );
   }
 
-  const { report, parcel } = data;
+  const { report, parcel, survey } = data;
   // Seed from the saved report once, then the field owns it.
   const draftNotes = notes ?? report.notes ?? "";
   const review = filingReview(report, draftNotes);
   const closed = report.status === "completed" || report.status === "cancelled";
+  const active = report.status === "in-progress" && survey?.status === "in-progress";
 
   const capturePoint = async () => {
     const pos = await readPosition(parcel?.centroid);
@@ -174,7 +179,7 @@ export default function CapturePage() {
   };
 
   const file = async () => {
-    await updateReport.mutateAsync({ status: "completed", notes: draftNotes });
+    await completeSurvey.mutateAsync(draftNotes);
     toast.success(t.pages.capture.filed);
   };
 
@@ -205,6 +210,24 @@ export default function CapturePage() {
           <span className="inline-flex items-center gap-1.5">
             <Navigation className="size-3.5" />
             {report.addressHint}
+          </span>
+        ) : null}
+        {survey ? (
+          <span className="inline-flex items-center gap-1.5">
+            <MapPin className="size-3.5" />
+            {t.pages.capture.surveyStatus(t.pages.capture.surveyState[survey.status])}
+          </span>
+        ) : null}
+        {survey ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Calendar className="size-3.5" />
+            {t.pages.capture.surveyStarted(f.dateTime(survey.startedAt))}
+          </span>
+        ) : null}
+        {survey?.completedAt ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Calendar className="size-3.5" />
+            {t.pages.capture.surveyCompleted(f.dateTime(survey.completedAt))}
           </span>
         ) : null}
       </div>
@@ -241,15 +264,22 @@ export default function CapturePage() {
               {t.pages.capture.markEnRoute}
             </Button>
           ) : null}
-          {report.status === "accepted" || report.status === "en-route" ? (
+          {(report.status === "accepted" || report.status === "en-route") && !survey ? (
             <Button
               size="sm"
               variant="secondary"
-              disabled={updateReport.isPending}
-              onClick={() => updateReport.mutate({ status: "in-progress" })}
+              disabled={startSurvey.isPending}
+              onClick={() =>
+                startSurvey.mutate(undefined, {
+                  onSuccess: () => toast.success(t.pages.capture.verificationStarted),
+                  onError: () => toast.error(t.common.somethingWentWrong),
+                })
+              }
             >
               <MapPin className="size-3.5" />
-              {t.pages.capture.markOnSite}
+              {startSurvey.isPending
+                ? t.pages.capture.startingVerification
+                : t.pages.capture.startVerification}
             </Button>
           ) : null}
         </div>
@@ -307,7 +337,7 @@ export default function CapturePage() {
               <Button
                 size="sm"
                 className="w-fit"
-                disabled={addMedia.isPending}
+                disabled={!active || addMedia.isPending}
                 onClick={capturePoint}
               >
                 <Crosshair className="size-3.5" />
@@ -372,7 +402,7 @@ export default function CapturePage() {
                 size="sm"
                 variant="secondary"
                 className="w-fit"
-                disabled={addMedia.isPending}
+                disabled={!active || addMedia.isPending}
                 onClick={addPhoto}
               >
                 <Camera className="size-3.5" />
@@ -424,11 +454,11 @@ export default function CapturePage() {
 
             <Button
               className="w-fit"
-              disabled={!review.canFile || updateReport.isPending}
+              disabled={!active || !review.canFile || completeSurvey.isPending}
               onClick={file}
             >
               <Send className="size-3.5" />
-              {updateReport.isPending ? t.pages.capture.filing : t.pages.capture.fileReport}
+              {completeSurvey.isPending ? t.pages.capture.filing : t.pages.capture.fileReport}
             </Button>
           </>
         ) : report.submittedAt ? (
