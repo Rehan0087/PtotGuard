@@ -19,6 +19,7 @@ import type {
   ServiceApplication,
   ServiceApplicationEvent,
   FieldReport,
+  FieldSurveySession,
   Hearing,
 } from ".";
 // Derived shapes rather than stored ones, so they come from the rules that
@@ -118,6 +119,7 @@ export interface ServiceApplicationDetail {
 export interface FieldReportDetail {
   report: FieldReport;
   parcel: Parcel | null;
+  survey: FieldSurveySession | null;
 }
 
 export interface HearingDetail {

@@ -10,6 +10,7 @@ export * from "./dispute";
 export * from "./mutation";
 export * from "./service-application";
 export * from "./field-report";
+export * from "./field-survey";
 export * from "./hearing";
 export * from "./notification";
 export * from "./auth";
