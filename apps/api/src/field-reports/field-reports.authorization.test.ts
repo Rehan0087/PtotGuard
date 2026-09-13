@@ -60,6 +60,8 @@ describe("field report assignment authorization", () => {
   let app: INestApplication;
   let report: ReportFixture;
   let survey: SurveyFixture | null;
+  let dispute: { id: string; status: string; updatedAt: Date };
+  let disputeEvents: Array<Record<string, unknown>>;
   let auditEntries: Array<Record<string, unknown>>;
 
   beforeEach(async () => {
@@ -83,6 +85,12 @@ describe("field report assignment authorization", () => {
       submittedAt: null,
     };
     survey = null;
+    dispute = {
+      id: "ds-1",
+      status: "field-visit-scheduled",
+      updatedAt: new Date("2026-09-10T08:00:00Z"),
+    };
+    disputeEvents = [];
 
     const fieldReport = {
       findMany: async ({ where }: { where: { assignedAgentId?: string } }) =>
@@ -176,7 +184,22 @@ describe("field report assignment authorization", () => {
       },
       ownershipRecord: { findMany: async () => [] },
       landDocument: { findMany: async () => [] },
-      dispute: { findMany: async () => [], groupBy: async () => [] },
+      dispute: {
+        findMany: async () => [],
+        groupBy: async () => [],
+        findUnique: async ({ where }: { where: { id: string } }) =>
+          where.id === dispute.id ? dispute : null,
+        update: async ({ data }: { data: Partial<typeof dispute> }) => {
+          dispute = { ...dispute, ...data };
+          return dispute;
+        },
+      },
+      disputeEvent: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          disputeEvents.push(data);
+          return data;
+        },
+      },
       mutation: { findMany: async () => [] },
       $transaction: async (operation: (tx: unknown) => Promise<unknown>) => operation(prismaFixture),
     };
@@ -290,7 +313,7 @@ describe("field report assignment authorization", () => {
       .patch("/field-reports/fr-1")
       .set("authorization", token)
       .send({ status: "in-progress" })
-      .expect(422);
+      .expect(400);
   });
 
   it("allows only one concurrent acceptance", async () => {
@@ -389,5 +412,115 @@ describe("field report assignment authorization", () => {
       .post("/field-reports/fr-1/survey/start")
       .set("authorization", token)
       .expect(409);
+  });
+
+  it("rejects completion when a survey was never started", async () => {
+    report.status = "in-progress";
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", bearer("usr-agent", "field-agent"))
+      .send({ notes: "Boundary verified." })
+      .expect(409);
+  });
+
+  it("does not let another agent complete an active survey", async () => {
+    report.status = "accepted";
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", bearer("usr-agent", "field-agent"))
+      .expect(201);
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", bearer("usr-agent-2", "field-agent"))
+      .send({ notes: "Boundary verified." })
+      .expect(404);
+  });
+
+  it("rejects completion until the report has its required evidence", async () => {
+    report.status = "accepted";
+    const token = bearer("usr-agent", "field-agent");
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", token)
+      .send({ notes: "Boundary verified." })
+      .expect(422);
+  });
+
+  it("completes session and synchronizes report and dispute", async () => {
+    report.status = "accepted";
+    report.disputeId = "ds-1";
+    const token = bearer("usr-agent", "field-agent");
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .expect(201);
+    report.gpsCaptures = [{ id: "g-1" }, { id: "g-2" }];
+
+    const response = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", token)
+      .send({ notes: "Boundary verified." })
+      .expect(200);
+
+    expect(response.body.report).toMatchObject({
+      status: "completed",
+      notes: "Boundary verified.",
+    });
+    expect(response.body.report.submittedAt).toBeTruthy();
+    expect(response.body.survey.status).toBe("completed");
+    expect(response.body.survey.completedAt).toBeTruthy();
+    expect(dispute.status).toBe("under-review");
+    expect(disputeEvents.at(-1)).toMatchObject({
+      type: "field-visit",
+      title: "Field survey filed",
+    });
+    expect(auditEntries.at(-1)).toMatchObject({
+      entityType: "field-survey",
+      entityId: response.body.survey.id,
+      action: "complete",
+      actorId: "usr-agent",
+    });
+  });
+
+  it("allows only one concurrent survey completion", async () => {
+    report.status = "accepted";
+    const token = bearer("usr-agent", "field-agent");
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .expect(201);
+    report.gpsCaptures = [{ id: "g-1" }, { id: "g-2" }];
+
+    const results = await Promise.all([
+      request(app.getHttpServer())
+        .post("/field-reports/fr-1/survey/complete")
+        .set("authorization", token)
+        .send({ notes: "Boundary verified." }),
+      request(app.getHttpServer())
+        .post("/field-reports/fr-1/survey/complete")
+        .set("authorization", token)
+        .send({ notes: "Boundary verified." }),
+    ]);
+    expect(results.map(({ status }) => status).sort()).toEqual([200, 409]);
+
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", token)
+      .send({ notes: "Boundary verified." })
+      .expect(409);
+  });
+
+  it("requires an active survey before accepting existing media writes", async () => {
+    report.status = "in-progress";
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/media")
+      .set("authorization", bearer("usr-agent", "field-agent"))
+      .send({ photo: { url: "", caption: "Boundary marker" } })
+      .expect(409);
+    expect(report.photos).toEqual([]);
   });
 });

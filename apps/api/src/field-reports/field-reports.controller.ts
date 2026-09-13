@@ -33,6 +33,7 @@ import { RolesGuard } from "../auth/roles.guard";
 import { findParcelView } from "../parcels/parcel-view";
 import { AddFieldReportMediaDto } from "./add-field-report-media.dto";
 import { BookFieldSurveyDto } from "./book-field-survey.dto";
+import { CompleteFieldSurveyDto } from "./complete-field-survey.dto";
 import { UpdateFieldReportDto } from "./update-field-report.dto";
 
 @Controller("field-reports")
@@ -205,6 +206,16 @@ export class FieldReportsController {
       where: { id, assignedAgentId: currentUserId(req) },
     });
     if (!report) throw new NotFoundError("Field report not found");
+    const activeSurvey = await this.prisma.fieldSurveySession.findFirst({
+      where: {
+        fieldReportId: id,
+        assignedAgentId: currentUserId(req),
+        status: "in-progress",
+      },
+    });
+    if (!activeSurvey) {
+      throw new ConflictError("Start field verification before adding evidence");
+    }
 
     const now = new Date().toISOString();
     const photos = report.photos as unknown as FieldReport["photos"];
@@ -356,12 +367,109 @@ export class FieldReportsController {
     });
   }
 
+  @Post(":id/survey/complete")
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
+  async completeSurvey(
+    @Param("id") id: string,
+    @Body() body: CompleteFieldSurveyDto,
+    @Req() req: Request,
+  ) {
+    const actorId = currentUserId(req);
+    return this.prisma.$transaction(async (tx) => {
+      const report = await tx.fieldReport.findFirst({
+        where: { id, assignedAgentId: actorId },
+      });
+      if (!report) throw new NotFoundError("Field report not found");
+      if (report.status !== "in-progress") {
+        throw new ConflictError("This case has no active field survey to complete");
+      }
+
+      const survey = await tx.fieldSurveySession.findFirst({
+        where: { fieldReportId: id, assignedAgentId: actorId },
+      });
+      if (!survey || survey.status !== "in-progress") {
+        throw new ConflictError("This case has no active field survey to complete");
+      }
+
+      const transition = reviewFieldSurveyTransition("in-progress", "completed");
+      if (!transition.allowed) {
+        throw new ConflictError("This field survey cannot be completed in its current state");
+      }
+
+      const review = filingReview(report as unknown as FieldReport, body.notes);
+      if (!review.canFile) throw new ValidationError(review.blockers[0], "status");
+
+      const now = new Date();
+      const reportChanged = await tx.fieldReport.updateMany({
+        where: { id, assignedAgentId: actorId, status: "in-progress" },
+        data: { status: "completed", submittedAt: now, notes: body.notes },
+      });
+      if (reportChanged.count !== 1) {
+        throw new ConflictError("This case changed; reload and try again");
+      }
+
+      const surveyChanged = await tx.fieldSurveySession.updateMany({
+        where: { id: survey.id, assignedAgentId: actorId, status: "in-progress" },
+        data: { status: "completed", completedAt: now },
+      });
+      if (surveyChanged.count !== 1) {
+        throw new ConflictError("This field survey changed; reload and try again");
+      }
+
+      const updatedReport = await tx.fieldReport.findUnique({ where: { id } });
+      const updatedSurvey = await tx.fieldSurveySession.findUnique({
+        where: { fieldReportId: id },
+      });
+      if (!updatedReport || !updatedSurvey) {
+        throw new NotFoundError("Field survey not found");
+      }
+
+      if (updatedReport.disputeId) {
+        const dispute = await tx.dispute.findUnique({
+          where: { id: updatedReport.disputeId },
+        });
+        if (dispute && dispute.status === "field-visit-scheduled") {
+          await tx.dispute.update({
+            where: { id: dispute.id },
+            data: { status: "under-review", updatedAt: now },
+          });
+          await tx.disputeEvent.create({
+            data: {
+              id: `de-${randomUUID()}`,
+              disputeId: dispute.id,
+              at: now,
+              type: "field-visit",
+              title: "Field survey filed",
+              content: { code: "field-visit-completed" },
+              description: body.notes,
+              actorId,
+            },
+          });
+        }
+      }
+
+      await this.audit.append(tx, {
+        entityType: "field-survey",
+        entityId: updatedSurvey.id,
+        action: "complete",
+        actorId,
+        payload: {
+          fieldReportId: updatedReport.id,
+          completedAt: now.toISOString(),
+          gpsCount: (updatedReport.gpsCaptures as unknown[]).length,
+          photoCount: (updatedReport.photos as unknown[]).length,
+        },
+      });
+
+      return { report: updatedReport, survey: updatedSurvey };
+    });
+  }
+
   /**
-   * Additive to the frozen spec: the agent's own edits to a report they are
-   * carrying out — moving it along the status ladder, saving notes, and
-   * filing it. `status: "completed"` is the filing, and it runs the same
-   * gate the client shows (filingReview()) so a hand-rolled request can't
-   * skip it.
+   * Notes and the optional travel marker. Session start and completion use
+   * dedicated transactional actions and cannot be reached from this patch.
    */
   @Patch(":id")
   @UseGuards(AccessTokenGuard, RolesGuard)
@@ -377,8 +485,6 @@ export class FieldReportsController {
     });
     if (!report) throw new NotFoundError("Field report not found");
 
-    const notes = body.notes ?? report.notes ?? "";
-
     if (body.status) {
       const transition = reviewFieldReportTransition(
         report.status as FieldReport["status"],
@@ -387,81 +493,20 @@ export class FieldReportsController {
       if (!transition.allowed) throw new ValidationError(transition, "status");
     }
 
-    if (body.status !== "completed") {
-      if (!body.status) {
-        return this.prisma.fieldReport.update({
-          where: { id },
-          data: { ...(body.notes !== undefined ? { notes: body.notes } : {}) },
-        });
-      }
-      const changed = await this.prisma.fieldReport.updateMany({
-        where: { id, assignedAgentId: actorId, status: report.status },
-        data: {
-          status: body.status,
-          ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        },
+    if (!body.status) {
+      return this.prisma.fieldReport.update({
+        where: { id },
+        data: { ...(body.notes !== undefined ? { notes: body.notes } : {}) },
       });
-      if (changed.count !== 1) throw new ConflictError("This case changed; reload and try again");
-      return this.prisma.fieldReport.findUnique({ where: { id } });
     }
-
-    const review = filingReview(report as unknown as FieldReport, notes);
-    if (!review.canFile) throw new ValidationError(review.blockers[0], "status");
-
-    return this.prisma.$transaction(async (tx) => {
-      const now = new Date();
-      const changed = await tx.fieldReport.updateMany({
-        where: { id, assignedAgentId: actorId, status: report.status },
-        data: {
-          status: "completed",
-          submittedAt: now,
-          ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        },
-      });
-      if (changed.count !== 1) throw new ConflictError("This case changed; reload and try again");
-      const updated = await tx.fieldReport.findUnique({ where: { id } });
-      if (!updated) throw new NotFoundError("Field report not found");
-
-      await this.audit.append(tx, {
-        entityType: "field-report",
-        entityId: updated.id,
-        action: "create",
-        actorId,
-        payload: {
-          parcelDagNo: updated.parcelDagNo,
-          purpose: updated.purpose,
-          gpsCount: (updated.gpsCaptures as unknown[]).length,
-          photoCount: (updated.photos as unknown[]).length,
-        },
-      });
-
-      // The booking moved the case to "field-visit-scheduled"; filing is what
-      // it was waiting on, so it goes back to an officer. Only when the visit
-      // is what held it up — a case that moved on since is left alone.
-      if (updated.disputeId) {
-        const dispute = await tx.dispute.findUnique({ where: { id: updated.disputeId } });
-        if (dispute && dispute.status === "field-visit-scheduled") {
-          await tx.dispute.update({
-            where: { id: dispute.id },
-            data: { status: "under-review", updatedAt: now },
-          });
-          await tx.disputeEvent.create({
-            data: {
-              id: `de-${randomUUID()}`,
-              disputeId: dispute.id,
-              at: now,
-              type: "field-visit",
-              title: "Field survey filed",
-              content: { code: "field-visit-completed" },
-              // The agent's findings are record content — carried across as typed.
-              description: notes,
-              actorId,
-            },
-          });
-        }
-      }
-
-      return updated;
+    const changed = await this.prisma.fieldReport.updateMany({
+      where: { id, assignedAgentId: actorId, status: report.status },
+      data: {
+        status: body.status,
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
+      },
     });
+    if (changed.count !== 1) throw new ConflictError("This case changed; reload and try again");
+    return this.prisma.fieldReport.findUnique({ where: { id } });
   }
 }

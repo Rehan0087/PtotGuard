@@ -18,10 +18,7 @@ export type FieldReportTransitionReview =
   | { allowed: false; code: "invalid-transition" };
 
 const NEXT_FIELD_REPORT_STATUS: Partial<Record<FieldReportStatus, FieldReportStatus>> = {
-  assigned: "accepted",
   accepted: "en-route",
-  "en-route": "in-progress",
-  "in-progress": "completed",
 };
 
 /** The one-way field workflow. Acceptance is exposed through its own API action. */
