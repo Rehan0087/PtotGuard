@@ -5,6 +5,7 @@
  */
 import type { AuditEvent, AuditVerifyResult } from "@/lib/types";
 import { auditSeed } from "./data";
+import { hydrateMutationState, persistMutationState } from "./mutation-store";
 
 type RawEvent = Omit<AuditEvent, "prevHash" | "hash">;
 
@@ -33,6 +34,11 @@ let chainCache: AuditEvent[] | null = null;
 /** The full, chained ledger (sorted by time), memoized for the session. */
 export async function getAuditChain(): Promise<AuditEvent[]> {
   if (chainCache) return chainCache;
+  const stored = hydrateMutationState();
+  if (stored) {
+    chainCache = stored;
+    return chainCache;
+  }
   const sorted = [...auditSeed].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const chain: AuditEvent[] = [];
   let prevHash = "";
@@ -66,6 +72,9 @@ export async function appendAudit(
   const hash = await sha256(hashInput(prevHash, event));
   const linked = { ...event, prevHash, hash };
   chain.push(linked);
+  // One storage write captures both this link and the domain state it records,
+  // so refresh can never restore one side of an action without the other.
+  persistMutationState(chain);
   return linked;
 }
 

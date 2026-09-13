@@ -16,6 +16,7 @@ import type {
   Dispute,
   DisputeEvent,
   Mutation,
+  MutationStatus,
   ServiceApplication,
   ServiceApplicationEvent,
   FieldReport,
@@ -85,10 +86,53 @@ export interface DisputeDetail {
   activeRestrictions: ParcelRestriction[];
 }
 
+export interface MutationActorSummary {
+  id: ID;
+  name: string;
+  title?: string;
+}
+
+export interface MutationJurisdictionSummary {
+  id: ID;
+  code: string;
+  name: string;
+  nameBn?: string;
+}
+
+export type MutationObjectionSummaryStatus =
+  | "not-started"
+  | "window-open"
+  | "unresolved"
+  | "clear";
+
+export interface MutationObjectionSummary {
+  total: number;
+  unresolved: number;
+  status: MutationObjectionSummaryStatus;
+}
+
+export interface MutationTimelineEvent {
+  id: ID;
+  action: string;
+  at: ISODateString;
+  actorName: string;
+  actorRole?: string;
+  previousStatus?: MutationStatus;
+  newStatus?: MutationStatus;
+  note?: string;
+}
+
 export interface MutationDetail {
   mutation: Mutation;
   parcel: Parcel | null;
   documents: LandDocument[];
+  applicant: MutationActorSummary | null;
+  assignedOfficer: MutationActorSummary | null;
+  verificationStartedBy: MutationActorSummary | null;
+  verifiedBy: MutationActorSummary | null;
+  jurisdiction: MutationJurisdictionSummary | null;
+  objectionSummary: MutationObjectionSummary;
+  timeline: MutationTimelineEvent[];
 }
 
 /**
