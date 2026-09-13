@@ -34,6 +34,7 @@ import {
   extractionReview,
   filingReview,
   normaliseUlpin,
+  maskNationalId,
   mutationActionGate,
   mutationObjectionSummary,
   mutationVerificationReferences,
@@ -52,7 +53,7 @@ import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 import { hydrateMutationState } from "./mutation-store";
 import { filterMutationReads } from "./mutation-contract.mjs";
-import { filterLandOfficeRecords } from "./records-contract.mjs";
+import { filterLandOfficeRecords, recordAuditEvents } from "./records-contract.mjs";
 
 // Restore mutation-owned preview state before any handler (including parcel
 // reads) can observe the in-memory seed after a hard refresh.
@@ -645,32 +646,36 @@ export const handlers = [
           ...(officer ? { responsibleOfficerName: officer.name } : {}),
         };
       });
-    const mutationIds = new Set(mutations.map(({ mutation }) => mutation.id));
+    const mutationIds = mutations.map(({ mutation }) => mutation.id);
+    const disputes = db.disputes
+      .filter((dispute) => dispute.parcelId === parcel.id)
+      .sort((a, b) => b.filedAt.localeCompare(a.filedAt));
     const chain = await getAuditChain();
+    const referenceId = maskNationalId(owner.nationalId);
 
     return HttpResponse.json({
       parcel,
       owner: {
         id: owner.id,
         name: owner.name,
-        ...(owner.nationalId ? { referenceId: owner.nationalId } : {}),
+        ...(referenceId ? { referenceId } : {}),
         ...(owner.profileDetails?.address ? { address: owner.profileDetails.address } : {}),
       },
       jurisdiction: ancestryOf(parcel.jurisdictionId, db.jurisdictions),
       ownership,
       mutations,
-      disputes: db.disputes
-        .filter((dispute) => dispute.parcelId === parcel.id)
-        .sort((a, b) => b.filedAt.localeCompare(a.filedAt)),
+      disputes,
       documents,
       restrictions: db.parcelRestrictions
         .filter((restriction) => restriction.parcelId === parcel.id)
         .sort((a, b) => b.fromDate.localeCompare(a.fromDate)),
-      audit: chain
-        .filter((event) =>
-          (event.entityType === "parcel" && event.entityId === parcel.id)
-          || (event.entityType === "mutation" && mutationIds.has(event.entityId)))
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      audit: recordAuditEvents({
+        events: chain,
+        parcelId: parcel.id,
+        mutationIds,
+        disputeIds: disputes.map((dispute) => dispute.id),
+        documentIds: documents.map((document) => document.id),
+      }),
     });
   }),
 
@@ -721,11 +726,12 @@ export const handlers = [
     const dag = url.searchParams.get("dag")?.toLowerCase();
     const khatian = url.searchParams.get("khatian")?.toLowerCase();
     const bbox = url.searchParams.get("bbox");
-    const q = url.searchParams.get("q")?.toLowerCase();
+    const q = url.searchParams.get("q")?.trim().toLowerCase();
     const ulpin = url.searchParams.get("ulpin");
 
     let items = db.parcels.slice();
-    if (getRole(request) === "land-office") {
+    const isLandOffice = getRole(request) === "land-office";
+    if (isLandOffice) {
       try {
         items = filterLandOfficeRecords({
           actor: currentUser(request),
@@ -740,7 +746,7 @@ export const handlers = [
     }
     if (owner === "me") items = items.filter((p) => p.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((p) => p.ownerId === owner);
-    if (status) items = items.filter((p) => p.registryStatus === status);
+    if (status && !isLandOffice) items = items.filter((p) => p.registryStatus === status);
     // Exact, not a substring: a ULPIN is an identifier being cited, so a
     // near-miss returns nothing rather than a plausible wrong plot.
     if (ulpin) items = items.filter((p) => p.ulpin === normaliseUlpin(ulpin));
@@ -756,7 +762,7 @@ export const handlers = [
           p.centroid.lat <= maxLat,
       );
     }
-    if (q)
+    if (q && !isLandOffice)
       items = items.filter(
         (p) =>
           p.dagNo.toLowerCase().includes(q) ||

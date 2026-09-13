@@ -30,7 +30,7 @@ const parcel = {
   owner: {
     id: "usr-owner",
     name: "Ayesha Siddika",
-    nationalId: "•••• •••• 4821",
+    nationalId: "1990123454821",
     profileDetails: { address: "Rajamehar, Debidwar" },
   },
   ownershipType: "sole",
@@ -65,7 +65,7 @@ describe("Land Office parcel records", () => {
     const controller = new ParcelsController(prisma as never);
 
     await controller.list(
-      { q: "Ayesha", status: "verified", pageSize: "100" },
+      { q: "  Ayesha  ", status: "verified", pageSize: "100" },
       requestFor("land-office"),
     );
 
@@ -110,18 +110,20 @@ describe("Land Office parcel records", () => {
       approvedBy: { name: "Nasrin Akter" }, rejectedBy: null,
     }];
     const documents = [{ id: "d-1", fileName: "deed.pdf", type: "sale-deed", verificationStatus: "verified" }];
+    const auditFindMany = vi.fn().mockResolvedValue([]);
+    const disputes = [{ id: "dispute-1", parcelId: "p-1", status: "open" }];
     const prisma = {
       user: { findUnique: vi.fn().mockResolvedValue(officer) },
       jurisdiction: {
         findMany: vi.fn().mockResolvedValue(jurisdictions),
       },
       parcel: { findUnique: vi.fn().mockResolvedValue(parcel) },
-      dispute: { groupBy: vi.fn().mockResolvedValue([]), findMany: vi.fn().mockResolvedValue([]) },
+      dispute: { groupBy: vi.fn().mockResolvedValue([]), findMany: vi.fn().mockResolvedValue(disputes) },
       ownershipRecord: { findMany: vi.fn().mockResolvedValue(ownership) },
       landDocument: { findMany: vi.fn().mockResolvedValue(documents) },
       mutation: { findMany: vi.fn().mockResolvedValue(mutations) },
       parcelRestriction: { findMany: vi.fn().mockResolvedValue([]) },
-      auditEvent: { findMany: vi.fn().mockResolvedValue([]) },
+      auditEvent: { findMany: auditFindMany },
     };
     const controller = new ParcelsController(prisma as never);
 
@@ -144,8 +146,19 @@ describe("Land Office parcel records", () => {
       applicantName: "Ayesha Siddika",
       responsibleOfficerName: "Nasrin Akter",
     }));
+    expect(auditFindMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { entityType: "parcel", entityId: "p-1" },
+          { entityType: "mutation", entityId: { in: ["m-1"] } },
+          { entityType: "dispute", entityId: { in: ["dispute-1"] } },
+          { entityType: "document", entityId: { in: ["d-1"] } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    });
     expect(detail).toEqual(expect.objectContaining({
-      disputes: [], documents, restrictions: [], audit: [],
+      disputes, documents, restrictions: [], audit: [],
     }));
   });
 });
