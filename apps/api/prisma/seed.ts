@@ -206,6 +206,28 @@ async function main(): Promise<void> {
     ] as Prisma.FieldReportCreateManyInput[],
   });
 
+  await prisma.fieldSurveySession.createMany({
+    data: [
+      {
+        id: "fs-2",
+        fieldReportId: "fr-2",
+        bhumiId: withUlpin.find((parcel) => parcel.id === "p-142")?.ulpin,
+        assignedAgentId: "usr-agent",
+        status: "completed",
+        startedAt: new Date("2026-07-19T04:45:00Z"),
+        completedAt: new Date("2026-07-19T07:10:00Z"),
+      },
+      {
+        id: "fs-3",
+        fieldReportId: "fr-3",
+        bhumiId: withUlpin.find((parcel) => parcel.id === "p-176")?.ulpin,
+        assignedAgentId: "usr-agent2",
+        status: "in-progress",
+        startedAt: new Date("2026-07-23T05:05:00Z"),
+      },
+    ] as Prisma.FieldSurveySessionCreateManyInput[],
+  });
+
   // --- Hearings -------------------------------------------------------------
   await prisma.hearing.createMany({
     data: [

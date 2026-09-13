@@ -13,7 +13,7 @@ type ReportFixture = {
   id: string;
   parcelId: string;
   parcelDagNo: string;
-  disputeId: null;
+  disputeId: string | null;
   mutationId: null;
   purpose: string;
   status: string;
@@ -24,8 +24,18 @@ type ReportFixture = {
   addressHint: string;
   gpsCaptures: unknown[];
   photos: unknown[];
-  notes: null;
-  submittedAt: null;
+  notes: string | null;
+  submittedAt: Date | null;
+};
+
+type SurveyFixture = {
+  id: string;
+  fieldReportId: string;
+  bhumiId: string | null;
+  assignedAgentId: string;
+  status: string;
+  startedAt: Date;
+  completedAt: Date | null;
 };
 
 let prismaFixture: Record<string, unknown>;
@@ -49,6 +59,7 @@ function bearer(id: string, role: "field-agent" | "land-office") {
 describe("field report assignment authorization", () => {
   let app: INestApplication;
   let report: ReportFixture;
+  let survey: SurveyFixture | null;
   let auditEntries: Array<Record<string, unknown>>;
 
   beforeEach(async () => {
@@ -71,6 +82,7 @@ describe("field report assignment authorization", () => {
       notes: null,
       submittedAt: null,
     };
+    survey = null;
 
     const fieldReport = {
       findMany: async ({ where }: { where: { assignedAgentId?: string } }) =>
@@ -99,11 +111,58 @@ describe("field report assignment authorization", () => {
       },
     };
 
+    const fieldSurveySession = {
+      findUnique: async ({ where }: { where: { id?: string; fieldReportId?: string } }) =>
+        survey &&
+        ((where.id && survey.id === where.id) ||
+          (where.fieldReportId && survey.fieldReportId === where.fieldReportId))
+          ? survey
+          : null,
+      findFirst: async ({
+        where,
+      }: {
+        where: { fieldReportId?: string; assignedAgentId?: string; status?: string };
+      }) =>
+        survey &&
+        (!where.fieldReportId || survey.fieldReportId === where.fieldReportId) &&
+        (!where.assignedAgentId || survey.assignedAgentId === where.assignedAgentId) &&
+        (!where.status || survey.status === where.status)
+          ? survey
+          : null,
+      create: async ({ data }: { data: SurveyFixture }) => {
+        if (survey?.fieldReportId === data.fieldReportId) {
+          throw new Error("Unique constraint failed on fieldReportId");
+        }
+        survey = { ...data };
+        return survey;
+      },
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { id: string; assignedAgentId: string; status: string };
+        data: Partial<SurveyFixture>;
+      }) => {
+        if (
+          !survey ||
+          survey.id !== where.id ||
+          survey.assignedAgentId !== where.assignedAgentId ||
+          survey.status !== where.status
+        ) {
+          return { count: 0 };
+        }
+        survey = { ...survey, ...data };
+        return { count: 1 };
+      },
+    };
+
     prismaFixture = {
       fieldReport,
+      fieldSurveySession,
       parcel: {
         findUnique: async () => ({
           id: "parcel-1",
+          ulpin: "ILR-CUM-DEB-0001452",
           dagNo: "1452",
           khatianNo: "88",
           area: 0.35,
@@ -174,6 +233,7 @@ describe("field report assignment authorization", () => {
       .set("authorization", token)
       .expect(200);
     expect(response.body.report).toMatchObject({ id: "fr-1", parcelDagNo: "1452" });
+    expect(response.body.survey).toBeNull();
     await request(app.getHttpServer())
       .get("/field-reports/missing")
       .set("authorization", token)
@@ -240,5 +300,94 @@ describe("field report assignment authorization", () => {
       request(app.getHttpServer()).post("/field-reports/fr-1/accept").set("authorization", token),
     ]);
     expect(results.map(({ status }) => status).sort()).toEqual([200, 409]);
+  });
+
+  it("starts an accepted owned case and records its BhumiID and audit event", async () => {
+    report.status = "accepted";
+    const response = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", bearer("usr-agent", "field-agent"))
+      .expect(201);
+
+    expect(response.body.report.status).toBe("in-progress");
+    expect(response.body.survey).toMatchObject({
+      fieldReportId: "fr-1",
+      assignedAgentId: "usr-agent",
+      bhumiId: "ILR-CUM-DEB-0001452",
+      status: "in-progress",
+    });
+    expect(response.body.survey.startedAt).toBeTruthy();
+    expect(auditEntries.at(-1)).toMatchObject({
+      entityType: "field-survey",
+      entityId: response.body.survey.id,
+      action: "start",
+      actorId: "usr-agent",
+      payload: {
+        fieldReportId: "fr-1",
+        bhumiId: "ILR-CUM-DEB-0001452",
+      },
+    });
+  });
+
+  it("starts an accepted case from the optional en-route marker", async () => {
+    report.status = "en-route";
+    const response = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", bearer("usr-agent", "field-agent"))
+      .expect(201);
+    expect(response.body.report.status).toBe("in-progress");
+    expect(response.body.survey.status).toBe("in-progress");
+  });
+
+  it("resumes the same active session through report detail", async () => {
+    report.status = "accepted";
+    const token = bearer("usr-agent", "field-agent");
+    const started = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .expect(201);
+    const detail = await request(app.getHttpServer())
+      .get("/field-reports/fr-1")
+      .set("authorization", token)
+      .expect(200);
+    expect(detail.body.survey.id).toBe(started.body.survey.id);
+    expect(detail.body.report.status).toBe("in-progress");
+  });
+
+  it("does not let another agent start an owned case", async () => {
+    report.status = "accepted";
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", bearer("usr-agent-2", "field-agent"))
+      .expect(404);
+    expect(survey).toBeNull();
+  });
+
+  it.each(["assigned", "completed", "cancelled"])(
+    "rejects starting a case in %s state",
+    async (status) => {
+      report.status = status;
+      await request(app.getHttpServer())
+        .post("/field-reports/fr-1/survey/start")
+        .set("authorization", bearer("usr-agent", "field-agent"))
+        .expect(409);
+      expect(survey).toBeNull();
+    },
+  );
+
+  it("prevents duplicate and concurrent survey starts", async () => {
+    report.status = "accepted";
+    const token = bearer("usr-agent", "field-agent");
+    const results = await Promise.all([
+      request(app.getHttpServer()).post("/field-reports/fr-1/survey/start").set("authorization", token),
+      request(app.getHttpServer()).post("/field-reports/fr-1/survey/start").set("authorization", token),
+    ]);
+    expect(results.map(({ status }) => status).sort()).toEqual([201, 409]);
+    expect(survey?.fieldReportId).toBe("fr-1");
+
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .expect(409);
   });
 });

@@ -16,6 +16,7 @@ import {
   filingReview,
   rankCandidates,
   reviewFieldReportTransition,
+  reviewFieldSurveyTransition,
   type FieldReport,
   type Jurisdiction,
   type Parcel,
@@ -246,7 +247,11 @@ export class FieldReportsController {
       where: { id, assignedAgentId: currentUserId(req) },
     });
     if (!report) throw new NotFoundError("Field report not found");
-    return { report, parcel: await findParcelView(this.prisma, report.parcelId) };
+    const [parcel, survey] = await Promise.all([
+      findParcelView(this.prisma, report.parcelId),
+      this.prisma.fieldSurveySession.findUnique({ where: { fieldReportId: id } }),
+    ]);
+    return { report, parcel, survey };
   }
 
   @Post(":id/accept")
@@ -285,6 +290,69 @@ export class FieldReportsController {
         },
       });
       return updated;
+    });
+  }
+
+  @Post(":id/survey/start")
+  @HttpCode(201)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
+  async startSurvey(@Param("id") id: string, @Req() req: Request) {
+    const actorId = currentUserId(req);
+    return this.prisma.$transaction(async (tx) => {
+      const report = await tx.fieldReport.findFirst({
+        where: { id, assignedAgentId: actorId },
+      });
+      if (!report) throw new NotFoundError("Field report not found");
+
+      const existing = await tx.fieldSurveySession.findUnique({
+        where: { fieldReportId: id },
+      });
+      if (existing) throw new ConflictError("A field survey already exists for this case");
+
+      if (!(["accepted", "en-route"] as string[]).includes(report.status)) {
+        throw new ConflictError("This case cannot start field verification in its current state");
+      }
+      const transition = reviewFieldSurveyTransition("not-started", "in-progress");
+      if (!transition.allowed) {
+        throw new ConflictError("This field survey cannot be started");
+      }
+
+      const claimed = await tx.fieldReport.updateMany({
+        where: { id, assignedAgentId: actorId, status: report.status },
+        data: { status: "in-progress" },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictError("This case changed; reload and try again");
+      }
+
+      const parcel = await tx.parcel.findUnique({ where: { id: report.parcelId } });
+      const now = new Date();
+      const survey = await tx.fieldSurveySession.create({
+        data: {
+          id: `fs-${randomUUID()}`,
+          fieldReportId: id,
+          bhumiId: parcel?.ulpin,
+          assignedAgentId: actorId,
+          status: "in-progress",
+          startedAt: now,
+        },
+      });
+      const updatedReport = await tx.fieldReport.findUnique({ where: { id } });
+      if (!updatedReport) throw new NotFoundError("Field report not found");
+
+      await this.audit.append(tx, {
+        entityType: "field-survey",
+        entityId: survey.id,
+        action: "start",
+        actorId,
+        payload: {
+          fieldReportId: id,
+          bhumiId: survey.bhumiId,
+          startedAt: now.toISOString(),
+        },
+      });
+      return { report: updatedReport, survey };
     });
   }
 

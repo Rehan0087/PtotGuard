@@ -87,6 +87,7 @@ model User {
   serviceApplicationsAsOfficer ServiceApplication[]      @relation("ServiceApplicationOfficer")
   serviceApplicationEvents     ServiceApplicationEvent[]
   fieldReportsAssigned         FieldReport[]
+  fieldSurveySessions          FieldSurveySession[]
   hearingsAsMediator           Hearing[]
   notifications                AppNotification[]
   auditActions                 AuditEvent[]
@@ -438,12 +439,31 @@ model FieldReport {
   photos          Json      @default("[]")
   notes           String?
   submittedAt     DateTime?
+  survey          FieldSurveySession?
 
   @@index([parcelId])
   @@index([disputeId])
   @@index([assignedAgentId])
   @@index([status])
   @@map("field_reports")
+}
+
+model FieldSurveySession {
+  id              String      @id
+  fieldReportId   String      @unique
+  fieldReport     FieldReport @relation(fields: [fieldReportId], references: [id])
+  /// Parcel ULPIN captured as the BhumiID when the survey starts.
+  bhumiId         String?
+  assignedAgentId String
+  assignedAgent   User        @relation(fields: [assignedAgentId], references: [id])
+  /// FieldSurveyStatus: "in-progress" | "completed" | "failed" | "cancelled"
+  status          String
+  startedAt       DateTime    @default(now())
+  completedAt     DateTime?
+
+  @@index([assignedAgentId])
+  @@index([status])
+  @@map("field_survey_sessions")
 }
 
 // --- Hearings ---------------------------------------------------------------
