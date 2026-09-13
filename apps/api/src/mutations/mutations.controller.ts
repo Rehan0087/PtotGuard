@@ -5,6 +5,8 @@ import type { Prisma } from "@prisma/client";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
   mutationActionGate,
+  mutationObjectionSummary,
+  mutationVerificationReferences,
   verificationGate,
   transferReview,
   type Mutation,
@@ -26,12 +28,9 @@ import {
   assertMutationActionAccess,
   coveredJurisdictionIds,
   loadMutationActor,
+  loadMutationReadActor,
   type MutationActor,
 } from "./mutation-access";
-
-function isLandOfficeRequest(req: Request): boolean {
-  return req.header("x-plotguard-role") === "land-office";
-}
 
 function asMutationStatus(value: unknown): MutationStatus | undefined {
   return typeof value === "string" && ["submitted", "verification", "objection-period", "approved", "rejected"].includes(value)
@@ -53,12 +52,11 @@ export class MutationsController {
 
   @Get()
   async list(@Query() query: Record<string, string>, @Req() req: Request) {
-    const me = currentUserId(req);
-    const where = isLandOfficeRequest(req)
-      ? await this.landOfficeListWhere(query, req)
+    const actor = await loadMutationReadActor(this.prisma, req);
+    const where = actor.role === "land-office"
+      ? await this.landOfficeListWhere(query, actor)
       : {
-          ...(query.scope === "mine" ? { requestedById: me } : {}),
-          ...(query.scope === "assigned" ? { assignedOfficerId: me } : {}),
+          requestedById: actor.id,
           ...(query.status ? { status: query.status } : {}),
         };
     const all = await this.prisma.mutation.findMany({ where, orderBy: { requestedAt: "desc" } });
@@ -67,34 +65,42 @@ export class MutationsController {
 
   @Get(":id")
   async detail(@Param("id") id: string, @Req() req: Request) {
+    const actor = await loadMutationReadActor(this.prisma, req);
     const mutation = await this.prisma.mutation.findUnique({ where: { id } });
     if (!mutation) throw new NotFoundError("Mutation not found");
 
-    if (isLandOfficeRequest(req)) {
-      const [actor, jurisdictions, parcel] = await Promise.all([
-        loadMutationActor(this.prisma, req),
-        this.prisma.jurisdiction.findMany(),
-        this.prisma.parcel.findUnique({
-          where: { id: mutation.parcelId },
-          select: { jurisdictionId: true },
-        }),
-      ]);
-      if (parcel && !coveredJurisdictionIds(actor, jurisdictions).has(parcel.jurisdictionId)) {
+    const accessParcel = await this.prisma.parcel.findUnique({
+      where: { id: mutation.parcelId },
+      select: { jurisdictionId: true },
+    });
+    if (actor.role === "citizen") {
+      if (mutation.requestedById !== actor.id) {
+        throw new ForbiddenException("You can only view your own mutations.");
+      }
+    } else {
+      const jurisdictions = await this.prisma.jurisdiction.findMany();
+      if (accessParcel && !coveredJurisdictionIds(actor, jurisdictions).has(accessParcel.jurisdictionId)) {
         throw new ForbiddenException("This mutation is outside your jurisdiction.");
       }
     }
 
-    const [parcel, documents, applicant, assignedOfficer, events] = await Promise.all([
+    const summary = (userId: string | null | undefined) => userId
+      ? this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, name: true, title: true },
+        })
+      : null;
+    const [parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy, jurisdiction, events] = await Promise.all([
       findParcelView(this.prisma, mutation.parcelId),
       this.prisma.landDocument.findMany({ where: { id: { in: mutation.documentIds } } }),
-      this.prisma.user.findUnique({
-        where: { id: mutation.requestedById },
-        select: { id: true, name: true, title: true },
-      }),
-      mutation.assignedOfficerId
-        ? this.prisma.user.findUnique({
-            where: { id: mutation.assignedOfficerId },
-            select: { id: true, name: true, title: true },
+      summary(mutation.requestedById),
+      summary(mutation.assignedOfficerId),
+      summary(mutation.verificationStartedById),
+      summary(mutation.verifiedById),
+      accessParcel
+        ? this.prisma.jurisdiction.findUnique({
+            where: { id: accessParcel.jurisdictionId },
+            select: { id: true, code: true, name: true, nameBn: true },
           })
         : null,
       this.prisma.auditEvent.findMany({
@@ -103,7 +109,9 @@ export class MutationsController {
       }),
     ]);
     return {
-      mutation, parcel, documents, applicant, assignedOfficer,
+      mutation, parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy,
+      jurisdiction,
+      objectionSummary: mutationObjectionSummary(mutation as unknown as Mutation),
       timeline: events.map((event) => {
         const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
           ? event.payload : {};
@@ -253,6 +261,21 @@ export class MutationsController {
       const notes = typeof body.notes === "string" ? body.notes.trim() : "";
       const verification = verificationGate(checklist, notes);
       if (!verification.ok) throw new ValidationError(verification.reason, "verification");
+      const [recipient, documents] = await Promise.all([
+        mutation.toOwnerId ? tx.user.findUnique({ where: { id: mutation.toOwnerId } }) : null,
+        tx.landDocument.findMany({ where: { id: { in: mutation.documentIds } } }),
+      ]);
+      const references = mutationVerificationReferences(
+        mutation as unknown as Mutation,
+        recipient,
+        documents,
+      );
+      if (!references.ok) {
+        throw new ValidationError(
+          references.reason,
+          references.reason.code === "invalid-recipient" ? "toOwnerId" : "documentIds",
+        );
+      }
       const policy = await tx.policy.findUnique({ where: { id: "singleton" } });
       if (!policy || !Number.isInteger(policy.objectionWindowDays) || policy.objectionWindowDays < 0) {
         throw new ValidationError({ code: "objection-policy-unavailable" }, "verification");
@@ -429,11 +452,8 @@ export class MutationsController {
     }
   }
 
-  private async landOfficeListWhere(query: Record<string, string>, req: Request) {
-    const [actor, jurisdictions] = await Promise.all([
-      loadMutationActor(this.prisma, req),
-      this.prisma.jurisdiction.findMany(),
-    ]);
+  private async landOfficeListWhere(query: Record<string, string>, actor: MutationActor) {
+    const jurisdictions = await this.prisma.jurisdiction.findMany();
     return {
       parcel: { jurisdictionId: { in: [...coveredJurisdictionIds(actor, jurisdictions)] } },
       ...(query.scope === "assigned" ? { assignedOfficerId: actor.id } : {}),

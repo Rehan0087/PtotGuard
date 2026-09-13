@@ -4,6 +4,7 @@ import {
   assertLandOfficeActor,
   assertMutationActionAccess,
   coveredJurisdictionIds,
+  loadMutationReadActor,
   loadMutationActor,
 } from "./mutation-access";
 import { MutationsController } from "./mutations.controller";
@@ -33,6 +34,26 @@ function prismaFor(actor: object | null) {
 describe("mutation access", () => {
   it("loads an active Land Office actor from the authenticated database user", async () => {
     await expect(loadMutationActor(prismaFor(officer), requestFor("land-office"))).resolves.toEqual(officer);
+  });
+
+  it("loads an active citizen for mutation reads from the database identity", async () => {
+    const citizen = { ...officer, id: "usr-citizen", role: "citizen" };
+    await expect(loadMutationReadActor(prismaFor(citizen), requestFor("land-office")))
+      .resolves.toEqual(citizen);
+  });
+
+  it.each([
+    { ...officer, role: "admin" },
+    { ...officer, status: "suspended" },
+    null,
+  ])("rejects unsupported, inactive, or missing read actors: %j", async (actor) => {
+    await expect(loadMutationReadActor(prismaFor(actor), requestFor("citizen")))
+      .rejects.toThrow(ForbiddenException);
+  });
+
+  it("rejects an unsupported role selector before falling back to a citizen identity", async () => {
+    await expect(loadMutationReadActor(prismaFor(officer), requestFor("auditor")))
+      .rejects.toThrow(ForbiddenException);
   });
 
   it("rejects a citizen actor", () => {
@@ -109,5 +130,37 @@ describe("mutation access", () => {
     );
 
     await expect(controller.detail("m-out", requestFor("land-office"))).rejects.toThrow(ForbiddenException);
+  });
+
+  it("forces an omitted citizen scope to the actor's own mutations", async () => {
+    const citizen = { ...officer, id: "usr-ayesha", role: "citizen" };
+    const findMany = vi.fn().mockResolvedValue([]);
+    const controller = new MutationsController(
+      { user: { findUnique: vi.fn().mockResolvedValue(citizen) }, mutation: { findMany } } as never,
+      {} as never,
+    );
+
+    await controller.list({}, requestFor("citizen"));
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: { requestedById: "usr-ayesha" },
+      orderBy: { requestedAt: "desc" },
+    });
+  });
+
+  it("ignores a hostile assigned scope for a citizen while retaining status", async () => {
+    const citizen = { ...officer, id: "usr-ayesha", role: "citizen" };
+    const findMany = vi.fn().mockResolvedValue([]);
+    const controller = new MutationsController(
+      { user: { findUnique: vi.fn().mockResolvedValue(citizen) }, mutation: { findMany } } as never,
+      {} as never,
+    );
+
+    await controller.list({ scope: "assigned", status: "approved" }, requestFor("citizen"));
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: { requestedById: "usr-ayesha", status: "approved" },
+      orderBy: { requestedAt: "desc" },
+    });
   });
 });

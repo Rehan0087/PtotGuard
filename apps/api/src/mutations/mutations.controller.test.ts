@@ -10,6 +10,12 @@ import { MutationDecisionDto } from "./mutation-decision.dto";
 const now = new Date("2026-09-12T10:00:00.000Z");
 const officer = { id: "usr-officer", name: "Officer", role: "land-office", status: "active", jurisdictionId: "j-office" };
 const recipient = { id: "usr-new", name: "New owner", role: "citizen", status: "active" };
+const document = {
+  id: "doc-1", parcelId: "p-1", ownerId: "usr-applicant", type: "sale-deed",
+  fileName: "deed.pdf", mimeType: "application/pdf", sizeBytes: 10,
+  uploadedAt: now, uploadedById: "usr-applicant", ocrStatus: "extracted",
+  verificationStatus: "verified",
+};
 const jurisdictions = [
   { id: "j-office", parentId: null },
   { id: "j-local", parentId: "j-office" },
@@ -33,7 +39,11 @@ function fixture(status = "submitted") {
   };
   const parcel = { id: "p-1", dagNo: "42", ownerId: "usr-old", owner: { name: "Old owner" }, jurisdictionId: "j-local" };
   const users = vi.fn().mockImplementation(async ({ where }: { where: { id: string } }) =>
-    where.id === "usr-new" ? recipient : where.id === "usr-applicant" ? { id: "usr-applicant", name: "Applicant" } : officer);
+    where.id === "usr-new"
+      ? recipient
+      : ["usr-applicant", "usr-ayesha"].includes(where.id)
+        ? { id: where.id, name: "Applicant", role: "citizen", status: "active", jurisdictionId: "j-local" }
+        : officer);
   const tx = {
     mutation: {
       findUnique: vi.fn().mockResolvedValue(mutation),
@@ -42,9 +52,13 @@ function fixture(status = "submitted") {
     },
     parcel: { findUnique: vi.fn().mockResolvedValue(parcel), update: vi.fn().mockResolvedValue(parcel) },
     user: { findUnique: users },
-    jurisdiction: { findMany: vi.fn().mockResolvedValue(jurisdictions) },
+    jurisdiction: {
+      findMany: vi.fn().mockResolvedValue(jurisdictions),
+      findUnique: vi.fn().mockResolvedValue({ id: "j-local", code: "LOC", name: "Local", nameBn: "স্থানীয়" }),
+    },
     policy: { findUnique: vi.fn().mockResolvedValue({ id: "singleton", objectionWindowDays: 15, mutationFeeBdt: 500 }) },
     ownershipRecord: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), create: vi.fn().mockResolvedValue({}) },
+    landDocument: { findMany: vi.fn().mockResolvedValue([document]) },
   };
   const prisma = {
     ...tx,
@@ -52,7 +66,7 @@ function fixture(status = "submitted") {
     user: { findUnique: vi.fn().mockImplementation(users) },
     parcel: { ...tx.parcel, findUnique: vi.fn().mockResolvedValue(parcel) },
     auditEvent: { findMany: vi.fn().mockResolvedValue([]) },
-    landDocument: { findMany: vi.fn().mockResolvedValue([{ id: "doc-1" }]) },
+    landDocument: { findMany: vi.fn().mockResolvedValue([document]) },
     parcelRestriction: { findMany: vi.fn().mockResolvedValue([]) },
     dispute: { groupBy: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn().mockImplementation(async (callback) => callback(tx)),
@@ -159,7 +173,8 @@ describe("mutation workflow writes", () => {
     const f = fixture("verification");
     await f.controller.completeVerification("m-1", checks, request());
     expect(f.tx.policy.findUnique).toHaveBeenCalledWith({ where: { id: "singleton" } });
-    const { notes: _, ...checklist } = checks;
+    const checklist = { ...checks };
+    delete (checklist as { notes?: string }).notes;
     expect(f.tx.mutation.update).toHaveBeenCalledWith({
       where: expect.objectContaining({ id: "m-1", status: "verification", updatedAt: f.mutation.updatedAt }),
       data: expect.objectContaining({ status: "objection-period", assignedOfficerId: "usr-officer", verifiedById: "usr-officer", verifiedAt: now,
@@ -168,6 +183,30 @@ describe("mutation workflow writes", () => {
     });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ action: "status-change", actorId: "usr-officer",
       payload: expect.objectContaining({ previousStatus: "verification", newStatus: "objection-period", note: "Records verified" }) }));
+  });
+
+  it.each([
+    ["missing recipient", null, [document], "invalid-recipient"],
+    ["missing document", recipient, [], "mutation-documents-missing"],
+    ["partial document set", recipient, [document], "mutation-documents-missing"],
+    ["foreign parcel document", recipient, [{ ...document, parcelId: "p-other" }], "mutation-documents-foreign"],
+  ] as const)("refuses completion with %s", async (_case, linkedRecipient, documents, code) => {
+    const f = fixture("verification");
+    if (_case === "partial document set") f.mutation.documentIds = ["doc-1", "doc-2"];
+    f.tx.user.findUnique.mockImplementation(async ({ where }) =>
+      where.id === "usr-new" ? linkedRecipient : officer);
+    f.tx.landDocument.findMany.mockResolvedValue(documents);
+
+    const error = await f.controller.completeVerification("m-1", checks, request())
+      .catch((caught) => caught as ValidationError);
+
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).getResponse()).toMatchObject({
+      error: "validation_failed",
+      field: code === "invalid-recipient" ? "toOwnerId" : "documentIds",
+      reason: { code },
+    });
+    noWrites(f);
   });
 
   it.each(["submitted", "objection-period", "approved", "rejected"])("refuses completion from %s without writes", async (status) => {
@@ -344,6 +383,18 @@ describe("mutation read and filing compatibility", () => {
     await f.controller.list({ scope: "mine" }, request("citizen"));
     expect(f.prisma.mutation.findMany).toHaveBeenCalledWith({ where: { requestedById: "usr-ayesha" }, orderBy: { requestedAt: "desc" } });
   });
+  it("forbids a citizen from reading another applicant's mutation detail", async () => {
+    const f = fixture();
+    await expect(f.controller.detail("m-1", request("citizen")))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(f.prisma.landDocument.findMany).not.toHaveBeenCalled();
+  });
+  it("allows a citizen to read their own mutation detail", async () => {
+    const f = fixture();
+    f.mutation.requestedById = "usr-ayesha";
+    await expect(f.controller.detail("m-1", request("citizen")))
+      .resolves.toMatchObject({ mutation: { id: "m-1" } });
+  });
   it("captures the registry owner on citizen filing", async () => {
     const f = fixture();
     await f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash" }, request("citizen"));
@@ -357,16 +408,26 @@ describe("mutation read and filing compatibility", () => {
       { id: "au-2", action: "status-change", createdAt: now, actorName: "Officer", payload: { actorRole: "land-office", previousStatus: "submitted", newStatus: "verification", note: "Assigned" } },
       { id: "au-3", action: "update", createdAt: now, actorName: null, payload: null },
     ]);
+    f.mutation.requestedById = "usr-ayesha";
+    Object.assign(f.mutation, {
+      verificationStartedById: "usr-officer",
+      verifiedById: "usr-officer",
+      objectionStartDate: new Date("2026-09-01T10:00:00.000Z"),
+    });
+    f.mutation.objections = [{ id: "o-open", status: "open" }, { id: "o-done", status: "resolved" }];
     const result = await f.controller.detail("m-1", request("citizen"));
     expect(result).toMatchObject({ mutation: { id: "m-1" }, parcel: { id: "p-1", ownerName: "Old owner" }, documents: [{ id: "doc-1" }],
-      applicant: { id: "usr-applicant", name: "Applicant" }, assignedOfficer: { id: "usr-officer", name: "Officer" },
+      applicant: { id: "usr-ayesha" }, assignedOfficer: { id: "usr-officer", name: "Officer" },
+      verificationStartedBy: { id: "usr-officer", name: "Officer" },
+      verifiedBy: { id: "usr-officer", name: "Officer" },
+      objectionSummary: { total: 2, unresolved: 1, status: "unresolved" },
       timeline: [
         { id: "au-1", action: "create", at: "2026-08-01T10:00:00.000Z", actorName: "Applicant" },
         { id: "au-2", action: "status-change", at: "2026-09-12T10:00:00.000Z", actorName: "Officer", actorRole: "land-office", previousStatus: "submitted", newStatus: "verification", note: "Assigned" },
         { id: "au-3", action: "update", actorName: "System" },
       ] });
     expect(f.prisma.user.findUnique).toHaveBeenCalledWith({
-      where: { id: "usr-applicant" },
+      where: { id: "usr-ayesha" },
       select: { id: true, name: true, title: true },
     });
     expect(f.prisma.user.findUnique).toHaveBeenCalledWith({

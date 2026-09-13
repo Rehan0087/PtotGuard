@@ -20,14 +20,32 @@ export function assertLandOfficeActor(actor: MutationActor): void {
   }
 }
 
+export async function loadMutationReadActor(
+  prisma: PrismaService,
+  req: Request,
+): Promise<MutationActor> {
+  const requestedRole = req.header("x-plotguard-role");
+  if (requestedRole && requestedRole !== "citizen" && requestedRole !== "land-office") {
+    throw new ForbiddenException("Citizen or Land Office Staff access required.");
+  }
+  const actor = await prisma.user.findUnique({ where: { id: currentUserId(req) } });
+  if (
+    !actor ||
+    actor.status !== "active" ||
+    (actor.role !== "citizen" && actor.role !== "land-office")
+  ) {
+    throw new ForbiddenException("Citizen or Land Office Staff access required.");
+  }
+  return actor;
+}
+
 /**
  * The request header selects a demo identity, but it is not itself an
  * authorization claim. Load that identity so role, status, and jurisdiction
  * remain server-side facts.
  */
 export async function loadMutationActor(prisma: PrismaService, req: Request): Promise<MutationActor> {
-  const actor = await prisma.user.findUnique({ where: { id: currentUserId(req) } });
-  if (!actor) throw new ForbiddenException("Land Office Staff access required.");
+  const actor = await loadMutationReadActor(prisma, req);
   assertLandOfficeActor(actor);
   return actor;
 }

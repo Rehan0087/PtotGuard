@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   approvalGate,
   mutationActionGate,
+  mutationObjectionSummary,
+  mutationVerificationReferences,
   verificationGate,
 } from "./mutations";
 import type {
@@ -157,6 +159,100 @@ describe("approvalGate", () => {
 
     expect(gate.daysToWindowClose).toBeNull();
     expect(gate.canApprove).toBe(true);
+  });
+});
+
+describe("mutation verification references", () => {
+  const recipient = { id: "usr-2", role: "citizen", status: "active" };
+  const deed = {
+    id: "doc-1",
+    parcelId: "p-1",
+    ownerId: "usr-1",
+    type: "sale-deed",
+  };
+
+  it("accepts resolved parcel evidence and an active linked recipient", () => {
+    expect(mutationVerificationReferences(
+      mutation({ documentIds: ["doc-1"] }),
+      recipient,
+      [deed],
+    )).toEqual({ ok: true });
+  });
+
+  it.each([
+    null,
+    { id: "usr-2", role: "land-office", status: "active" },
+    { id: "usr-2", role: "citizen", status: "suspended" },
+  ])("requires the linked recipient to resolve to an active citizen: %j", (invalidRecipient) => {
+    expect(mutationVerificationReferences(mutation({ documentIds: ["doc-1"] }), invalidRecipient, [deed]))
+      .toEqual({ ok: false, reason: { code: "invalid-recipient" } });
+  });
+
+  it("requires at least one appropriate supporting document", () => {
+    expect(mutationVerificationReferences(mutation({ documentIds: [] }), recipient, []))
+      .toEqual({ ok: false, reason: { code: "supporting-documents-required" } });
+  });
+
+  it("reports every unresolved document id", () => {
+    expect(mutationVerificationReferences(
+      mutation({ documentIds: ["doc-1", "fabricated"] }),
+      recipient,
+      [deed],
+    )).toEqual({
+      ok: false,
+      reason: { code: "mutation-documents-missing", documentIds: ["fabricated"] },
+    });
+  });
+
+  it("rejects parcel documents belonging to another parcel", () => {
+    expect(mutationVerificationReferences(
+      mutation({ documentIds: ["doc-foreign"] }),
+      recipient,
+      [{ ...deed, id: "doc-foreign", parcelId: "p-other" }],
+    )).toEqual({
+      ok: false,
+      reason: { code: "mutation-documents-foreign", documentIds: ["doc-foreign"] },
+    });
+  });
+
+  it("accepts owner-only identity evidence only for a mutation party", () => {
+    const ownerOnly = { id: "doc-id", ownerId: "usr-2", type: "id-proof" };
+    expect(mutationVerificationReferences(
+      mutation({ documentIds: ["doc-1", "doc-id"] }),
+      recipient,
+      [deed, ownerOnly],
+    )).toEqual({ ok: true });
+
+    expect(mutationVerificationReferences(
+      mutation({ documentIds: ["doc-1", "doc-id"] }),
+      recipient,
+      [deed, { ...ownerOnly, ownerId: "usr-stranger" }],
+    )).toEqual({
+      ok: false,
+      reason: { code: "mutation-documents-foreign", documentIds: ["doc-id"] },
+    });
+  });
+
+  it("requires evidence appropriate to the mutation type", () => {
+    expect(mutationVerificationReferences(
+      mutation({ documentIds: ["receipt"] }),
+      recipient,
+      [{ ...deed, id: "receipt", type: "tax-receipt" }],
+    )).toEqual({
+      ok: false,
+      reason: { code: "supporting-document-type-required", expectedTypes: ["sale-deed"] },
+    });
+  });
+});
+
+describe("mutation objection summary", () => {
+  it.each([
+    [{}, { total: 0, unresolved: 0, status: "not-started" }],
+    [{ objectionStartDate: fromNow(-1), objectionWindowEndsAt: fromNow(2) }, { total: 0, unresolved: 0, status: "window-open" }],
+    [{ objectionStartDate: fromNow(-4), objectionWindowEndsAt: fromNow(-1), objections: [objection()] }, { total: 1, unresolved: 1, status: "unresolved" }],
+    [{ objectionStartDate: fromNow(-4), objectionWindowEndsAt: fromNow(-1), objections: [{ ...objection(), status: "resolved" }] }, { total: 1, unresolved: 0, status: "clear" }],
+  ] as const)("computes renderable counts and status for %j", (overrides, expected) => {
+    expect(mutationObjectionSummary(mutation(overrides), NOW)).toEqual(expected);
   });
 });
 

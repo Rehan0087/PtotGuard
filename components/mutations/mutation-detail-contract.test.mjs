@@ -98,3 +98,17 @@ test("mutation detail labels authoritative identifiers and statuses", () => {
   );
   assert.match(detailSource, /mutationDetailPresentation\(/);
 });
+
+test("mutation detail renders jurisdiction, verification actors, objection summary, and approval holds", () => {
+  for (const field of [
+    "jurisdiction",
+    "verificationStartedBy",
+    "verifiedBy",
+    "objectionSummary",
+  ]) {
+    assert.match(detailSource, new RegExp(`\\b${field}\\b`), field);
+  }
+  assert.match(detailSource, /hold\.objections/);
+  assert.match(detailSource, /hold\.objectionWindow/);
+  assert.match(detailSource, /hold\.noRecipient/);
+});

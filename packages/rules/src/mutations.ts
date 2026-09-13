@@ -7,11 +7,13 @@
 import type {
   AcquisitionType,
   ID,
+  DocumentType,
   Mutation,
   MutationObjection,
   MutationStatus,
   MutationType,
   MutationVerificationChecklist,
+  MutationObjectionSummary,
 } from "./types";
 
 const DAY_MS = 86_400_000;
@@ -51,6 +53,34 @@ export type MutationVerificationFailure =
       missing: (keyof MutationVerificationChecklist)[];
     }
   | { code: "verification-notes-required" };
+
+export type MutationVerificationReferenceFailure =
+  | { code: "invalid-recipient" }
+  | { code: "supporting-documents-required" }
+  | { code: "mutation-documents-missing"; documentIds: ID[] }
+  | { code: "mutation-documents-foreign"; documentIds: ID[] }
+  | { code: "supporting-document-type-required"; expectedTypes: DocumentType[] };
+
+export interface MutationVerificationDocument {
+  id: ID;
+  parcelId?: ID | null;
+  ownerId?: ID | null;
+  type: DocumentType | string;
+}
+
+export interface MutationVerificationRecipient {
+  id: ID;
+  role: string;
+  status: string;
+}
+
+const REQUIRED_DOCUMENT_TYPES: Record<MutationType, DocumentType[]> = {
+  sale: ["sale-deed"],
+  inheritance: ["inheritance-affidavit"],
+  gift: ["title-deed"],
+  partition: ["title-deed", "survey-report"],
+  correction: ["title-deed", "mutation-order", "court-order"],
+};
 
 export interface MutationActionGate {
   canStartVerification: boolean;
@@ -114,6 +144,69 @@ export function verificationGate(
   }
 
   return { ok: true };
+}
+
+/** Validate the durable references behind a completed verification checklist. */
+export function mutationVerificationReferences(
+  mutation: Pick<Mutation, "type" | "parcelId" | "requestedById" | "fromOwnerId" | "toOwnerId" | "documentIds">,
+  recipient: MutationVerificationRecipient | null,
+  documents: MutationVerificationDocument[],
+): { ok: true } | { ok: false; reason: MutationVerificationReferenceFailure } {
+  if (
+    !mutation.toOwnerId ||
+    !recipient ||
+    recipient.id !== mutation.toOwnerId ||
+    recipient.role !== "citizen" ||
+    recipient.status !== "active"
+  ) {
+    return { ok: false, reason: { code: "invalid-recipient" } };
+  }
+
+  if (mutation.documentIds.length === 0) {
+    return { ok: false, reason: { code: "supporting-documents-required" } };
+  }
+
+  const byId = new Map(documents.map((document) => [document.id, document]));
+  const missing = [...new Set(mutation.documentIds.filter((id) => !byId.has(id)))];
+  if (missing.length > 0) {
+    return { ok: false, reason: { code: "mutation-documents-missing", documentIds: missing } };
+  }
+
+  const legitimateOwners = new Set(
+    [mutation.requestedById, mutation.fromOwnerId, mutation.toOwnerId].filter(
+      (id): id is ID => typeof id === "string" && id.length > 0,
+    ),
+  );
+  const foreign = [...new Set(mutation.documentIds.filter((id) => {
+    const document = byId.get(id)!;
+    if (document.parcelId) return document.parcelId !== mutation.parcelId;
+    return !document.ownerId || !legitimateOwners.has(document.ownerId);
+  }))];
+  if (foreign.length > 0) {
+    return { ok: false, reason: { code: "mutation-documents-foreign", documentIds: foreign } };
+  }
+
+  const expectedTypes = REQUIRED_DOCUMENT_TYPES[mutation.type];
+  if (!documents.some((document) => expectedTypes.includes(document.type as DocumentType))) {
+    return { ok: false, reason: { code: "supporting-document-type-required", expectedTypes } };
+  }
+
+  return { ok: true };
+}
+
+export function mutationObjectionSummary(
+  mutation: Pick<Mutation, "objectionStartDate" | "objectionWindowEndsAt" | "objections">,
+  now: Date = new Date(),
+): MutationObjectionSummary {
+  const unresolved = mutation.objections.filter((item) => item.status !== "resolved").length;
+  let status: MutationObjectionSummary["status"];
+  if (!mutation.objectionStartDate) status = "not-started";
+  else if (mutation.objectionWindowEndsAt && new Date(mutation.objectionWindowEndsAt).getTime() > now.getTime()) {
+    status = "window-open";
+  } else if (unresolved > 0) status = "unresolved";
+  else status = "clear";
+
+  return { total: mutation.objections.length, unresolved, status };
 }
 
 export function mutationActionGate(
