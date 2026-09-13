@@ -60,7 +60,7 @@ function listPrisma() {
 }
 
 describe("Land Office parcel records", () => {
-  it("composes jurisdiction, status, and multi-field search in the database query", async () => {
+  it("composes jurisdiction, non-mutation status, and search against parcels with no active mutation", async () => {
     const { prisma, findMany } = listPrisma();
     const controller = new ParcelsController(prisma as never);
 
@@ -73,6 +73,9 @@ describe("Land Office parcel records", () => {
       where: {
         jurisdictionId: { in: ["j-debidwar", "j-rajamehar"] },
         registryStatus: "verified",
+        mutations: {
+          none: { status: { in: ["submitted", "verification", "objection-period"] } },
+        },
         OR: [
           { dagNo: { contains: "ayesha", mode: "insensitive" } },
           { khatianNo: { contains: "ayesha", mode: "insensitive" } },
@@ -81,8 +84,47 @@ describe("Land Office parcel records", () => {
           { ulpin: { contains: "AYESHA", mode: "insensitive" } },
         ],
       },
-      include: { owner: { select: { name: true } } },
+      include: {
+        owner: { select: { name: true } },
+        mutations: {
+          where: { status: { in: ["submitted", "verification", "objection-period"] } },
+          select: { status: true },
+        },
+      },
     });
+  });
+
+  it("filters and projects Under mutation from the related active mutation rows", async () => {
+    const activeParcel = {
+      ...parcel,
+      registryStatus: "verified",
+      mutations: [{ status: "verification" }],
+    };
+    const findMany = vi.fn().mockResolvedValue([activeParcel]);
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue(officer) },
+      jurisdiction: { findMany: vi.fn().mockResolvedValue(jurisdictions) },
+      parcel: { findMany, count: vi.fn().mockResolvedValue(1) },
+      dispute: { groupBy: vi.fn().mockResolvedValue([]) },
+    };
+    const controller = new ParcelsController(prisma as never);
+
+    const result = await controller.list(
+      { status: "under-mutation", pageSize: "100" },
+      requestFor("land-office"),
+    );
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        mutations: {
+          some: { status: { in: ["submitted", "verification", "objection-period"] } },
+        },
+      }),
+    }));
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: "p-1", registryStatus: "under-mutation" }),
+    ]);
+    expect(result.items[0]).not.toHaveProperty("mutations");
   });
 
   it("rejects record detail outside the officer jurisdiction", async () => {
@@ -160,5 +202,41 @@ describe("Land Office parcel records", () => {
     expect(detail).toEqual(expect.objectContaining({
       disputes, documents, restrictions: [], audit: [],
     }));
+  });
+
+  it("projects record status from current mutation rows and keeps terminal history non-active", async () => {
+    const mutationFindMany = vi.fn()
+      .mockResolvedValueOnce([{
+        id: "m-active", parcelId: "p-1", mutationNumber: "MUT-2026-00002",
+        status: "objection-period", requestedAt: new Date("2026-09-01T00:00:00Z"),
+        requestedBy: { name: "Ayesha Siddika" }, assignedOfficer: { name: "Nasrin Akter" },
+        approvedBy: null, rejectedBy: null,
+      }])
+      .mockResolvedValueOnce([{
+        id: "m-rejected", parcelId: "p-1", mutationNumber: "MUT-2026-00003",
+        status: "rejected", requestedAt: new Date("2026-09-02T00:00:00Z"),
+        requestedBy: { name: "Ayesha Siddika" }, assignedOfficer: { name: "Nasrin Akter" },
+        approvedBy: null, rejectedBy: { name: "Nasrin Akter" },
+      }]);
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue(officer) },
+      jurisdiction: { findMany: vi.fn().mockResolvedValue(jurisdictions) },
+      parcel: { findUnique: vi.fn().mockResolvedValue(parcel) },
+      dispute: { findMany: vi.fn().mockResolvedValue([]) },
+      ownershipRecord: { findMany: vi.fn().mockResolvedValue([]) },
+      landDocument: { findMany: vi.fn().mockResolvedValue([]) },
+      mutation: { findMany: mutationFindMany },
+      parcelRestriction: { findMany: vi.fn().mockResolvedValue([]) },
+      auditEvent: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const controller = new ParcelsController(prisma as never);
+
+    const active = await controller.record("p-1", requestFor("land-office"));
+    const terminal = await controller.record("p-1", requestFor("land-office"));
+
+    expect(active.parcel.registryStatus).toBe("under-mutation");
+    expect(active.mutations[0].mutation.status).toBe("objection-period");
+    expect(terminal.parcel.registryStatus).toBe("verified");
+    expect(terminal.mutations[0].mutation.status).toBe("rejected");
   });
 });

@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { maskNationalId } from "./records";
+import { maskNationalId, recordRegistryStatus } from "./records";
+
+describe("recordRegistryStatus", () => {
+  it.each(["submitted", "verification", "objection-period"] as const)(
+    "marks a parcel under mutation while a related mutation is %s",
+    (status) => {
+      expect(recordRegistryStatus("verified", [{ status }])).toBe("under-mutation");
+    },
+  );
+
+  it.each(["approved", "rejected"] as const)(
+    "does not mark a parcel under mutation when its related mutation is %s",
+    (status) => {
+      expect(recordRegistryStatus("verified", [{ status }])).toBe("verified");
+    },
+  );
+
+  it("uses any active mutation when a parcel has both active and terminal history", () => {
+    expect(recordRegistryStatus("disputed", [
+      { status: "approved" },
+      { status: "verification" },
+      { status: "rejected" },
+    ])).toBe("under-mutation");
+  });
+});
 
 describe("maskNationalId", () => {
   it("reveals only the final four characters of a stored identifier", () => {

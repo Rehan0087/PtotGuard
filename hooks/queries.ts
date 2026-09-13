@@ -223,21 +223,20 @@ export function useCreateMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<LandMutation>) => api.post<LandMutation>("/mutations", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["mutations"] }),
+    onSuccess: (mutation) => invalidateMutationWorkflow(qc, mutation.id),
   });
 }
 
-function invalidateMutationWorkflow(qc: QueryClient, id: string, includeParcel = false) {
+function invalidateMutationWorkflow(qc: QueryClient, id: string) {
   qc.invalidateQueries({ queryKey: ["mutation", id] });
   qc.invalidateQueries({ queryKey: ["mutations"] });
   qc.invalidateQueries({ queryKey: ["audit", "mutation", id] });
   // Record detail embeds mutation state and its audit trail, so every workflow
-  // action refreshes that aggregate. Approval also changes parcel ownership.
+  // action refreshes that aggregate and the Records list projection. Approval
+  // also changes the parcel's owner through the existing backend transaction.
   qc.invalidateQueries({ queryKey: ["land-record"] });
-  if (includeParcel) {
-    qc.invalidateQueries({ queryKey: ["parcel"] });
-    qc.invalidateQueries({ queryKey: ["parcels"] });
-  }
+  qc.invalidateQueries({ queryKey: ["parcel"] });
+  qc.invalidateQueries({ queryKey: ["parcels"] });
 }
 
 export type CompleteMutationVerificationInput = MutationVerificationChecklist & {
@@ -294,8 +293,7 @@ export function useMutationDecision(id: string) {
   return useMutation({
     mutationFn: (input: MutationDecisionInput) =>
       api.patch<LandMutation>(`/mutations/${id}/decision`, normalizeMutationDecision(input)),
-    onSuccess: (_mutation, input) =>
-      invalidateMutationWorkflow(qc, id, normalizeMutationDecision(input).decision === "approve"),
+    onSuccess: () => invalidateMutationWorkflow(qc, id),
   });
 }
 

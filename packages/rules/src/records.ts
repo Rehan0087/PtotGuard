@@ -1,3 +1,27 @@
+import type { Mutation, MutationStatus, RegistryStatus } from "./types";
+
+/** Mutation rows that make a parcel actively unavailable for another transfer. */
+export const ACTIVE_MUTATION_STATUSES = [
+  "submitted",
+  "verification",
+  "objection-period",
+] as const satisfies readonly MutationStatus[];
+
+/**
+ * Project the status shown by Land Office Records from the parcel's persisted
+ * non-workflow status and its related mutation rows. Mutation is the workflow
+ * source of truth; `under-mutation` is never maintained by the Records UI.
+ */
+export function recordRegistryStatus(
+  baseStatus: RegistryStatus,
+  mutations: readonly Pick<Mutation, "status">[],
+): RegistryStatus {
+  return mutations.some(({ status }) =>
+    ACTIVE_MUTATION_STATUSES.includes(status as (typeof ACTIVE_MUTATION_STATUSES)[number]))
+    ? "under-mutation"
+    : baseStatus;
+}
+
 /**
  * Returns the reference form that an officer UI may display without exposing
  * the stored national identifier. Already-masked seed/import data is preserved.
