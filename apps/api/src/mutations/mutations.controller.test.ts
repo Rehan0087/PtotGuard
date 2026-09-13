@@ -59,6 +59,7 @@ function fixture(status = "submitted") {
     policy: { findUnique: vi.fn().mockResolvedValue({ id: "singleton", objectionWindowDays: 15, mutationFeeBdt: 500 }) },
     ownershipRecord: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), create: vi.fn().mockResolvedValue({}) },
     landDocument: { findMany: vi.fn().mockResolvedValue([document]) },
+    appNotification: { create: vi.fn().mockResolvedValue({}) },
   };
   const prisma = {
     ...tx,
@@ -80,6 +81,7 @@ function noWrites(f: ReturnType<typeof fixture>) {
   expect(f.tx.parcel.update).not.toHaveBeenCalled();
   expect(f.tx.ownershipRecord.updateMany).not.toHaveBeenCalled();
   expect(f.tx.ownershipRecord.create).not.toHaveBeenCalled();
+  expect(f.tx.appNotification.create).not.toHaveBeenCalled();
   expect(f.audit.append).not.toHaveBeenCalled();
 }
 

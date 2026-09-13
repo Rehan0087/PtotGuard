@@ -26,11 +26,14 @@ import { cn } from "@/lib/utils";
 export function ParcelLiveMap({
   parcels,
   focusId,
+  hrefBase = "/parcels",
   className,
 }: {
   parcels: Parcel[];
   /** Rendered in the accent colour and used to centre the initial view. */
   focusId?: string;
+  /** Route prefix used when a plot is selected; Citizen Portal remains the default. */
+  hrefBase?: string;
   className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -82,7 +85,7 @@ export function ParcelLiveMap({
         shape
           .addTo(map)
           .bindTooltip(parcel.ulpin ? `${parcel.dagNo} · ${parcel.ulpin}` : parcel.dagNo)
-          .on("click", () => router.push(`/parcels/${parcel.id}`));
+          .on("click", () => router.push(`${hrefBase}/${parcel.id}`));
 
         bounds.extend(
           "getBounds" in shape ? shape.getBounds() : [parcel.centroid.lat, parcel.centroid.lng],
@@ -97,7 +100,7 @@ export function ParcelLiveMap({
       map?.remove();
       mapRef.current = null;
     };
-  }, [parcels, focusId, router]);
+  }, [parcels, focusId, hrefBase, router]);
 
   if (parcels.length === 0) return null;
 
