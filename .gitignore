@@ -47,3 +47,6 @@ dist
 # demo.sh runtime artifacts
 /logs/
 .demo.pids
+
+# isolated implementation worktrees
+/.worktrees/
