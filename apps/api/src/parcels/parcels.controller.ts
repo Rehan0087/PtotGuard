@@ -1,13 +1,17 @@
 import { Controller, ForbiddenException, Get, Param, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import {
+  ACTIVE_MUTATION_STATUSES,
   ancestryOf,
   maskNationalId,
   normaliseUlpin,
+  recordRegistryStatus,
   toPublicParcel,
   transferReview,
   type Jurisdiction,
+  type MutationStatus,
   type ParcelRestriction,
+  type RegistryStatus,
 } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { currentUserId } from "../auth/dev-current-user";
@@ -30,11 +34,26 @@ export class ParcelsController {
     const officeJurisdictionIds = req.header("x-plotguard-role") === "land-office"
       ? await this.landOfficeJurisdictionIds(req)
       : undefined;
+    const activeMutationFilter = {
+      status: { in: [...ACTIVE_MUTATION_STATUSES] },
+    };
+    const registryStatusFilter = officeJurisdictionIds
+      ? query.status === "under-mutation"
+        ? { mutations: { some: activeMutationFilter } }
+        : query.status
+          ? {
+              registryStatus: query.status,
+              mutations: { none: activeMutationFilter },
+            }
+          : {}
+      : query.status
+        ? { registryStatus: query.status }
+        : {};
 
     const where = {
       ...(officeJurisdictionIds ? { jurisdictionId: { in: officeJurisdictionIds } } : {}),
       ...(owner ? { ownerId: owner } : {}),
-      ...(query.status ? { registryStatus: query.status } : {}),
+      ...registryStatusFilter,
       ...(dag ? { dagNo: { contains: dag, mode: "insensitive" as const } } : {}),
       ...(khatian ? { khatianNo: { contains: khatian, mode: "insensitive" as const } } : {}),
       // Exact, not `contains`: a ULPIN is an identifier being cited, so a
@@ -56,7 +75,16 @@ export class ParcelsController {
     };
 
     const [rows, total] = await Promise.all([
-      this.prisma.parcel.findMany({ where, include: { owner: { select: { name: true } } } }),
+      this.prisma.parcel.findMany({
+        where,
+        include: {
+          owner: { select: { name: true } },
+          mutations: {
+            where: activeMutationFilter,
+            select: { status: true },
+          },
+        },
+      }),
       this.prisma.parcel.count({ where }),
     ]);
 
@@ -72,7 +100,18 @@ export class ParcelsController {
       : rows;
 
     const counts = await openDisputeCounts(this.prisma, filtered.map((p) => p.id));
-    const items = filtered.map((p) => toParcel(p, counts.get(p.id) ?? 0));
+    const items = filtered.map(({ mutations, ...parcel }) => {
+      const view = toParcel(parcel, counts.get(parcel.id) ?? 0);
+      return officeJurisdictionIds
+        ? {
+            ...view,
+            registryStatus: recordRegistryStatus(
+              parcel.registryStatus as RegistryStatus,
+              mutations as { status: MutationStatus }[],
+            ),
+          }
+        : view;
+    });
 
     const params = pageParams(query);
     const page = items.slice(params.skip, params.skip + params.take);
@@ -195,8 +234,14 @@ export class ParcelsController {
     const referenceId = maskNationalId(parcel.owner.nationalId);
 
     return {
-      parcel: toParcel(parcel, disputes.filter((dispute) =>
-        !["resolved", "rejected", "withdrawn"].includes(dispute.status)).length),
+      parcel: {
+        ...toParcel(parcel, disputes.filter((dispute) =>
+          !["resolved", "rejected", "withdrawn"].includes(dispute.status)).length),
+        registryStatus: recordRegistryStatus(
+          parcel.registryStatus as RegistryStatus,
+          mutationRows as { status: MutationStatus }[],
+        ),
+      },
       owner: {
         id: parcel.owner.id,
         name: parcel.owner.name,
