@@ -789,7 +789,6 @@ export const en = {
       documents: "Documents",
       noDocuments: "No documents are linked to this land record.",
       fileUnavailable: "File unavailable",
-      downloadFile: "Download",
       auditHistory: "Audit history",
       auditBy: (actor: string, entity: string) => `${actor} · ${entity}`,
       noAudit: "No audit events are linked to this record.",
