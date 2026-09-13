@@ -74,7 +74,10 @@ export interface LandRecordOwnershipEvent extends OwnershipRecord {
   document?: LandRecordDocumentSummary;
 }
 
-/** Land Office-only aggregate. Parcel remains the persisted source of truth. */
+/**
+ * Land Office-only aggregate assembled from persisted parcel, mutation,
+ * ownership, document, dispute, jurisdiction, and audit relationships.
+ */
 export interface LandRecordDetail {
   parcel: Parcel;
   owner: LandRecordOwner;
