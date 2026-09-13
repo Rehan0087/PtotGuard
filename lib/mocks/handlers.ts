@@ -39,6 +39,7 @@ import {
   mutationObjectionSummary,
   mutationVerificationReferences,
   rankCandidates,
+  recordRegistryStatus,
   registryStatusAfter,
   reviewDraft,
   routeDisputeToOfficer,
@@ -654,7 +655,13 @@ export const handlers = [
     const referenceId = maskNationalId(owner.nationalId);
 
     return HttpResponse.json({
-      parcel,
+      parcel: {
+        ...parcel,
+        registryStatus: recordRegistryStatus(
+          parcel.registryStatus,
+          mutations.map(({ mutation }) => mutation),
+        ),
+      },
       owner: {
         id: owner.id,
         name: owner.name,
@@ -720,6 +727,7 @@ export const handlers = [
 
   http.get(`${API}/parcels`, async ({ request }) => {
     await latency();
+    hydrateMutationState();
     const url = new URL(request.url);
     const owner = url.searchParams.get("owner");
     const status = url.searchParams.get("status");
@@ -737,6 +745,7 @@ export const handlers = [
           actor: currentUser(request),
           jurisdictions: db.jurisdictions,
           parcels: items,
+          mutations: db.mutations,
           q,
           status,
         });

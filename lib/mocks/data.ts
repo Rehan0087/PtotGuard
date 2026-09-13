@@ -158,7 +158,7 @@ export const parcels: Parcel[] = [
   {
     id: "p-088", ulpin: "ILR-CUM-DEB-000002", dagNo: "RS-88", khatianNo: "217", title: "Homestead plot, Rajamehar", jurisdictionId: "j-rajamehar",
     landUse: "residential", area: { value: 8, unit: "katha" }, ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque",
-    ownershipType: "sole", registryStatus: "under-mutation", centroid: { lat: 23.5502, lng: 90.9871 },
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.5502, lng: 90.9871 },
     boundary: square({ lat: 23.5502, lng: 90.9871 }, 0.0005), marketValue: { amount: 3200000, currency: "BDT" },
     registeredAt: "1990-04-02T00:00:00Z", openDisputeCount: 0,
   },
