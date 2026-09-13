@@ -25,6 +25,7 @@ import { ROLES } from "@/lib/types";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
   activeRestrictions,
+  ancestryOf,
   assessLandTax,
   calcInheritance,
   deletionGate,
@@ -51,6 +52,7 @@ import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 import { hydrateMutationState } from "./mutation-store";
 import { filterMutationReads } from "./mutation-contract.mjs";
+import { filterLandOfficeRecords } from "./records-contract.mjs";
 
 // Restore mutation-owned preview state before any handler (including parcel
 // reads) can observe the in-memory seed after a hard refresh.
@@ -580,6 +582,98 @@ export const handlers = [
     );
   }),
 
+  http.get(`${API}/parcels/:id/record`, async ({ params, request }) => {
+    await latency();
+    hydrateMutationState();
+    const me = currentUser(request);
+    if (!isActiveLandOffice(me)) return forbidden("Land Office Staff access required.");
+
+    const parcel = db.parcels.find((item) => item.id === params.id);
+    if (!parcel) return notFound("Parcel not found");
+    if (!coveredJurisdictionIds(me).has(parcel.jurisdictionId)) {
+      return forbidden("This land record is outside your jurisdiction.");
+    }
+
+    const owner = db.users.find((user) => user.id === parcel.ownerId);
+    if (!owner) return notFound("Recorded owner not found");
+    const documents = db.documents
+      .filter((document) => document.parcelId === parcel.id)
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+    const documentById = new Map(documents.map((document) => [document.id, document]));
+    const ownership = db.ownershipRecords
+      .filter((entry) => entry.parcelId === parcel.id)
+      .sort((a, b) => b.fromDate.localeCompare(a.fromDate))
+      .map((entry) => {
+        const mutation = entry.mutationId
+          ? db.mutations.find((item) => item.id === entry.mutationId)
+          : undefined;
+        const document = entry.documentId ? documentById.get(entry.documentId) : undefined;
+        return {
+          ...entry,
+          ...(mutation
+            ? {
+                mutation: {
+                  id: mutation.id,
+                  mutationNumber: mutation.mutationNumber,
+                  status: mutation.status,
+                  type: mutation.type,
+                },
+              }
+            : {}),
+          ...(document
+            ? {
+                document: {
+                  id: document.id,
+                  fileName: document.fileName,
+                  type: document.type,
+                  verificationStatus: document.verificationStatus,
+                },
+              }
+            : {}),
+        };
+      });
+    const mutations = db.mutations
+      .filter((mutation) => mutation.parcelId === parcel.id)
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))
+      .map((mutation) => {
+        const applicant = db.users.find((user) => user.id === mutation.requestedById);
+        const officerId = mutation.approvedById ?? mutation.rejectedById ?? mutation.assignedOfficerId;
+        const officer = officerId ? db.users.find((user) => user.id === officerId) : undefined;
+        return {
+          mutation,
+          ...(applicant ? { applicantName: applicant.name } : {}),
+          ...(officer ? { responsibleOfficerName: officer.name } : {}),
+        };
+      });
+    const mutationIds = new Set(mutations.map(({ mutation }) => mutation.id));
+    const chain = await getAuditChain();
+
+    return HttpResponse.json({
+      parcel,
+      owner: {
+        id: owner.id,
+        name: owner.name,
+        ...(owner.nationalId ? { referenceId: owner.nationalId } : {}),
+        ...(owner.profileDetails?.address ? { address: owner.profileDetails.address } : {}),
+      },
+      jurisdiction: ancestryOf(parcel.jurisdictionId, db.jurisdictions),
+      ownership,
+      mutations,
+      disputes: db.disputes
+        .filter((dispute) => dispute.parcelId === parcel.id)
+        .sort((a, b) => b.filedAt.localeCompare(a.filedAt)),
+      documents,
+      restrictions: db.parcelRestrictions
+        .filter((restriction) => restriction.parcelId === parcel.id)
+        .sort((a, b) => b.fromDate.localeCompare(a.fromDate)),
+      audit: chain
+        .filter((event) =>
+          (event.entityType === "parcel" && event.entityId === parcel.id)
+          || (event.entityType === "mutation" && mutationIds.has(event.entityId)))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    });
+  }),
+
   http.get(`${API}/parcels/:id/neighbours`, async ({ params }) => {
     await latency();
     const parcel = db.parcels.find((p) => p.id === params.id);
@@ -631,6 +725,19 @@ export const handlers = [
     const ulpin = url.searchParams.get("ulpin");
 
     let items = db.parcels.slice();
+    if (getRole(request) === "land-office") {
+      try {
+        items = filterLandOfficeRecords({
+          actor: currentUser(request),
+          jurisdictions: db.jurisdictions,
+          parcels: items,
+          q,
+          status,
+        });
+      } catch {
+        return forbidden("Land Office Staff access required.");
+      }
+    }
     if (owner === "me") items = items.filter((p) => p.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((p) => p.ownerId === owner);
     if (status) items = items.filter((p) => p.registryStatus === status);

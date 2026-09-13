@@ -21,6 +21,9 @@ import type {
   ServiceApplicationEvent,
   FieldReport,
   Hearing,
+  AuditEvent,
+  DocumentType,
+  VerificationStatus,
 } from ".";
 // Derived shapes rather than stored ones, so they come from the rules that
 // compute them, not from the domain model.
@@ -35,6 +38,54 @@ export interface ParcelDetail {
   restrictions: ParcelRestriction[];
   /** Whether the land may change hands — decided server-side, see transferReview(). */
   transfer: TransferReview;
+}
+
+export interface LandRecordOwner {
+  id: ID;
+  name: string;
+  /** Masked identifier only; the API never exposes a raw national ID. */
+  referenceId?: string;
+  address?: string;
+}
+
+export interface LandRecordJurisdiction {
+  id: ID;
+  code: string;
+  name: string;
+  nameBn?: string;
+  level: "division" | "district" | "upazila" | "mouza";
+}
+
+export interface LandRecordDocumentSummary {
+  id: ID;
+  fileName: string;
+  type: DocumentType;
+  verificationStatus: VerificationStatus;
+}
+
+export interface LandRecordMutationSummary {
+  mutation: Mutation;
+  applicantName?: string;
+  responsibleOfficerName?: string;
+}
+
+export interface LandRecordOwnershipEvent extends OwnershipRecord {
+  mutation?: Pick<Mutation, "id" | "mutationNumber" | "status" | "type">;
+  document?: LandRecordDocumentSummary;
+}
+
+/** Land Office-only aggregate. Parcel remains the persisted source of truth. */
+export interface LandRecordDetail {
+  parcel: Parcel;
+  owner: LandRecordOwner;
+  /** Root-to-leaf administrative path ending at the parcel's jurisdiction. */
+  jurisdiction: LandRecordJurisdiction[];
+  ownership: LandRecordOwnershipEvent[];
+  mutations: LandRecordMutationSummary[];
+  disputes: Dispute[];
+  documents: LandDocument[];
+  restrictions: ParcelRestriction[];
+  audit: AuditEvent[];
 }
 
 /**

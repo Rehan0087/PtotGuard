@@ -37,6 +37,7 @@ import type {
   AuditVerifyResult,
   Policy,
   MutationVerificationChecklist,
+  LandRecordDetail,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
 
@@ -112,6 +113,15 @@ export function useParcel(id: string | undefined) {
   return useQuery({
     queryKey: ["parcel", id],
     queryFn: () => api.get<ParcelDetail>(`/parcels/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useLandRecord(id: string | undefined) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["land-record", role, id],
+    queryFn: () => api.get<LandRecordDetail>(`/parcels/${id}/record`),
     enabled: Boolean(id),
   });
 }
@@ -221,7 +231,13 @@ function invalidateMutationWorkflow(qc: QueryClient, id: string, includeParcel =
   qc.invalidateQueries({ queryKey: ["mutation", id] });
   qc.invalidateQueries({ queryKey: ["mutations"] });
   qc.invalidateQueries({ queryKey: ["audit", "mutation", id] });
-  if (includeParcel) qc.invalidateQueries({ queryKey: ["parcel"] });
+  // Record detail embeds mutation state and its audit trail, so every workflow
+  // action refreshes that aggregate. Approval also changes parcel ownership.
+  qc.invalidateQueries({ queryKey: ["land-record"] });
+  if (includeParcel) {
+    qc.invalidateQueries({ queryKey: ["parcel"] });
+    qc.invalidateQueries({ queryKey: ["parcels"] });
+  }
 }
 
 export type CompleteMutationVerificationInput = MutationVerificationChecklist & {
