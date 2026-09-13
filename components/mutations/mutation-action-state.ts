@@ -1,9 +1,10 @@
-import { mutationActionGate, type Mutation } from "@plotguard/rules";
+import { mutationActionGate, type Mutation, type MutationWorkflowHold } from "@plotguard/rules";
 
 export interface MutationActionState {
   primary: "start-verification" | "complete-verification" | "approve" | null;
   canReject: boolean;
   terminal: "approved" | "rejected" | null;
+  hold: MutationWorkflowHold | null;
   holdCode?: string;
 }
 
@@ -27,6 +28,7 @@ export function mutationActionState(
           : null,
     canReject: gate.canReject,
     terminal,
+    hold: gate.hold,
     ...(gate.hold ? { holdCode: gate.hold.code } : {}),
   };
 }

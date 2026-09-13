@@ -92,6 +92,25 @@ export interface MutationActorSummary {
   title?: string;
 }
 
+export interface MutationJurisdictionSummary {
+  id: ID;
+  code: string;
+  name: string;
+  nameBn?: string;
+}
+
+export type MutationObjectionSummaryStatus =
+  | "not-started"
+  | "window-open"
+  | "unresolved"
+  | "clear";
+
+export interface MutationObjectionSummary {
+  total: number;
+  unresolved: number;
+  status: MutationObjectionSummaryStatus;
+}
+
 export interface MutationTimelineEvent {
   id: ID;
   action: string;
@@ -109,6 +128,10 @@ export interface MutationDetail {
   documents: LandDocument[];
   applicant: MutationActorSummary | null;
   assignedOfficer: MutationActorSummary | null;
+  verificationStartedBy: MutationActorSummary | null;
+  verifiedBy: MutationActorSummary | null;
+  jurisdiction: MutationJurisdictionSummary | null;
+  objectionSummary: MutationObjectionSummary;
   timeline: MutationTimelineEvent[];
 }
 

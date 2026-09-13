@@ -92,7 +92,17 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
   const session = useSession();
   const start = useStartMutationVerification(detail.mutation.id);
   const [decision, setDecision] = useState<"approve" | "reject" | null>(null);
-  const { mutation, parcel, applicant, assignedOfficer, timeline } = detail;
+  const {
+    mutation,
+    parcel,
+    applicant,
+    assignedOfficer,
+    verificationStartedBy,
+    verifiedBy,
+    jurisdiction,
+    objectionSummary,
+    timeline,
+  } = detail;
   const presentation = mutationDetailPresentation(detail);
   const actorId = session.data?.user.id;
   const action = actorId ? mutationActionState(mutation, actorId) : null;
@@ -131,6 +141,10 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                 {
                   label: t.pages.mutations.assignedOfficer,
                   value: assignedOfficer?.name ?? t.pages.mutations.notAssigned,
+                },
+                {
+                  label: t.pages.mutations.jurisdiction,
+                  value: jurisdiction ? `${jurisdiction.name} (${jurisdiction.code})` : t.common.notAvailable,
                 },
               ]}
             />
@@ -218,6 +232,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
               {mutation.verificationStartedAt ? (
                 <p className="text-sm text-muted-foreground">
                   {t.pages.mutations.verificationStarted(f.dateTime(mutation.verificationStartedAt))}
+                  {verificationStartedBy ? ` · ${t.pages.mutations.verificationStartedBy}: ${verificationStartedBy.name}` : ""}
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">{t.pages.mutations.verificationNotStarted}</p>
@@ -225,6 +240,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
               {mutation.verifiedAt ? (
                 <p className="text-sm text-muted-foreground">
                   {t.pages.mutations.verificationCompleted(f.dateTime(mutation.verifiedAt))}
+                  {verifiedBy ? ` · ${t.pages.mutations.verifiedBy}: ${verifiedBy.name}` : ""}
                 </p>
               ) : null}
               {mutation.verificationChecklist ? (
@@ -267,6 +283,20 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
 
           <DetailSection title={t.pages.mutations.objections}>
             <div className="space-y-3">
+              <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs text-muted-foreground">{t.pages.mutations.objectionTotal}</dt>
+                  <dd className="text-sm text-foreground">{objectionSummary.total}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">{t.pages.mutations.objectionUnresolved}</dt>
+                  <dd className="text-sm text-foreground">{objectionSummary.unresolved}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">{t.pages.mutations.objectionStatus}</dt>
+                  <dd className="text-sm text-foreground">{objectionSummary.status}</dd>
+                </div>
+              </dl>
               {mutation.objectionStartDate ? (
                 <p className="text-sm text-muted-foreground">
                   {t.pages.mutations.objectionWindowStarts(f.dateTime(mutation.objectionStartDate))}
@@ -300,6 +330,15 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
               )}
               {role === "land-office" && action?.holdCode === "assigned-to-other-officer" ? (
                 <p className="text-sm text-muted-foreground">{t.pages.mutations.hold.assignedToOther}</p>
+              ) : null}
+              {role === "land-office" && action?.hold?.code === "objections" ? (
+                <p className="text-sm text-muted-foreground">{t.pages.mutations.hold.objections(action.hold.count)}</p>
+              ) : null}
+              {role === "land-office" && action?.hold?.code === "objection-window" ? (
+                <p className="text-sm text-muted-foreground">{t.pages.mutations.hold.objectionWindow(action.hold.days)}</p>
+              ) : null}
+              {role === "land-office" && action?.hold?.code === "no-recipient" ? (
+                <p className="text-sm text-muted-foreground">{t.pages.mutations.hold.noRecipient}</p>
               ) : null}
               {role === "land-office" && action?.primary === "approve" ? (
                 <Button type="button" onClick={() => setDecision("approve")}>

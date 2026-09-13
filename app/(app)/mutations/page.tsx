@@ -130,22 +130,15 @@ function MutationCard({
     });
   }
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onOpenDetail();
-    }
-  }
-
   return (
-    <Card
-      role="button"
-      tabIndex={0}
-      aria-label={`${t.pages.mutations.detailTitle}: ${mutation.mutationNumber}`}
-      className="cursor-pointer gap-4 px-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={onOpenDetail}
-      onKeyDown={handleKeyDown}
-    >
+    <Card className="relative gap-4 px-5">
+      <button
+        type="button"
+        aria-label={`${t.pages.mutations.detailTitle}: ${mutation.mutationNumber}`}
+        className="absolute inset-0 z-0 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={onOpenDetail}
+      />
+      <div className="relative z-10 pointer-events-none">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -240,7 +233,7 @@ function MutationCard({
         ) : null}
 
         <div
-          className="flex flex-wrap items-center gap-2"
+          className="pointer-events-auto flex flex-wrap items-center gap-2"
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         >
@@ -292,12 +285,13 @@ function MutationCard({
             href={`/parcels/${mutation.parcelId}`}
             className={cn(
               buttonVariants({ variant: "ghost", size: "sm" }),
-              "ml-auto text-muted-foreground",
+              "pointer-events-auto ml-auto text-muted-foreground",
             )}
           >
             {t.pages.mutations.viewParcel}
           </Link>
         </div>
+      </div>
       </div>
     </Card>
   );

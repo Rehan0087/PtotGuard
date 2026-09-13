@@ -34,6 +34,8 @@ import {
   filingReview,
   normaliseUlpin,
   mutationActionGate,
+  mutationObjectionSummary,
+  mutationVerificationReferences,
   rankCandidates,
   registryStatusAfter,
   reviewDraft,
@@ -48,6 +50,7 @@ import {
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 import { hydrateMutationState } from "./mutation-store";
+import { filterMutationReads } from "./mutation-contract.mjs";
 
 // Restore mutation-owned preview state before any handler (including parcel
 // reads) can observe the in-memory seed after a hard refresh.
@@ -67,6 +70,15 @@ function getRole(request: Request): Role {
 function currentUser(request: Request): User {
   const id = db.CURRENT_USER_BY_ROLE[getRole(request)];
   return db.users.find((u) => u.id === id)!;
+}
+
+function mutationReadActor(request: Request): User | null {
+  const header = request.headers.get("x-plotguard-role");
+  if (header && !(ROLES as string[]).includes(header)) return null;
+  const actor = currentUser(request);
+  return actor.status === "active" && (actor.role === "citizen" || actor.role === "land-office")
+    ? actor
+    : null;
 }
 
 function badRequest(message = "Bad Request") {
@@ -434,7 +446,7 @@ export const handlers = [
   http.patch(`${API}/auth/me`, async ({ request }) => {
     await latency();
     const user = currentUser(request);
-    const body = (await request.json()) as any;
+    const body = (await request.json()) as Partial<Pick<User, "phone" | "avatarUrl" | "profileDetails">>;
     
     if (body.phone !== undefined) user.phone = body.phone;
     if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
@@ -913,6 +925,16 @@ export const handlers = [
     if (gateError) return gateError;
     const verification = verificationGate(checklist, notes);
     if (!verification.ok) return unprocessable({ verification: verification.reason });
+    const recipient = mutation.toOwnerId
+      ? db.users.find((user) => user.id === mutation.toOwnerId)
+      : undefined;
+    const documents = db.documents.filter((document) => mutation.documentIds.includes(document.id));
+    const references = mutationVerificationReferences(mutation, recipient ?? null, documents);
+    if (!references.ok) {
+      return unprocessable({
+        [references.reason.code === "invalid-recipient" ? "toOwnerId" : "documentIds"]: references.reason,
+      });
+    }
     if (!Number.isInteger(db.policies.objectionWindowDays) || db.policies.objectionWindowDays < 0) {
       return unprocessable({ verification: { code: "objection-policy-unavailable" } });
     }
@@ -1038,11 +1060,13 @@ export const handlers = [
   http.get(`${API}/mutations/:id`, async ({ params, request }) => {
     await latency();
     hydrateMutationState();
+    const actor = mutationReadActor(request);
+    if (!actor) return forbidden("Citizen or Land Office Staff access required.");
     const mutation = db.mutations.find((item) => item.id === params.id);
     if (!mutation) return notFound("Mutation not found");
-    if (getRole(request) === "land-office") {
-      const actor = currentUser(request);
-      if (!isActiveLandOffice(actor)) return forbidden("Land Office Staff access required.");
+    if (actor.role === "citizen") {
+      if (mutation.requestedById !== actor.id) return forbidden("You can only view your own mutations.");
+    } else {
       const parcel = mutationParcel(mutation);
       if (parcel && !coveredJurisdictionIds(actor).has(parcel.jurisdictionId)) {
         return forbidden("This mutation is outside your jurisdiction.");
@@ -1064,6 +1088,14 @@ export const handlers = [
       documents: db.documents.filter((document) => mutation.documentIds.includes(document.id)),
       applicant: summary(mutation.requestedById),
       assignedOfficer: summary(mutation.assignedOfficerId),
+      verificationStartedBy: summary(mutation.verificationStartedById),
+      verifiedBy: summary(mutation.verifiedById),
+      jurisdiction: (() => {
+        const parcel = mutationParcel(mutation);
+        const item = parcel ? db.jurisdictions.find((candidate) => candidate.id === parcel.jurisdictionId) : undefined;
+        return item ? { id: item.id, code: item.code, name: item.name, ...(item.nameBn ? { nameBn: item.nameBn } : {}) } : null;
+      })(),
+      objectionSummary: mutationObjectionSummary(mutation),
       timeline: chain
         .filter((event) => event.entityType === "mutation" && event.entityId === mutation.id)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -1086,18 +1118,15 @@ export const handlers = [
     const url = new URL(request.url);
     const scope = url.searchParams.get("scope");
     const status = url.searchParams.get("status");
-    const me = currentUser(request);
-    let items = db.mutations.slice();
-    if (getRole(request) === "land-office") {
-      if (!isActiveLandOffice(me)) return forbidden("Land Office Staff access required.");
-      const covered = coveredJurisdictionIds(me);
-      items = items.filter((mutation) => {
-        const parcel = mutationParcel(mutation);
-        return parcel ? covered.has(parcel.jurisdictionId) : false;
-      });
-      if (scope === "assigned") items = items.filter((mutation) => mutation.assignedOfficerId === me.id);
-    } else if (scope === "mine") items = items.filter((mutation) => mutation.requestedById === me.id);
-    else if (scope === "assigned") items = items.filter((mutation) => mutation.assignedOfficerId === me.id);
+    const me = mutationReadActor(request);
+    if (!me) return forbidden("Citizen or Land Office Staff access required.");
+    let items: Mutation[] = filterMutationReads({
+      actor: me,
+      mutations: db.mutations,
+      parcels: db.parcels,
+      coveredJurisdictionIds: coveredJurisdictionIds(me),
+      scope,
+    }) as Mutation[];
     if (status) items = items.filter((mutation) => mutation.status === status);
     items.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     return HttpResponse.json(paginate(items, url));

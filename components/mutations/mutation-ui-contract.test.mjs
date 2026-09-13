@@ -70,6 +70,16 @@ test("mutations page integrates the complete URL-backed officer workflow", () =>
   assert.match(pageSource, /href=\{`\/parcels\/\$\{mutation\.parcelId\}`\}/);
 });
 
+test("mutation cards use a sibling native overlay trigger instead of nesting controls in a button", () => {
+  const card = pageSource.match(/function MutationCard[\s\S]*?\n}\n\n\/\*\*/)?.[0] ?? pageSource;
+  assert.doesNotMatch(card, /<Card[\s\S]{0,250}\brole=["']button["']/);
+  assert.doesNotMatch(card, /<Card[\s\S]{0,250}\btabIndex=/);
+  assert.match(card, /<button\s+[\s\S]*?type=["']button["'][\s\S]*?aria-label=/);
+  assert.match(card, /absolute inset-0/);
+  assert.match(card, /<Button\b/);
+  assert.match(card, /<Link\b/);
+});
+
 test("successful decisions switch from confirmation to refreshed selected detail", () => {
   assert.equal(typeof mutationDecisionSuccessState, "function");
   assert.deepEqual(mutationDecisionSuccessState("mutation-database-id"), {
