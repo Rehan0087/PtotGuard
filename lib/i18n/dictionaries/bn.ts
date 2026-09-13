@@ -750,6 +750,7 @@ export const bn: Dictionary = {
       documents: "দলিল",
       noDocuments: "এই ভূমি রেকর্ডের সঙ্গে কোনো দলিল যুক্ত নেই।",
       fileUnavailable: "ফাইল নেই",
+      downloadFile: "ডাউনলোড",
       auditHistory: "অডিট ইতিহাস",
       auditBy: (actor: string, entity: string) => `${actor} · ${entity}`,
       noAudit: "এই রেকর্ডের সঙ্গে কোনো অডিট ঘটনা যুক্ত নেই।",

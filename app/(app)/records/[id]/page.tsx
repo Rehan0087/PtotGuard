@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   ClipboardList,
+  Download,
   FileText,
   History,
   MapPin,
@@ -17,7 +19,6 @@ import { DisputeListItem } from "@/components/dispute-list-item";
 import { IdChip } from "@/components/id-chip";
 import { MutationDetailDialog } from "@/components/mutations/mutation-detail-dialog";
 import { PageHeader } from "@/components/page-header";
-import { ParcelBoundary } from "@/components/parcel-boundary";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,6 +35,11 @@ import {
   ownershipTransitions,
   usableRecordDocumentUrl,
 } from "@/components/records/record-detail-utils.mjs";
+
+const ParcelLiveMap = dynamic(
+  () => import("@/components/parcel-live-map").then((module) => module.ParcelLiveMap),
+  { ssr: false, loading: () => <Skeleton className="h-72 w-full rounded-lg" /> },
+);
 
 function Section({
   id,
@@ -81,6 +87,10 @@ export default function LandRecordDetailPage() {
   const ownership = useMemo(
     () => ownershipTransitions(record.data?.ownership ?? []) as (LandRecordOwnershipEvent & { previousOwnerName?: string })[],
     [record.data?.ownership],
+  );
+  const mapParcels = useMemo(
+    () => (record.data ? [record.data.parcel] : []),
+    [record.data],
   );
 
   if (record.isLoading) {
@@ -241,9 +251,11 @@ export default function LandRecordDetailPage() {
         <div className="space-y-6">
           <Section id="location" title={t.pages.records.plotLocation} icon={MapPin}>
             <Card className="gap-3 p-4">
-              <div className="h-56 overflow-hidden rounded-lg bg-secondary/40 ring-1 ring-foreground/10">
-                <ParcelBoundary boundary={parcel.boundary} />
-              </div>
+              <ParcelLiveMap
+                parcels={mapParcels}
+                focusId={parcel.id}
+                hrefBase="/records"
+              />
               <Facts rows={[
                 { label: t.pages.records.coordinates, value: `${parcel.centroid.lat.toFixed(5)}, ${parcel.centroid.lng.toFixed(5)}` },
                 { label: t.pages.records.boundary, value: parcel.boundary ? t.pages.records.boundaryRecorded : t.pages.records.boundaryUnavailable },
@@ -292,9 +304,15 @@ export default function LandRecordDetailPage() {
                         </div>
                         <StatusMetaBadge meta={s.verification[document.verificationStatus]} dot={false} />
                         {url ? (
-                          <a href={url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
-                            {t.common.view}
-                          </a>
+                          <div className="flex items-center gap-1">
+                            <a href={url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+                              {t.common.view}
+                            </a>
+                            <a href={url} download className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+                              <Download className="size-4" />
+                              {t.pages.records.downloadFile}
+                            </a>
+                          </div>
                         ) : (
                           <Button variant="ghost" size="sm" disabled>{t.pages.records.fileUnavailable}</Button>
                         )}

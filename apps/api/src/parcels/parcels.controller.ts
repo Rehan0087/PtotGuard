@@ -2,6 +2,7 @@ import { Controller, ForbiddenException, Get, Param, Query, Req } from "@nestjs/
 import type { Request } from "express";
 import {
   ancestryOf,
+  maskNationalId,
   normaliseUlpin,
   toPublicParcel,
   transferReview,
@@ -24,7 +25,7 @@ export class ParcelsController {
     const owner = query.owner === "me" ? currentUserId(req) : query.owner;
     const dag = query.dag?.toLowerCase();
     const khatian = query.khatian?.toLowerCase();
-    const q = query.q?.toLowerCase();
+    const q = query.q?.trim().toLowerCase();
     const bbox = query.bbox?.split(",").map(Number);
     const officeJurisdictionIds = req.header("x-plotguard-role") === "land-office"
       ? await this.landOfficeJurisdictionIds(req)
@@ -135,12 +136,20 @@ export class ParcelsController {
     ]);
 
     const mutationIds = mutationRows.map((mutation) => mutation.id);
+    const disputeIds = disputes.map((dispute) => dispute.id);
+    const documentIds = documents.map((document) => document.id);
     const audit = await this.prisma.auditEvent.findMany({
       where: {
         OR: [
           { entityType: "parcel", entityId: id },
           ...(mutationIds.length > 0
             ? [{ entityType: "mutation", entityId: { in: mutationIds } }]
+            : []),
+          ...(disputeIds.length > 0
+            ? [{ entityType: "dispute", entityId: { in: disputeIds } }]
+            : []),
+          ...(documentIds.length > 0
+            ? [{ entityType: "document", entityId: { in: documentIds } }]
             : []),
         ],
       },
@@ -183,6 +192,7 @@ export class ParcelsController {
       "address" in profileDetails && typeof profileDetails.address === "string"
         ? profileDetails.address
         : undefined;
+    const referenceId = maskNationalId(parcel.owner.nationalId);
 
     return {
       parcel: toParcel(parcel, disputes.filter((dispute) =>
@@ -190,7 +200,7 @@ export class ParcelsController {
       owner: {
         id: parcel.owner.id,
         name: parcel.owner.name,
-        ...(parcel.owner.nationalId ? { referenceId: parcel.owner.nationalId } : {}),
+        ...(referenceId ? { referenceId } : {}),
         ...(address ? { address } : {}),
       },
       jurisdiction: ancestryOf(parcel.jurisdictionId, jurisdictions as Jurisdiction[]),
