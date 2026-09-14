@@ -93,6 +93,7 @@ model User {
   serviceApplicationEvents     ServiceApplicationEvent[]
   fieldReportsAssigned         FieldReport[]
   fieldSurveySessions          FieldSurveySession[]
+  fieldSurveySyncReceipts      FieldSurveySyncReceipt[]
   hearingsAsMediator           Hearing[]
   notifications                AppNotification[]
   auditActions                 AuditEvent[]
@@ -454,31 +455,32 @@ model ServiceApplicationEvent {
 // --- Field reports ----------------------------------------------------------
 
 model FieldReport {
-  id              String    @id
+  id              String                   @id
   parcelId        String
-  parcel          Parcel    @relation(fields: [parcelId], references: [id])
+  parcel          Parcel                   @relation(fields: [parcelId], references: [id])
   parcelDagNo     String
   disputeId       String?
-  dispute         Dispute?  @relation(fields: [disputeId], references: [id])
+  dispute         Dispute?                 @relation(fields: [disputeId], references: [id])
   mutationId      String?
-  mutation        Mutation? @relation(fields: [mutationId], references: [id])
+  mutation        Mutation?                @relation(fields: [mutationId], references: [id])
   /// FieldReportPurpose: "boundary-survey" | "encroachment-check" | "possession-verify" | "measurement"
   purpose         String
   /// FieldReportStatus: "assigned" | "accepted" | "en-route" | "in-progress" | "completed" | "cancelled"
-  status          String    @default("assigned")
+  status          String                   @default("assigned")
   assignedAgentId String
-  assignedAgent   User      @relation(fields: [assignedAgentId], references: [id])
-  assignedAt      DateTime  @default(now())
+  assignedAgent   User                     @relation(fields: [assignedAgentId], references: [id])
+  assignedAt      DateTime                 @default(now())
   acceptedAt      DateTime?
   scheduledFor    DateTime
   addressHint     String?
   /// GpsCapture[] — accumulate via POST .../media, never addressed singly.
-  gpsCaptures     Json      @default("[]")
+  gpsCaptures     Json                     @default("[]")
   /// FieldPhoto[] — same reasoning as gpsCaptures.
-  photos          Json      @default("[]")
+  photos          Json                     @default("[]")
   notes           String?
   submittedAt     DateTime?
   survey          FieldSurveySession?
+  syncReceipts    FieldSurveySyncReceipt[]
 
   @@index([parcelId])
   @@index([disputeId])
@@ -488,21 +490,63 @@ model FieldReport {
 }
 
 model FieldSurveySession {
-  id              String      @id
-  fieldReportId   String      @unique
-  fieldReport     FieldReport @relation(fields: [fieldReportId], references: [id])
+  id              String                @id
+  localSessionId  String?               @unique
+  fieldReportId   String                @unique
+  fieldReport     FieldReport           @relation(fields: [fieldReportId], references: [id])
   /// Parcel ULPIN captured as the BhumiID when the survey starts.
   bhumiId         String?
   assignedAgentId String
-  assignedAgent   User        @relation(fields: [assignedAgentId], references: [id])
+  assignedAgent   User                  @relation(fields: [assignedAgentId], references: [id])
   /// FieldSurveyStatus: "in-progress" | "completed" | "failed" | "cancelled"
   status          String
-  startedAt       DateTime    @default(now())
+  version         Int                   @default(1)
+  startedAt       DateTime              @default(now())
   completedAt     DateTime?
+  summary         Json?
+  points          FieldSurveyGpsPoint[]
 
   @@index([assignedAgentId])
   @@index([status])
   @@map("field_survey_sessions")
+}
+
+model FieldSurveyGpsPoint {
+  id                   String             @id
+  fieldSurveySessionId String
+  fieldSurveySession   FieldSurveySession @relation(fields: [fieldSurveySessionId], references: [id], onDelete: Cascade)
+  sequence             Int
+  latitude             Float
+  longitude            Float
+  recordedAt           DateTime
+  receivedAt           DateTime           @default(now())
+  accuracyMeters       Float
+  altitudeMeters       Float?
+  speedMetersPerSecond Float?
+  headingDegrees       Float?
+  issues               Json
+
+  @@unique([fieldSurveySessionId, sequence])
+  @@index([fieldSurveySessionId, recordedAt])
+  @@index([receivedAt])
+  @@map("field_survey_gps_points")
+}
+
+model FieldSurveySyncReceipt {
+  idempotencyKey  String      @id
+  assignedAgentId String
+  assignedAgent   User        @relation(fields: [assignedAgentId], references: [id])
+  fieldReportId   String
+  fieldReport     FieldReport @relation(fields: [fieldReportId], references: [id])
+  operationType   String
+  payloadHash     String
+  statusCode      Int
+  responseBody    Json
+  createdAt       DateTime    @default(now())
+
+  @@index([assignedAgentId, createdAt])
+  @@index([fieldReportId, createdAt])
+  @@map("field_survey_sync_receipts")
 }
 
 // --- Hearings ---------------------------------------------------------------
