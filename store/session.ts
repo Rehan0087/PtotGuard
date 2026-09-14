@@ -18,23 +18,27 @@ import type { AuthTokens, Role, User } from "@/lib/types";
  * gate on `isAuthenticated` must wait for `hasHydrated` first.
  */
 interface SessionState {
+  userId: string | null;
   role: Role;
   tokens: AuthTokens | null;
   isAuthenticated: boolean;
   hasHydrated: boolean;
-  login: (user: Pick<User, "role">, tokens: AuthTokens) => void;
+  login: (user: Pick<User, "id" | "role">, tokens: AuthTokens) => void;
   logout: () => void;
 }
 
 export const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
+      userId: null,
       role: "citizen",
       tokens: null,
       isAuthenticated: false,
       hasHydrated: false,
-      login: (user, tokens) => set({ role: user.role, tokens, isAuthenticated: true }),
-      logout: () => set({ role: "citizen", tokens: null, isAuthenticated: false }),
+      login: (user, tokens) =>
+        set({ userId: user.id, role: user.role, tokens, isAuthenticated: true }),
+      logout: () =>
+        set({ userId: null, role: "citizen", tokens: null, isAuthenticated: false }),
     }),
     { name: "plotguard-session" },
   ),

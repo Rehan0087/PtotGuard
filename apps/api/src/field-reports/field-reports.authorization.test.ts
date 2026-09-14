@@ -30,12 +30,30 @@ type ReportFixture = {
 
 type SurveyFixture = {
   id: string;
+  localSessionId: string | null;
   fieldReportId: string;
   bhumiId: string | null;
   assignedAgentId: string;
   status: string;
+  version: number;
   startedAt: Date;
   completedAt: Date | null;
+  summary: unknown | null;
+};
+
+type GpsPointFixture = {
+  id: string;
+  fieldSurveySessionId: string;
+  sequence: number;
+  latitude: number;
+  longitude: number;
+  recordedAt: Date;
+  receivedAt: Date;
+  accuracyMeters: number;
+  altitudeMeters: number | null;
+  speedMetersPerSecond: number | null;
+  headingDegrees: number | null;
+  issues: string[];
 };
 
 let prismaFixture: Record<string, unknown>;
@@ -70,6 +88,8 @@ describe("field report assignment authorization", () => {
   let disputeEvents: Array<Record<string, unknown>>;
   let notifications: Array<Record<string, unknown>>;
   let auditEntries: Array<Record<string, unknown>>;
+  let gpsPoints: GpsPointFixture[];
+  let syncReceipts: Array<Record<string, unknown>>;
 
   beforeEach(async () => {
     process.env.AUTH_TOKEN_SECRET = "test-secret-that-is-long-enough";
@@ -101,6 +121,8 @@ describe("field report assignment authorization", () => {
     };
     disputeEvents = [];
     notifications = [];
+    gpsPoints = [];
+    syncReceipts = [];
 
     const fieldReport = {
       findMany: async ({ where }: { where: { assignedAgentId?: string } }) =>
@@ -158,25 +180,53 @@ describe("field report assignment authorization", () => {
         where,
         data,
       }: {
-        where: { id: string; assignedAgentId: string; status: string };
+        where: { id: string; assignedAgentId: string; status: string; version?: number };
         data: Partial<SurveyFixture>;
       }) => {
         if (
           !survey ||
           survey.id !== where.id ||
           survey.assignedAgentId !== where.assignedAgentId ||
-          survey.status !== where.status
+          survey.status !== where.status ||
+          (where.version !== undefined && survey.version !== where.version)
         ) {
           return { count: 0 };
         }
         survey = { ...survey, ...data };
         return { count: 1 };
       },
+      update: async ({ data }: { data: Partial<SurveyFixture> }) => {
+        if (!survey) throw new Error("Survey missing");
+        survey = { ...survey, ...data };
+        return survey;
+      },
+    };
+
+    const fieldSurveyGpsPoint = {
+      findMany: async ({ where }: { where: { fieldSurveySessionId: string } }) =>
+        gpsPoints
+          .filter((point) => point.fieldSurveySessionId === where.fieldSurveySessionId)
+          .sort((a, b) => a.sequence - b.sequence),
+      create: async ({ data }: { data: GpsPointFixture }) => {
+        gpsPoints.push(data);
+        return data;
+      },
+    };
+
+    const fieldSurveySyncReceipt = {
+      findUnique: async ({ where }: { where: { idempotencyKey: string } }) =>
+        syncReceipts.find((receipt) => receipt.idempotencyKey === where.idempotencyKey) ?? null,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        syncReceipts.push(data);
+        return data;
+      },
     };
 
     prismaFixture = {
       fieldReport,
       fieldSurveySession,
+      fieldSurveyGpsPoint,
+      fieldSurveySyncReceipt,
       parcel: {
         findUnique: async () => ({
           id: "parcel-1",
@@ -366,6 +416,179 @@ describe("field report assignment authorization", () => {
         bhumiId: "ILR-CUM-DEB-0001452",
       },
     });
+  });
+
+  it("replays an idempotent offline start without creating a second session", async () => {
+    report.status = "accepted";
+    const token = bearer("usr-agent", "field-agent");
+    const requestBody = { localSessionId: "550e8400-e29b-41d4-a716-446655440000" };
+
+    const first = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .set("idempotency-key", "550e8400-e29b-41d4-a716-446655440010")
+      .send(requestBody)
+      .expect(201);
+    const replay = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .set("idempotency-key", "550e8400-e29b-41d4-a716-446655440010")
+      .send(requestBody)
+      .expect(201);
+
+    expect(replay.body.survey.id).toBe(first.body.survey.id);
+    expect(auditEntries.filter((entry) => entry.action === "start")).toHaveLength(1);
+    expect(syncReceipts).toHaveLength(1);
+
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .set("idempotency-key", "550e8400-e29b-41d4-a716-446655440010")
+      .send({ localSessionId: "550e8400-e29b-41d4-a716-446655440099" })
+      .expect(409);
+  });
+
+  it("appends ordered GPS points once and restores them through detail", async () => {
+    report.status = "accepted";
+    const token = bearer("usr-agent", "field-agent");
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .send({ localSessionId: "550e8400-e29b-41d4-a716-446655440000" })
+      .expect(201);
+    const body = {
+      points: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440001",
+          sequence: 1,
+          latitude: 23.55,
+          longitude: 90.99,
+          recordedAt: "2026-09-14T05:00:00.000Z",
+          accuracyMeters: 4,
+        },
+        {
+          id: "550e8400-e29b-41d4-a716-446655440002",
+          sequence: 2,
+          latitude: 23.5501,
+          longitude: 90.9901,
+          recordedAt: "2026-09-14T05:00:10.000Z",
+          accuracyMeters: 6,
+          altitudeMeters: 12,
+        },
+      ],
+    };
+
+    const first = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/points")
+      .set("authorization", token)
+      .set("idempotency-key", "550e8400-e29b-41d4-a716-446655440011")
+      .send(body)
+      .expect(201);
+    const replay = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/points")
+      .set("authorization", token)
+      .set("idempotency-key", "550e8400-e29b-41d4-a716-446655440011")
+      .send(body)
+      .expect(201);
+    const detail = await request(app.getHttpServer())
+      .get("/field-reports/fr-1")
+      .set("authorization", token)
+      .expect(200);
+
+    expect(first.body.acceptedThroughSequence).toBe(2);
+    expect(replay.body.acceptedThroughSequence).toBe(2);
+    expect(gpsPoints).toHaveLength(2);
+    expect(detail.body.survey.points.map((point: GpsPointFixture) => point.sequence)).toEqual([1, 2]);
+    expect(detail.body.survey.points[1].altitudeMeters).toBe(12);
+  });
+
+  it("rejects changed payload reuse, sequence gaps, and another agent's points", async () => {
+    report.status = "accepted";
+    const token = bearer("usr-agent", "field-agent");
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .send({ localSessionId: "550e8400-e29b-41d4-a716-446655440000" })
+      .expect(201);
+    const basePoint = {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      sequence: 2,
+      latitude: 23.55,
+      longitude: 90.99,
+      recordedAt: "2026-09-14T05:00:00.000Z",
+      accuracyMeters: 4,
+    };
+
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/points")
+      .set("authorization", token)
+      .set("idempotency-key", "550e8400-e29b-41d4-a716-446655440012")
+      .send({ points: [basePoint] })
+      .expect(409);
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/points")
+      .set("authorization", bearer("usr-agent-2", "field-agent"))
+      .send({ points: [{ ...basePoint, sequence: 1 }] })
+      .expect(404);
+  });
+
+  it("completes from durable points and replays without duplicate side effects", async () => {
+    report.status = "accepted";
+    const token = bearer("usr-agent", "field-agent");
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .send({ localSessionId: "550e8400-e29b-41d4-a716-446655440000" })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/points")
+      .set("authorization", token)
+      .send({
+        points: [
+          {
+            id: "550e8400-e29b-41d4-a716-446655440001",
+            sequence: 1,
+            latitude: 23.55,
+            longitude: 90.99,
+            recordedAt: "2026-09-14T05:00:00.000Z",
+            accuracyMeters: 4,
+          },
+          {
+            id: "550e8400-e29b-41d4-a716-446655440002",
+            sequence: 2,
+            latitude: 23.5501,
+            longitude: 90.9901,
+            recordedAt: "2026-09-14T05:00:10.000Z",
+            accuracyMeters: 6,
+          },
+        ],
+      })
+      .expect(201);
+    const completion = {
+      notes: "Boundary walk retained and reviewed.",
+      expectedVersion: 2,
+    };
+    const first = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", token)
+      .set("idempotency-key", "550e8400-e29b-41d4-a716-446655440013")
+      .send(completion)
+      .expect(200);
+    const replay = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", token)
+      .set("idempotency-key", "550e8400-e29b-41d4-a716-446655440013")
+      .send(completion)
+      .expect(200);
+
+    expect(first.body.survey.summary).toMatchObject({
+      totalPoints: 2,
+      geometry: "insufficient-points",
+      confidence: "low",
+    });
+    expect(first.body.survey.points).toHaveLength(2);
+    expect(replay.body.survey.summary.totalPoints).toBe(2);
+    expect(auditEntries.filter((entry) => entry.action === "complete")).toHaveLength(1);
   });
 
   it("starts an accepted case from the optional en-route marker", async () => {

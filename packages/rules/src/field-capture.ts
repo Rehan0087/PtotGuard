@@ -68,9 +68,13 @@ export interface FilingReview {
  * @param notes The agent's unsaved draft, so the gate reacts as they type rather
  *   than only to what has already been written to the report.
  */
-export function filingReview(report: FieldReport, notes: string): FilingReview {
+export function filingReview(
+  report: FieldReport,
+  notes: string,
+  evidence: { gpsCount?: number } = {},
+): FilingReview {
   const need = EVIDENCE_REQUIRED[report.purpose];
-  const gpsHave = report.gpsCaptures.length;
+  const gpsHave = evidence.gpsCount ?? report.gpsCaptures.length;
   const photosHave = report.photos.length;
   const hasNotes = notes.trim().length > 0;
 

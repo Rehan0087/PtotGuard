@@ -77,7 +77,9 @@ export const NAV: Record<Role, PortalNav> = {
   "field-agent": {
     portalKey: "fieldSurvey",
     home: "/field",
-    items: [{ labelKey: "assignedVisits", href: "/field", icon: MapPin }],
+    items: [
+      { labelKey: "assignedVisits", href: "/field", icon: MapPin },
+    ],
   },
   mediator: {
     portalKey: "mediation",
@@ -97,3 +99,9 @@ export const NAV: Record<Role, PortalNav> = {
 };
 
 export const roleHome = (role: Role): string => NAV[role].home;
+
+export const profileHrefForRole = (role: Role | undefined): string =>
+  role === "field-agent" ? "/field/profile" : "/profile";
+
+export const searchHrefForRole = (role: Role | undefined): string =>
+  role === "field-agent" ? "/field/search" : "/search";
