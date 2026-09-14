@@ -17,7 +17,7 @@ const fieldAgent = {
   jurisdictionId: "j-rajamehar",
   nationalId: null,
   avatarUrl: null,
-  profileDetails: null,
+  profileDetails: { employeeCode: "FA-1042" },
   status: "active",
   title: "Survey Officer",
   passwordHash,
@@ -25,6 +25,7 @@ const fieldAgent = {
 };
 
 let prismaFixture: Record<string, unknown>;
+let lastUserUpdate: Record<string, unknown> | undefined;
 
 @Module({
   controllers: [AuthController],
@@ -37,11 +38,22 @@ describe("AuthController", () => {
 
   beforeEach(async () => {
     process.env.AUTH_TOKEN_SECRET = "test-secret-that-is-long-enough";
+    lastUserUpdate = undefined;
     prismaFixture = {
       user: {
-        findUnique: async ({ where }: { where: { id?: string; email?: string } }) =>
-          where.email === fieldAgent.email || where.id === fieldAgent.id ? fieldAgent : null,
-        update: async () => fieldAgent,
+        findUnique: async ({ where }: { where: { id?: string; email?: string } }) => {
+          if (where.email === "used@plotguard.bd") {
+            return { ...fieldAgent, id: "usr-other", email: where.email };
+          }
+          return where.email === fieldAgent.email || where.id === fieldAgent.id ? fieldAgent : null;
+        },
+        update: async ({ data }: { data: Record<string, unknown> }) => {
+          if (data.email === "race@plotguard.bd") {
+            throw { code: "P2002", meta: { target: ["email"] } };
+          }
+          lastUserUpdate = data;
+          return { ...fieldAgent, ...data };
+        },
       },
       jurisdiction: {
         findUnique: async () => ({
@@ -54,8 +66,8 @@ describe("AuthController", () => {
       },
     };
 
-    const module = await Test.createTestingModule({ imports: [AuthTestModule] }).compile();
-    app = module.createNestApplication();
+    const testingModule = await Test.createTestingModule({ imports: [AuthTestModule] }).compile();
+    app = testingModule.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
     await app.init();
   });
@@ -102,6 +114,96 @@ describe("AuthController", () => {
       .expect(200);
 
     expect(response.body.user.id).toBe("usr-agent");
+  });
+
+  it("updates only the signed-in user's editable profile fields and preserves managed details", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: fieldAgent.email, password: "demo1234" });
+
+    const response = await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({
+        name: "  Md. Abdul Karim  ",
+        email: "  KARIM@PLOTGUARD.BD ",
+        phone: "+8801711000000",
+        avatarUrl: "https://example.bd/karim.jpg",
+        currentAddress: "Debidwar, Cumilla",
+        emergencyContact: "+8801811000000",
+      })
+      .expect(200);
+
+    expect(lastUserUpdate).toEqual({
+      name: "Md. Abdul Karim",
+      email: "karim@plotguard.bd",
+      phone: "+8801711000000",
+      avatarUrl: "https://example.bd/karim.jpg",
+      profileDetails: {
+        employeeCode: "FA-1042",
+        currentAddress: "Debidwar, Cumilla",
+        emergencyContact: "+8801811000000",
+      },
+    });
+    expect(response.body.role).toBe("field-agent");
+  });
+
+  it("rejects role and employment-controlled fields on self-service updates", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: fieldAgent.email, password: "demo1234" });
+
+    await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({ role: "admin", title: "Administrator", jurisdictionId: "j-cumilla" })
+      .expect(400);
+
+    expect(lastUserUpdate).toBeUndefined();
+  });
+
+  it("prevents a field agent from rewriting managed profile details directly", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: fieldAgent.email, password: "demo1234" });
+
+    await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({ profileDetails: { employeeCode: "ADMIN" } })
+      .expect(400);
+
+    expect(lastUserUpdate).toBeUndefined();
+  });
+
+  it("returns a conflict instead of assigning an email used by another account", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: fieldAgent.email, password: "demo1234" });
+
+    await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({ email: "used@plotguard.bd" })
+      .expect(409);
+
+    expect(lastUserUpdate).toBeUndefined();
+  });
+
+  it("maps a concurrent unique-email race to a conflict", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: fieldAgent.email, password: "demo1234" });
+
+    await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({ email: "race@plotguard.bd" })
+      .expect(409);
+  });
+
+  it("rejects unauthenticated profile updates", async () => {
+    await request(app.getHttpServer()).patch("/auth/me").send({ name: "Intruder" }).expect(401);
   });
 
   it("rejects an expired access token", async () => {

@@ -58,6 +58,7 @@ import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 import { DEMO_PASSWORD, findDemoAccount } from "../demo-accounts";
 import { hydrateMutationState } from "./mutation-store";
+import { applyMockProfileUpdate, MockProfileUpdateError } from "../field-profile";
 import { filterMutationReads } from "./mutation-contract.mjs";
 import { filterLandOfficeRecords, recordAuditEvents } from "./records-contract.mjs";
 import {
@@ -488,13 +489,30 @@ export const handlers = [
     await latency();
     const user = authenticatedUser(request);
     if (!user) return unauthorized();
-    const body = (await request.json()) as Partial<
-      Pick<User, "phone" | "avatarUrl" | "profileDetails">
-    >;
+    const body = (await request.json()) as Record<string, unknown>;
 
-    if (body.phone !== undefined) user.phone = body.phone;
-    if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
-    if (body.profileDetails !== undefined) user.profileDetails = body.profileDetails;
+    if (user.role === "field-agent") {
+      try {
+        return HttpResponse.json(applyMockProfileUpdate(db.users, user.id, body));
+      } catch (error) {
+        if (error instanceof MockProfileUpdateError) {
+          if (error.status === 404) return notFound("User not found");
+          if (error.status === 409) {
+            return conflict("This email address is already used by another account", {
+              code: error.code,
+            });
+          }
+          return badRequest("Field profile update is invalid");
+        }
+        throw error;
+      }
+    }
+
+    if (typeof body.phone === "string") user.phone = body.phone;
+    if (typeof body.avatarUrl === "string") user.avatarUrl = body.avatarUrl;
+    if (body.profileDetails && typeof body.profileDetails === "object") {
+      user.profileDetails = body.profileDetails as Record<string, string>;
+    }
 
     return HttpResponse.json(user);
   }),
