@@ -49,7 +49,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       {role === "citizen" && (
         <div className="px-4 pb-4">
-          <div className="rounded-full border border-primary text-primary px-3 py-1.5 text-xs font-medium inline-block mb-4">
+          <div className="mb-4 inline-block rounded-full border border-sidebar-primary/50 bg-sidebar-primary/10 px-3 py-1.5 text-xs font-medium text-sidebar-primary">
             Profile Verified By
           </div>
           <div className="space-y-2.5 text-xs text-sidebar-foreground">
