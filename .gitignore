@@ -50,3 +50,6 @@ dist
 
 # local design and implementation planning artifacts
 /docs/
+
+# isolated implementation worktrees
+/.worktrees/
