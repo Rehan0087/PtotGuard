@@ -21,6 +21,7 @@ export class FieldSyncProcessor {
   private running = false;
   private readonly repository: FieldOfflineRepository;
   private readonly transport: SyncTransport;
+  private readonly owner = crypto.randomUUID();
 
   constructor(repository: FieldOfflineRepository, transport: SyncTransport) {
     this.repository = repository;
@@ -30,7 +31,10 @@ export class FieldSyncProcessor {
   async process(assignedAgentId: string, ignoreBackoff = false): Promise<void> {
     if (this.running || !this.transport.isOnline()) return;
     this.running = true;
+    let leased = false;
     try {
+      leased = await this.repository.acquireSyncLease(this.owner);
+      if (!leased) return;
       await this.repository.recoverInterruptedUploads();
       const operations = (await this.repository.listOperations()).filter(
         (operation) => operation.assigned_agent_id === assignedAgentId,
@@ -44,7 +48,10 @@ export class FieldSyncProcessor {
           blockedSurveys.add(operation.survey_key);
           continue;
         }
-        if (operation.retry_count >= MAX_AUTOMATIC_RETRIES) {
+        if (
+          operation.sync_status === "FAILED" &&
+          operation.retry_count >= MAX_AUTOMATIC_RETRIES
+        ) {
           blockedSurveys.add(operation.survey_key);
           continue;
         }
@@ -118,6 +125,7 @@ export class FieldSyncProcessor {
         }
       }
     } finally {
+      if (leased) await this.repository.releaseSyncLease(this.owner);
       this.running = false;
     }
   }
@@ -128,6 +136,23 @@ export class FieldSyncProcessor {
       next_attempt_at: undefined,
       last_error: undefined,
     });
+    await this.process(assignedAgentId, true);
+  }
+
+  async retryFailed(assignedAgentId: string): Promise<void> {
+    const failed = (await this.repository.listOperations()).filter(
+      (operation) =>
+        operation.assigned_agent_id === assignedAgentId && operation.sync_status === "FAILED",
+    );
+    await Promise.all(
+      failed.map((operation) =>
+        this.repository.updateOperation(operation.local_id, {
+          sync_status: "PENDING",
+          next_attempt_at: undefined,
+          last_error: undefined,
+        }),
+      ),
+    );
     await this.process(assignedAgentId, true);
   }
 }

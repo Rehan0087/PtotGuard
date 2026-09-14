@@ -753,6 +753,18 @@ export const en = {
       simulatedNote:
         "Device GPS is used when available; otherwise a point near the parcel is simulated for this preview.",
       simulatedPoint: "Simulated",
+      online: "Online — syncing automatically",
+      offline: "Offline — GPS continues on this device",
+      pendingSync: (count: number) => `${n(count)} pending upload${count === 1 ? "" : "s"}`,
+      tracking: "GPS tracking active",
+      resumeTracking: "Resume GPS tracking",
+      lowAccuracy: "Low accuracy",
+      gpsProblem: "GPS problem",
+      permissionDenied: "Location permission was denied. Allow location access to record the boundary.",
+      gpsUnavailable: "GPS is unavailable. No coordinate was created.",
+      gpsTimeout: "GPS timed out before a reliable position was available.",
+      syncFailed: "Saved on this device, but synchronization failed.",
+      syncConflict: "Local and server survey data conflict. Both copies were preserved.",
 
       // Notes + filing
       notes: "Findings",
