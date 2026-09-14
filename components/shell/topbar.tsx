@@ -12,9 +12,12 @@ import { LanguageToggle } from "./language-toggle";
 import { ThemeToggle } from "./theme-toggle";
 import { NotificationsMenu } from "./notifications-menu";
 import { UserMenu } from "./user-menu";
+import { searchHrefForRole } from "@/lib/nav";
+import { useSessionStore } from "@/store/session";
 
 export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   const t = useT();
+  const role = useSessionStore((state) => state.role);
   const { data } = useSession();
   const jurisdiction = data?.jurisdiction;
 
@@ -40,7 +43,7 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
 
       <div className="ml-auto flex items-center gap-1.5">
         <Link
-          href="/search"
+          href={searchHrefForRole(role)}
           className={cn(
             buttonVariants({ variant: "outline", size: "sm" }),
             "hidden text-muted-foreground sm:inline-flex",

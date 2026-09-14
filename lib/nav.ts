@@ -102,3 +102,6 @@ export const roleHome = (role: Role): string => NAV[role].home;
 
 export const profileHrefForRole = (role: Role | undefined): string =>
   role === "field-agent" ? "/field/profile" : "/profile";
+
+export const searchHrefForRole = (role: Role | undefined): string =>
+  role === "field-agent" ? "/field/search" : "/search";
