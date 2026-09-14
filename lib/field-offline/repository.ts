@@ -6,7 +6,7 @@ import type {
   OfflineFieldSurvey,
 } from "./types.ts";
 
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const MAX_POINT_BATCH = 50;
 
 interface RepositoryOptions {
@@ -79,6 +79,9 @@ export class FieldOfflineRepository {
           const operations = database.createObjectStore("operations", { keyPath: "local_id" });
           operations.createIndex("surveyCreated", ["survey_key", "created_at"]);
           operations.createIndex("agentCreated", ["assigned_agent_id", "created_at"]);
+        }
+        if (!database.objectStoreNames.contains("meta")) {
+          database.createObjectStore("meta", { keyPath: "key" });
         }
       };
       request.onsuccess = () => resolve(request.result);
@@ -210,7 +213,25 @@ export class FieldOfflineRepository {
     return values.sort((a, b) => a.sequence - b.sequence);
   }
 
-  async queueCompletion(surveyKey: string, notes: string): Promise<void> {
+  async storeAcknowledgedPoint(point: LocalGpsPoint): Promise<void> {
+    const database = await this.open();
+    const transaction = database.transaction("points", "readwrite");
+    const store = transaction.objectStore("points");
+    const existing = (await requestResult(store.get(point.id))) as LocalGpsPoint | undefined;
+    if (!existing) store.add(point);
+    else if (stable(existing) !== stable(point)) {
+      transaction.abort();
+      throw new Error("Acknowledged GPS point conflicts with local raw data");
+    }
+    await transactionDone(transaction);
+  }
+
+  async queueCompletion(
+    surveyKey: string,
+    notes: string,
+    completedAt = this.now(),
+    summary?: OfflineFieldSurvey["summary"],
+  ): Promise<void> {
     const database = await this.open();
     const transaction = database.transaction(["surveys", "operations"], "readwrite");
     const surveys = transaction.objectStore("surveys");
@@ -219,12 +240,12 @@ export class FieldOfflineRepository {
       transaction.abort();
       throw new Error("Offline survey not found");
     }
-    const completedAt = this.now();
     const updated = {
       ...survey,
       state: "completed" as const,
       completedAt,
       notes,
+      summary,
       syncStatus: "PENDING" as const,
       updatedAt: completedAt,
     };
@@ -288,6 +309,34 @@ export class FieldOfflineRepository {
           }),
         ),
     );
+  }
+
+  async acquireSyncLease(owner: string, ttlMilliseconds = 15_000): Promise<boolean> {
+    const database = await this.open();
+    const transaction = database.transaction("meta", "readwrite");
+    const store = transaction.objectStore("meta");
+    const existing = (await requestResult(store.get("sync-lease"))) as
+      | { key: string; owner: string; expiresAt: number }
+      | undefined;
+    const now = Date.now();
+    if (existing && existing.owner !== owner && existing.expiresAt > now) {
+      await transactionDone(transaction);
+      return false;
+    }
+    store.put({ key: "sync-lease", owner, expiresAt: now + ttlMilliseconds });
+    await transactionDone(transaction);
+    return true;
+  }
+
+  async releaseSyncLease(owner: string): Promise<void> {
+    const database = await this.open();
+    const transaction = database.transaction("meta", "readwrite");
+    const store = transaction.objectStore("meta");
+    const existing = (await requestResult(store.get("sync-lease"))) as
+      | { key: string; owner: string }
+      | undefined;
+    if (existing?.owner === owner) store.delete("sync-lease");
+    await transactionDone(transaction);
   }
 }
 

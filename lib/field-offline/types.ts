@@ -1,4 +1,4 @@
-import type { FieldReport, GpsPointInput, Parcel } from "@/lib/types";
+import type { FieldReport, FieldSurveySummary, GpsPointInput, Parcel } from "@/lib/types";
 
 export type FieldSyncStatus = "PENDING" | "UPLOADING" | "SYNCED" | "FAILED" | "CONFLICT";
 export type FieldSyncOperationType = "START_SURVEY" | "APPEND_POINTS" | "COMPLETE_SURVEY";
@@ -18,6 +18,7 @@ export interface OfflineFieldSurvey {
   reportSnapshot?: FieldReport;
   parcelSnapshot?: Parcel;
   notes?: string;
+  summary?: FieldSurveySummary;
 }
 
 export interface LocalGpsPoint extends GpsPointInput {
