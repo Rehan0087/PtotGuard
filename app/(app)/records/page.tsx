@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -32,10 +32,11 @@ export default function RecordsPage() {
   const t = useT();
   const f = useFmt();
   const s = useStatusMeta();
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | RegistryStatus>("all");
 
-  const { data, isLoading } = useParcels({
+  const { data, isLoading, isError, refetch } = useParcels({
     q: q || undefined,
     status: status === "all" ? undefined : status,
     pageSize: 100,
@@ -81,6 +82,17 @@ export default function RecordsPage() {
               <Skeleton key={i} className="h-10 rounded-md" />
             ))}
           </div>
+        ) : isError ? (
+          <EmptyState
+            className="border-0"
+            icon={Search}
+            title={t.pages.records.loadFailedTitle}
+            description={t.pages.records.loadFailedBody}
+          >
+            <Button variant="outline" size="sm" onClick={() => void refetch()}>
+              {t.common.retry}
+            </Button>
+          </EmptyState>
         ) : parcels.length === 0 ? (
           <EmptyState
             className="border-0"
@@ -103,12 +115,25 @@ export default function RecordsPage() {
             </TableHeader>
             <TableBody>
               {parcels.map((p) => (
-                <TableRow key={p.id}>
+                <TableRow
+                  key={p.id}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={t.pages.records.openRecord(p.dagNo)}
+                  className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => router.push(`/records/${p.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      router.push(`/records/${p.id}`);
+                    }
+                  }}
+                >
                   <TableCell>
-                    <Link href={`/parcels/${p.id}`} className="inline-flex items-center gap-1.5 hover:underline">
+                    <span className="inline-flex items-center gap-1.5">
                       <IdChip>{p.dagNo}</IdChip>
                       <span className="tabular text-xs text-muted-foreground">#{p.khatianNo}</span>
-                    </Link>
+                    </span>
                   </TableCell>
                   <TableCell className="max-w-[16rem] truncate font-medium text-foreground">
                     {p.title}

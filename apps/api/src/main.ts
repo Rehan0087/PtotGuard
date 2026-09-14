@@ -9,13 +9,19 @@ import "dotenv/config";
 import "reflect-metadata";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module";
+import { configureBodyParser } from "./common/configure-body-parser";
 
 /** The frontend calls `${NEXT_PUBLIC_API_BASE}/parcels`, so the prefix is `/api`. */
 export const API_PREFIX = "api";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+    bufferLogs: true,
+  });
+  configureBodyParser(app);
 
   app.setGlobalPrefix(API_PREFIX);
   app.useGlobalPipes(

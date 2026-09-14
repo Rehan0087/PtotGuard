@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
+import type { Prisma } from "@prisma/client";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
-  approvalGate,
+  mutationActionGate,
+  mutationObjectionSummary,
+  mutationVerificationReferences,
+  verificationGate,
   transferReview,
   type Mutation,
   type MutationType,
+  type MutationStatus,
   type ParcelRestriction,
 } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
@@ -17,6 +22,26 @@ import { currentUserId } from "../auth/dev-current-user";
 import { findParcelView } from "../parcels/parcel-view";
 import { MutationDecisionDto } from "./mutation-decision.dto";
 import { CreateMutationDto } from "./create-mutation.dto";
+import { CompleteVerificationDto } from "./complete-verification.dto";
+import {
+  assertLandOfficeActor,
+  assertMutationActionAccess,
+  coveredJurisdictionIds,
+  loadMutationActor,
+  loadMutationReadActor,
+  type MutationActor,
+} from "./mutation-access";
+
+function asMutationStatus(value: unknown): MutationStatus | undefined {
+  return typeof value === "string" && ["submitted", "verification", "objection-period", "approved", "rejected"].includes(value)
+    ? value as MutationStatus : undefined;
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+type ActionContext = Awaited<ReturnType<MutationsController["actionContext"]>>;
 
 @Controller("mutations")
 export class MutationsController {
@@ -27,26 +52,81 @@ export class MutationsController {
 
   @Get()
   async list(@Query() query: Record<string, string>, @Req() req: Request) {
-    const me = currentUserId(req);
-    const where = {
-      ...(query.scope === "mine" ? { requestedById: me } : {}),
-      ...(query.scope === "assigned" ? { assignedOfficerId: me } : {}),
-      ...(query.status ? { status: query.status } : {}),
-    };
+    const actor = await loadMutationReadActor(this.prisma, req);
+    const where = actor.role === "land-office"
+      ? await this.landOfficeListWhere(query, actor)
+      : {
+          requestedById: actor.id,
+          ...(query.status ? { status: query.status } : {}),
+        };
     const all = await this.prisma.mutation.findMany({ where, orderBy: { requestedAt: "desc" } });
     return paginate(all, pageParams(query));
   }
 
   @Get(":id")
-  async detail(@Param("id") id: string) {
+  async detail(@Param("id") id: string, @Req() req: Request) {
+    const actor = await loadMutationReadActor(this.prisma, req);
     const mutation = await this.prisma.mutation.findUnique({ where: { id } });
     if (!mutation) throw new NotFoundError("Mutation not found");
 
-    const [parcel, documents] = await Promise.all([
+    const accessParcel = await this.prisma.parcel.findUnique({
+      where: { id: mutation.parcelId },
+      select: { jurisdictionId: true },
+    });
+    if (actor.role === "citizen") {
+      if (mutation.requestedById !== actor.id) {
+        throw new ForbiddenException("You can only view your own mutations.");
+      }
+    } else {
+      const jurisdictions = await this.prisma.jurisdiction.findMany();
+      if (accessParcel && !coveredJurisdictionIds(actor, jurisdictions).has(accessParcel.jurisdictionId)) {
+        throw new ForbiddenException("This mutation is outside your jurisdiction.");
+      }
+    }
+
+    const summary = (userId: string | null | undefined) => userId
+      ? this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, name: true, title: true },
+        })
+      : null;
+    const [parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy, jurisdiction, events] = await Promise.all([
       findParcelView(this.prisma, mutation.parcelId),
       this.prisma.landDocument.findMany({ where: { id: { in: mutation.documentIds } } }),
+      summary(mutation.requestedById),
+      summary(mutation.assignedOfficerId),
+      summary(mutation.verificationStartedById),
+      summary(mutation.verifiedById),
+      accessParcel
+        ? this.prisma.jurisdiction.findUnique({
+            where: { id: accessParcel.jurisdictionId },
+            select: { id: true, code: true, name: true, nameBn: true },
+          })
+        : null,
+      this.prisma.auditEvent.findMany({
+        where: { entityType: "mutation", entityId: id },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
-    return { mutation, parcel, documents };
+    return {
+      mutation, parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy,
+      jurisdiction,
+      objectionSummary: mutationObjectionSummary(mutation as unknown as Mutation),
+      timeline: events.map((event) => {
+        const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+          ? event.payload : {};
+        return {
+          id: event.id,
+          action: event.action,
+          at: event.createdAt.toISOString(),
+          actorName: event.actorName ?? "System",
+          actorRole: asOptionalString(payload.actorRole),
+          previousStatus: asMutationStatus(payload.previousStatus),
+          newStatus: asMutationStatus(payload.newStatus),
+          note: asOptionalString(payload.note ?? payload.reason),
+        };
+      }),
+    };
   }
 
   /**
@@ -110,6 +190,7 @@ export class MutationsController {
           // The registry's own fact, not the applicant's claim — a citizen
           // does not get to assert who the current owner is.
           fromOwnerName: parcel.owner.name,
+          fromOwnerId: parcel.ownerId,
           toOwnerId: toOwner.id,
           toOwnerName: toOwner.name,
           requestedById: actorId,
@@ -132,6 +213,7 @@ export class MutationsController {
           mutationNumber: created.mutationNumber,
           parcelDagNo: created.parcelDagNo,
           toOwnerName: created.toOwnerName,
+          newStatus: "submitted",
         },
       });
 
@@ -153,55 +235,134 @@ export class MutationsController {
     });
   }
 
-  /**
-   * approvalGate() ran client-side only in the mock (app/(app)/mutations/page.tsx
-   * disables the button; lib/mocks/handlers.ts never checked it) — the exact
-   * gap this codebase's own design principle warns against: a UI that
-   * explains a hold is not a server that enforces one. Fixed here and in the
-   * mock (parity), so a request that bypasses the disabled button still 422s.
-   *
-   * Approval used to stop at flipping `status` — the actual point of a
-   * namjari, moving the parcel to its new owner, never happened.
-   * approvalGate()'s own `no-recipient` hold is what makes this safe: by the
-   * time execution reaches here, `toOwnerId` is guaranteed present.
-   */
+  @Patch(":id/start-verification")
+  async startVerification(@Param("id") id: string, @Req() req: Request) {
+    return this.runAction(id, req, async (tx, { mutation, actor }, now) => {
+      this.assertTransition(mutation, actor, now, "canStartVerification", ["submitted"]);
+      const updated = await tx.mutation.update({
+        where: {
+          id,
+          status: "submitted",
+          assignedOfficerId: mutation.assignedOfficerId,
+          updatedAt: mutation.updatedAt,
+        },
+        data: {
+          status: "verification", assignedOfficerId: actor.id,
+          verificationStartedAt: now, verificationStartedById: actor.id,
+        },
+      });
+      await this.audit.append(tx, {
+        entityType: "mutation", entityId: id, action: "status-change", actorId: actor.id,
+        payload: { previousStatus: mutation.status, newStatus: updated.status, actorRole: actor.role },
+      });
+      return updated;
+    });
+  }
+
+  @Patch(":id/complete-verification")
+  async completeVerification(
+    @Param("id") id: string,
+    @Body() body: CompleteVerificationDto,
+    @Req() req: Request,
+  ) {
+    return this.runAction(id, req, async (tx, { mutation, actor }, now) => {
+      this.assertTransition(mutation, actor, now, "canCompleteVerification", ["verification"]);
+      const checklist = {
+        applicantVerified: body.applicantVerified, previousOwnerVerified: body.previousOwnerVerified,
+        proposedOwnerVerified: body.proposedOwnerVerified, dagKhatianVerified: body.dagKhatianVerified,
+        deedVerified: body.deedVerified, landRecordMatched: body.landRecordMatched, documentsPresent: body.documentsPresent,
+      };
+      const notes = typeof body.notes === "string" ? body.notes.trim() : "";
+      const verification = verificationGate(checklist, notes);
+      if (!verification.ok) throw new ValidationError(verification.reason, "verification");
+      const [recipient, documents] = await Promise.all([
+        mutation.toOwnerId ? tx.user.findUnique({ where: { id: mutation.toOwnerId } }) : null,
+        tx.landDocument.findMany({ where: { id: { in: mutation.documentIds } } }),
+      ]);
+      const references = mutationVerificationReferences(
+        mutation as unknown as Mutation,
+        recipient,
+        documents,
+      );
+      if (!references.ok) {
+        throw new ValidationError(
+          references.reason,
+          references.reason.code === "invalid-recipient" ? "toOwnerId" : "documentIds",
+        );
+      }
+      const policy = await tx.policy.findUnique({ where: { id: "singleton" } });
+      if (!policy || !Number.isInteger(policy.objectionWindowDays) || policy.objectionWindowDays < 0) {
+        throw new ValidationError({ code: "objection-policy-unavailable" }, "verification");
+      }
+      const updated = await tx.mutation.update({
+        where: {
+          id,
+          status: "verification",
+          assignedOfficerId: mutation.assignedOfficerId,
+          updatedAt: mutation.updatedAt,
+        },
+        data: {
+          status: "objection-period", assignedOfficerId: actor.id,
+          verifiedAt: now, verifiedById: actor.id, verificationNotes: notes, verificationChecklist: checklist,
+          objectionStartDate: now, objectionWindowEndsAt: new Date(now.getTime() + policy.objectionWindowDays * 86_400_000),
+        },
+      });
+      await this.audit.append(tx, {
+        entityType: "mutation", entityId: id, action: "status-change", actorId: actor.id,
+        payload: { previousStatus: mutation.status, newStatus: updated.status, actorRole: actor.role, note: notes },
+      });
+      return updated;
+    });
+  }
+
   @Patch(":id/decision")
   async decide(
     @Param("id") id: string,
     @Body() body: MutationDecisionDto,
     @Req() req: Request,
   ) {
-    const mutation = await this.prisma.mutation.findUnique({ where: { id } });
-    if (!mutation) throw new NotFoundError("Mutation not found");
-
-    // approvalGate() models "already decided" as canApprove/canReject both
-    // false with hold: null (its own callers check mutation.status instead,
-    // to hide the buttons entirely) — so that case is refused here, before
-    // the gate, rather than invented as a hold code the pure rule doesn't have.
-    if (mutation.status === "approved" || mutation.status === "rejected") {
-      throw new ConflictError("This mutation has already been decided.");
-    }
-
-    const gate = approvalGate(mutation as unknown as Mutation);
-    const allowed = body.decision === "approve" ? gate.canApprove : gate.canReject;
-    if (!allowed) throw new ValidationError(gate.hold!, "decision");
-
-    const actorId = currentUserId(req);
-    const status = body.decision === "approve" ? "approved" : "rejected";
-
-    return this.prisma.$transaction(async (tx) => {
-      const now = new Date();
+    return this.runAction(id, req, async (tx, { mutation, parcel, actor }, now) => {
+      if (body.decision !== "approve" && body.decision !== "reject") {
+        throw new ValidationError({ code: "invalid-decision" }, "decision");
+      }
+      const approving = body.decision === "approve";
+      this.assertTransition(mutation, actor, now, approving ? "canApprove" : "canReject",
+        approving ? ["objection-period"] : ["submitted", "verification", "objection-period"]);
+      const reason = typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
+      const note = typeof body.approvalNote === "string" ? body.approvalNote.trim() : undefined;
+      if (!approving && !reason) throw new ValidationError({ code: "rejection-reason-required" }, "rejectionReason");
+      if (approving) {
+        // Legacy rows without a deadline cannot prove the objection window closed.
+        if (!mutation.objectionWindowEndsAt) {
+          throw new ValidationError({ code: "objection-window-missing" }, "decision");
+        }
+        if (!mutation.fromOwnerId || parcel.ownerId !== mutation.fromOwnerId) {
+          throw new ConflictError("The parcel owner has changed since this mutation was filed.");
+        }
+        const recipient = await tx.user.findUnique({ where: { id: mutation.toOwnerId! } });
+        if (!recipient || recipient.role !== "citizen" || recipient.status !== "active") {
+          throw new ValidationError({ code: "invalid-recipient" }, "toOwnerId");
+        }
+      }
       const updated = await tx.mutation.update({
-        where: { id },
-        data: { status, decidedAt: now },
+        where: {
+          id,
+          status: mutation.status,
+          assignedOfficerId: mutation.assignedOfficerId,
+          updatedAt: mutation.updatedAt,
+        },
+        data: {
+          assignedOfficerId: actor.id, decidedAt: now,
+          ...(approving
+            ? { status: "approved", approvedAt: now, approvedById: actor.id, approvalNote: note }
+            : { status: "rejected", rejectedAt: now, rejectedById: actor.id, rejectionReason: reason }),
+        },
       });
 
-      if (body.decision === "approve") {
-        // Guaranteed by approvalGate()'s no-recipient hold above.
+      if (approving) {
         const toOwnerId = mutation.toOwnerId!;
-
         await tx.parcel.update({
-          where: { id: mutation.parcelId },
+          where: { id: mutation.parcelId, ownerId: mutation.fromOwnerId! },
           data: { ownerId: toOwnerId, lastMutationAt: now },
         });
 
@@ -219,6 +380,7 @@ export class MutationsController {
             acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type as MutationType],
             fromDate: now,
             documentId: mutation.documentIds[0],
+            mutationId: id,
           },
         });
       }
@@ -227,11 +389,15 @@ export class MutationsController {
         entityType: "mutation",
         entityId: updated.id,
         action: body.decision,
-        actorId,
+        actorId: actor.id,
         payload: {
           mutationNumber: updated.mutationNumber,
           parcelDagNo: updated.parcelDagNo,
           toOwnerName: updated.toOwnerName,
+          previousStatus: mutation.status,
+          newStatus: updated.status,
+          actorRole: actor.role,
+          ...(approving ? (note ? { note } : {}) : { reason }),
         },
       });
       await tx.appNotification.create({
@@ -249,5 +415,76 @@ export class MutationsController {
 
       return updated;
     });
+  }
+
+  private assertTransition(
+    mutation: ActionContext["mutation"], actor: MutationActor, now: Date,
+    action: "canStartVerification" | "canCompleteVerification" | "canApprove" | "canReject",
+    expected: MutationStatus[],
+  ) {
+    const gate = mutationActionGate(mutation as unknown as Mutation, actor.id, now);
+    if (gate.hold?.code === "already-decided") throw new ConflictError("This mutation has already been decided.");
+    if (!gate[action]) {
+      const transitionAlreadyApplied =
+        (action === "canStartVerification" && ["verification", "objection-period"].includes(mutation.status)) ||
+        (action === "canCompleteVerification" && mutation.status === "objection-period");
+      if (transitionAlreadyApplied) {
+        throw new ConflictError("This mutation has already moved past that workflow transition.");
+      }
+      throw new ValidationError(gate.hold?.code === "wrong-status" || !gate.hold
+        ? { code: "wrong-status", expected } : gate.hold, "status");
+    }
+  }
+
+  private async actionContext(client: Prisma.TransactionClient, id: string, actor: MutationActor) {
+    const mutation = await client.mutation.findUnique({ where: { id } });
+    if (!mutation) throw new NotFoundError("Mutation not found");
+    assertMutationActionAccess(actor, mutation);
+    const [parcel, jurisdictions] = await Promise.all([
+      client.parcel.findUnique({ where: { id: mutation.parcelId } }),
+      client.jurisdiction.findMany(),
+    ]);
+    if (!parcel) throw new NotFoundError("Parcel not found");
+    if (!coveredJurisdictionIds(actor, jurisdictions).has(parcel.jurisdictionId)) {
+      throw new ForbiddenException("This mutation is outside your jurisdiction.");
+    }
+    return { mutation, parcel, actor };
+  }
+
+  private async runAction<T>(
+    id: string, req: Request,
+    action: (tx: Prisma.TransactionClient, context: ActionContext, now: Date) => Promise<T>,
+  ): Promise<T> {
+    const actor = await loadMutationActor(this.prisma, req);
+    // Reject unauthorized writes before opening a transaction, then repeat
+    // the checks from transaction state to close preflight races.
+    await this.actionContext(this.prisma, id, actor);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const currentActor = await tx.user.findUnique({ where: { id: actor.id } });
+        if (!currentActor) throw new ForbiddenException("Land Office Staff access required.");
+        assertLandOfficeActor(currentActor);
+        const context = await this.actionContext(tx, id, currentActor);
+        return action(tx, context, new Date());
+      }, { isolationLevel: "ReadCommitted" });
+    } catch (error) {
+      // Conditional writes protect the full mutation snapshot (including
+      // objections) and parcel ownership without a transaction-wide snapshot.
+      // READ COMMITTED is intentional: AuditService takes the ledger
+      // lock before reading the tail, which then gets a fresh statement snapshot.
+      if (error && typeof error === "object" && "code" in error && ["P2025", "P2034"].includes(String(error.code))) {
+        throw new ConflictError("This mutation changed while the action was being processed. Reload and try again.");
+      }
+      throw error;
+    }
+  }
+
+  private async landOfficeListWhere(query: Record<string, string>, actor: MutationActor) {
+    const jurisdictions = await this.prisma.jurisdiction.findMany();
+    return {
+      parcel: { jurisdictionId: { in: [...coveredJurisdictionIds(actor, jurisdictions)] } },
+      ...(query.scope === "assigned" ? { assignedOfficerId: actor.id } : {}),
+      ...(query.status ? { status: query.status } : {}),
+    };
   }
 }

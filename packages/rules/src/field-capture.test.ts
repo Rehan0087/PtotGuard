@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as fieldCapture from "./field-capture";
 import { EVIDENCE_REQUIRED, filingReview } from "./field-capture";
 import type { FieldPhoto, FieldReport, FieldReportPurpose, GpsCapture } from "./types";
 
@@ -83,6 +84,13 @@ describe("filingReview", () => {
     expect(filingReview(stored, "typed just now").canFile).toBe(true);
   });
 
+  it("uses the durable boundary-walk point count when supplied", () => {
+    const review = filingReview(report({ gpsCaptures: [] }), NOTES, { gpsCount: 2 });
+
+    expect(review.canFile).toBe(true);
+    expect(review.gpsHave).toBe(2);
+  });
+
   it("reports every outstanding requirement at once", () => {
     // An agent on site wants the whole remaining checklist, not one prompt at a time.
     const review = filingReview(report({ purpose: "encroachment-check" }), "");
@@ -120,5 +128,62 @@ describe("filingReview", () => {
     ];
 
     for (const p of purposes) expect(EVIDENCE_REQUIRED[p]).toBeDefined();
+  });
+
+  it("only files a report after the agent has started field work", () => {
+    const review = filingReview(
+      report({ status: "accepted", gpsCaptures: gps(2) }),
+      NOTES,
+    );
+
+    expect(review.canFile).toBe(false);
+    expect(review.blockers).toContainEqual({ code: "not-actionable" });
+  });
+});
+
+describe("field report status transitions", () => {
+  const transition = () =>
+    (fieldCapture as typeof fieldCapture & {
+      reviewFieldReportTransition: (
+        from: string,
+        to: string,
+      ) => { allowed: boolean; code?: string };
+    }).reviewFieldReportTransition;
+
+  it("allows the optional travel marker after acceptance", () => {
+    expect(transition()("accepted", "en-route")).toEqual({ allowed: true });
+  });
+
+  it("reserves active and complete states for survey session actions", () => {
+    expect(transition()("accepted", "in-progress")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
+    expect(transition()("en-route", "in-progress")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
+    expect(transition()("in-progress", "completed")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
+  });
+
+  it("rejects skipping acceptance or moving a case backwards", () => {
+    expect(transition()("assigned", "in-progress")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
+    expect(transition()("in-progress", "accepted")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
+  });
+
+  it("rejects accepting an already accepted case", () => {
+    expect(transition()("accepted", "accepted")).toEqual({
+      allowed: false,
+      code: "invalid-transition",
+    });
   });
 });

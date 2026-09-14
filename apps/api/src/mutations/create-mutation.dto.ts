@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString } from "class-validator";
+import { IsArray, IsIn, IsOptional, IsString } from "class-validator";
 
 const TYPES = ["sale", "inheritance", "gift", "partition", "correction"] as const;
 const PAYMENT_METHODS = ["bkash", "nagad", "card"] as const;
@@ -26,6 +26,8 @@ export class CreateMutationDto {
   deedDate?: string;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   documentIds?: string[];
 
   // Required, not optional: the wizard's flow is apply → pay → submit, so a
