@@ -43,6 +43,19 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function lifecycleOrder(operation: FieldSyncOperation): number {
+  if (operation.operation_type === "START_SURVEY") return 0;
+  if (operation.operation_type === "APPEND_POINTS") return 1;
+  return 2;
+}
+
+function firstPointSequence(operation: FieldSyncOperation): number {
+  if (operation.operation_type !== "APPEND_POINTS" || !Array.isArray(operation.payload.points)) {
+    return 0;
+  }
+  return (operation.payload.points[0] as { sequence?: number } | undefined)?.sequence ?? 0;
+}
+
 export class FieldOfflineRepository {
   private readonly factory: IDBFactory;
   private readonly dbName: string;
@@ -265,7 +278,16 @@ export class FieldOfflineRepository {
     )) as FieldSyncOperation[];
     return values
       .filter((operation) => !surveyKey || operation.survey_key === surveyKey)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.local_id.localeCompare(b.local_id));
+      .sort((a, b) => {
+        if (a.survey_key === b.survey_key) {
+          return (
+            lifecycleOrder(a) - lifecycleOrder(b) ||
+            firstPointSequence(a) - firstPointSequence(b) ||
+            a.created_at.localeCompare(b.created_at)
+          );
+        }
+        return a.created_at.localeCompare(b.created_at) || a.local_id.localeCompare(b.local_id);
+      });
   }
 
   async updateOperation(
