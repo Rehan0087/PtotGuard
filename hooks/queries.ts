@@ -40,6 +40,7 @@ import type {
   LandRecordDetail,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
+import type { FieldProfileUpdate } from "@/lib/field-profile";
 
 /** The active role scopes every query key so switching roles refetches. */
 export function useRole() {
@@ -54,6 +55,14 @@ export function useSession() {
   return useQuery({
     queryKey: ["auth-me", role],
     queryFn: () => api.get<AuthMe>("/auth/me"),
+  });
+}
+
+export function useUpdateOwnProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: FieldProfileUpdate) => api.patch<User>("/auth/me", body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["auth-me"] }),
   });
 }
 

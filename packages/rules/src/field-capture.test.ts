@@ -84,6 +84,13 @@ describe("filingReview", () => {
     expect(filingReview(stored, "typed just now").canFile).toBe(true);
   });
 
+  it("uses the durable boundary-walk point count when supplied", () => {
+    const review = filingReview(report({ gpsCaptures: [] }), NOTES, { gpsCount: 2 });
+
+    expect(review.canFile).toBe(true);
+    expect(review.gpsHave).toBe(2);
+  });
+
   it("reports every outstanding requirement at once", () => {
     // An agent on site wants the whole remaining checklist, not one prompt at a time.
     const review = filingReview(report({ purpose: "encroachment-check" }), "");

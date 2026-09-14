@@ -28,6 +28,8 @@ import type {
   GeoPoint,
   GeoPolygon,
 } from "@/lib/types";
+import type { FieldSurveyGpsPoint } from "@/lib/types";
+import type { MockSyncReceipt } from "./field-survey-sync-contract";
 
 /** ~100m square boundary around a centroid, as GeoJSON [lng, lat] ring. */
 function square(c: GeoPoint, d = 0.0009): GeoPolygon {
@@ -357,8 +359,10 @@ export const fieldSurveySessions: FieldSurveySession[] = [
     bhumiId: parcels.find((parcel) => parcel.id === "p-142")?.ulpin,
     assignedAgentId: "usr-agent",
     status: "completed",
+    version: 1,
     startedAt: "2026-07-19T04:45:00Z",
     completedAt: "2026-07-19T07:10:00Z",
+    points: [],
   },
   {
     id: "fs-3",
@@ -366,9 +370,14 @@ export const fieldSurveySessions: FieldSurveySession[] = [
     bhumiId: parcels.find((parcel) => parcel.id === "p-176")?.ulpin,
     assignedAgentId: "usr-agent2",
     status: "in-progress",
+    version: 1,
     startedAt: "2026-07-23T05:05:00Z",
+    points: [],
   },
 ];
+
+export const fieldSurveyGpsPoints: FieldSurveyGpsPoint[] = [];
+export const fieldSurveySyncReceipts: MockSyncReceipt[] = [];
 
 // ---------------------------------------------------------------------------
 // Hearings

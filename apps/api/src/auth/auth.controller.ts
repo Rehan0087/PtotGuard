@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -12,7 +13,7 @@ import {
 import type { Request } from "express";
 import type { Role } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
-import { NotFoundError } from "../common/domain-exceptions";
+import { ConflictError, NotFoundError } from "../common/domain-exceptions";
 import {
   currentUserId,
   issueAuthTokens,
@@ -39,6 +40,7 @@ export class AuthController {
       throw new UnauthorizedException("Invalid email or password");
     }
     const { passwordHash: _passwordHash, ...safeUser } = user;
+    void _passwordHash;
     return {
       user: safeUser,
       tokens: issueAuthTokens({ id: user.id, role: user.role as Role }),
@@ -76,14 +78,67 @@ export class AuthController {
   @UseGuards(AccessTokenGuard)
   async updateMe(@Req() req: Request, @Body() body: UpdateProfileDto) {
     const id = currentUserId(req);
-    const user = await this.prisma.user.update({
-      where: { id },
-      data: {
-        ...(body.phone !== undefined ? { phone: body.phone } : {}),
-        ...(body.avatarUrl !== undefined ? { avatarUrl: body.avatarUrl } : {}),
-        ...(body.profileDetails !== undefined ? { profileDetails: body.profileDetails } : {}),
-      },
-    });
-    return user;
+    const current = await this.prisma.user.findUnique({ where: { id } });
+    if (!current) throw new NotFoundError("User not found");
+    if (current.role === "field-agent" && body.profileDetails !== undefined) {
+      throw new BadRequestException("Field agents cannot update managed profile details");
+    }
+    if (body.email !== undefined && body.email !== current.email) {
+      const used = await this.prisma.user.findUnique({ where: { email: body.email } });
+      if (used && used.id !== id) {
+        throw new ConflictError("This email address is already used by another account", {
+          code: "email-in-use",
+        });
+      }
+    }
+    const currentDetails =
+      current.profileDetails &&
+      typeof current.profileDetails === "object" &&
+      !Array.isArray(current.profileDetails)
+        ? (current.profileDetails as Record<string, unknown>)
+        : {};
+    const profileDetails =
+      body.profileDetails !== undefined ||
+      body.currentAddress !== undefined ||
+      body.emergencyContact !== undefined
+        ? {
+            ...currentDetails,
+            ...(body.profileDetails ?? {}),
+            ...(body.currentAddress !== undefined
+              ? { currentAddress: body.currentAddress }
+              : {}),
+            ...(body.emergencyContact !== undefined
+              ? { emergencyContact: body.emergencyContact }
+              : {}),
+          }
+        : undefined;
+    let user;
+    try {
+      user = await this.prisma.user.update({
+        where: { id },
+        data: {
+          ...(body.name !== undefined ? { name: body.name } : {}),
+          ...(body.email !== undefined ? { email: body.email } : {}),
+          ...(body.phone !== undefined ? { phone: body.phone } : {}),
+          ...(body.avatarUrl !== undefined ? { avatarUrl: body.avatarUrl } : {}),
+          ...(profileDetails !== undefined ? { profileDetails } : {}),
+        },
+      });
+    } catch (error) {
+      const prismaError = error as { code?: string; meta?: { target?: unknown } };
+      const target = prismaError.meta?.target;
+      if (
+        prismaError.code === "P2002" &&
+        (target === "email" || (Array.isArray(target) && target.includes("email")))
+      ) {
+        throw new ConflictError("This email address is already used by another account", {
+          code: "email-in-use",
+        });
+      }
+      throw error;
+    }
+    const { passwordHash: _passwordHash, ...safeUser } = user;
+    void _passwordHash;
+    return safeUser;
   }
 }

@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Param,
   Patch,
@@ -14,6 +15,9 @@ import {
 import type { Request } from "express";
 import {
   filingReview,
+  analyzeGpsTrack,
+  annotateGpsPoints,
+  gpsPointErrors,
   rankCandidates,
   reviewFieldReportTransition,
   reviewFieldSurveyTransition,
@@ -21,7 +25,10 @@ import {
   type Jurisdiction,
   type Parcel,
   type User,
+  type FieldSurveyGpsPoint,
+  type GpsPointInput,
 } from "@plotguard/rules";
+import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -35,6 +42,48 @@ import { AddFieldReportMediaDto } from "./add-field-report-media.dto";
 import { BookFieldSurveyDto } from "./book-field-survey.dto";
 import { CompleteFieldSurveyDto } from "./complete-field-survey.dto";
 import { UpdateFieldReportDto } from "./update-field-report.dto";
+import { AppendSurveyPointsDto } from "./append-survey-points.dto";
+import { StartFieldSurveyDto } from "./start-field-survey.dto";
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+const payloadHash = (value: unknown) =>
+  createHash("sha256").update(canonical(value)).digest("hex");
+
+const jsonValue = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+function pointFromRow(row: Record<string, unknown>): FieldSurveyGpsPoint {
+  return {
+    id: row.id as string,
+    fieldSurveySessionId: row.fieldSurveySessionId as string,
+    sequence: row.sequence as number,
+    latitude: row.latitude as number,
+    longitude: row.longitude as number,
+    recordedAt: new Date(row.recordedAt as string | Date).toISOString(),
+    receivedAt: new Date(row.receivedAt as string | Date).toISOString(),
+    accuracyMeters: row.accuracyMeters as number,
+    ...(row.altitudeMeters === null || row.altitudeMeters === undefined
+      ? {}
+      : { altitudeMeters: row.altitudeMeters as number }),
+    ...(row.speedMetersPerSecond === null || row.speedMetersPerSecond === undefined
+      ? {}
+      : { speedMetersPerSecond: row.speedMetersPerSecond as number }),
+    ...(row.headingDegrees === null || row.headingDegrees === undefined
+      ? {}
+      : { headingDegrees: row.headingDegrees as number }),
+    issues: row.issues as FieldSurveyGpsPoint["issues"],
+  };
+}
 
 @Controller("field-reports")
 export class FieldReportsController {
@@ -42,6 +91,60 @@ export class FieldReportsController {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
   ) {}
+
+  private async idempotent<T>(
+    tx: Prisma.TransactionClient,
+    key: string | undefined,
+    identity: { actorId: string; fieldReportId: string; operationType: string },
+    payload: unknown,
+    statusCode: number,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    if (!key) return run();
+    const hash = payloadHash(payload);
+    const existing = await tx.fieldSurveySyncReceipt.findUnique({
+      where: { idempotencyKey: key },
+    });
+    if (existing) {
+      if (
+        existing.assignedAgentId !== identity.actorId ||
+        existing.fieldReportId !== identity.fieldReportId ||
+        existing.operationType !== identity.operationType ||
+        existing.payloadHash !== hash
+      ) {
+        throw new ConflictError("This idempotency key was already used for different data", {
+          code: "idempotency-key-reused",
+        });
+      }
+      return existing.responseBody as T;
+    }
+
+    const result = await run();
+    await tx.fieldSurveySyncReceipt.create({
+      data: {
+        idempotencyKey: key,
+        assignedAgentId: identity.actorId,
+        fieldReportId: identity.fieldReportId,
+        operationType: identity.operationType,
+        payloadHash: hash,
+        statusCode,
+        responseBody: jsonValue(result) as Prisma.InputJsonValue,
+      },
+    });
+    return result;
+  }
+
+  private surveyResponse(survey: Record<string, unknown>, points: FieldSurveyGpsPoint[]) {
+    return {
+      ...survey,
+      startedAt: new Date(survey.startedAt as string | Date).toISOString(),
+      ...(survey.completedAt
+        ? { completedAt: new Date(survey.completedAt as string | Date).toISOString() }
+        : {}),
+      points,
+      ...(survey.summary ? { summary: survey.summary } : {}),
+    };
+  }
 
   // Declared before ":id" — Nest matches routes in registration order, and a
   // dynamic segment would otherwise swallow the literal path "assigned".
@@ -262,7 +365,19 @@ export class FieldReportsController {
       findParcelView(this.prisma, report.parcelId),
       this.prisma.fieldSurveySession.findUnique({ where: { fieldReportId: id } }),
     ]);
-    return { report, parcel, survey };
+    const points = survey
+      ? await this.prisma.fieldSurveyGpsPoint.findMany({
+          where: { fieldSurveySessionId: survey.id },
+          orderBy: { sequence: "asc" },
+        })
+      : [];
+    return {
+      report,
+      parcel,
+      survey: survey
+        ? this.surveyResponse(survey as unknown as Record<string, unknown>, points.map((row) => pointFromRow(row as unknown as Record<string, unknown>)))
+        : null,
+    };
   }
 
   @Post(":id/accept")
@@ -308,13 +423,27 @@ export class FieldReportsController {
   @HttpCode(201)
   @UseGuards(AccessTokenGuard, RolesGuard)
   @Roles("field-agent")
-  async startSurvey(@Param("id") id: string, @Req() req: Request) {
+  async startSurvey(
+    @Param("id") id: string,
+    @Body() body: StartFieldSurveyDto,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Req() req: Request,
+  ) {
     const actorId = currentUserId(req);
+    const start = body ?? {};
     return this.prisma.$transaction(async (tx) => {
       const report = await tx.fieldReport.findFirst({
         where: { id, assignedAgentId: actorId },
       });
       if (!report) throw new NotFoundError("Field report not found");
+
+      return this.idempotent(
+        tx,
+        idempotencyKey,
+        { actorId, fieldReportId: id, operationType: "START_SURVEY" },
+        start,
+        201,
+        async () => {
 
       const existing = await tx.fieldSurveySession.findUnique({
         where: { fieldReportId: id },
@@ -341,12 +470,15 @@ export class FieldReportsController {
       const now = new Date();
       const survey = await tx.fieldSurveySession.create({
         data: {
-          id: `fs-${randomUUID()}`,
+          id: start.localSessionId ?? `fs-${randomUUID()}`,
+          localSessionId: start.localSessionId,
           fieldReportId: id,
           bhumiId: parcel?.ulpin,
           assignedAgentId: actorId,
           status: "in-progress",
+          version: 1,
           startedAt: now,
+          summary: undefined,
         },
       });
       const updatedReport = await tx.fieldReport.findUnique({ where: { id } });
@@ -363,8 +495,137 @@ export class FieldReportsController {
           startedAt: now.toISOString(),
         },
       });
-      return { report: updatedReport, survey };
+      return {
+        report: updatedReport,
+        survey: this.surveyResponse(survey as unknown as Record<string, unknown>, []),
+      };
+        },
+      );
     });
+  }
+
+  @Post(":id/survey/points")
+  @HttpCode(201)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
+  async appendSurveyPoints(
+    @Param("id") id: string,
+    @Body() body: AppendSurveyPointsDto,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Req() req: Request,
+  ) {
+    const actorId = currentUserId(req);
+    const owned = await this.prisma.fieldReport.findFirst({
+      where: { id, assignedAgentId: actorId },
+    });
+    if (!owned) throw new NotFoundError("Field report not found");
+
+    return this.prisma.$transaction(async (tx) =>
+      this.idempotent(
+        tx,
+        idempotencyKey,
+        { actorId, fieldReportId: id, operationType: "APPEND_POINTS" },
+        body,
+        201,
+        async () => {
+          const survey = await tx.fieldSurveySession.findFirst({
+            where: { fieldReportId: id, assignedAgentId: actorId, status: "in-progress" },
+          });
+          if (!survey) throw new ConflictError("This case has no active field survey");
+
+          for (const input of body.points as GpsPointInput[]) {
+            const errors = gpsPointErrors(input);
+            if (errors.length) {
+              throw new ValidationError({ code: "invalid-gps-point", fields: errors }, "points");
+            }
+          }
+
+          const storedRows = await tx.fieldSurveyGpsPoint.findMany({
+            where: { fieldSurveySessionId: survey.id },
+            orderBy: { sequence: "asc" },
+          });
+          const stored = storedRows.map((row) =>
+            pointFromRow(row as unknown as Record<string, unknown>),
+          );
+          const newInputs: GpsPointInput[] = [];
+          let nextSequence = (stored.at(-1)?.sequence ?? 0) + 1;
+
+          for (const input of body.points as GpsPointInput[]) {
+            const byId = stored.find((point) => point.id === input.id);
+            const bySequence = stored.find((point) => point.sequence === input.sequence);
+            if (byId || bySequence) {
+              const existing = byId ?? bySequence!;
+              const comparable = {
+                id: existing.id,
+                sequence: existing.sequence,
+                latitude: existing.latitude,
+                longitude: existing.longitude,
+                recordedAt: existing.recordedAt,
+                accuracyMeters: existing.accuracyMeters,
+                ...(existing.altitudeMeters === undefined ? {} : { altitudeMeters: existing.altitudeMeters }),
+                ...(existing.speedMetersPerSecond === undefined ? {} : { speedMetersPerSecond: existing.speedMetersPerSecond }),
+                ...(existing.headingDegrees === undefined ? {} : { headingDegrees: existing.headingDegrees }),
+              };
+              if (!byId || !bySequence || canonical(comparable) !== canonical(input)) {
+                throw new ConflictError("GPS point identity or sequence conflicts with server data", {
+                  code: "gps-point-conflict",
+                  serverData: existing,
+                  localData: input,
+                });
+              }
+              continue;
+            }
+            if (input.sequence !== nextSequence) {
+              throw new ConflictError("GPS point sequence is not contiguous", {
+                code: "gps-sequence-gap",
+                expectedSequence: nextSequence,
+                localData: input,
+              });
+            }
+            newInputs.push(input);
+            nextSequence += 1;
+          }
+
+          const previous = stored.at(-1);
+          const annotated = annotateGpsPoints(
+            [...(previous ? [previous] : []), ...newInputs],
+            survey.id,
+          ).slice(previous ? 1 : 0);
+          for (const point of annotated) {
+            await tx.fieldSurveyGpsPoint.create({
+              data: {
+                id: point.id,
+                fieldSurveySessionId: point.fieldSurveySessionId,
+                sequence: point.sequence,
+                latitude: point.latitude,
+                longitude: point.longitude,
+                recordedAt: new Date(point.recordedAt),
+                receivedAt: new Date(point.receivedAt),
+                accuracyMeters: point.accuracyMeters,
+                altitudeMeters: point.altitudeMeters ?? null,
+                speedMetersPerSecond: point.speedMetersPerSecond ?? null,
+                headingDegrees: point.headingDegrees ?? null,
+                issues: point.issues,
+              },
+            });
+          }
+
+          const version = survey.version + (annotated.length ? 1 : 0);
+          if (annotated.length) {
+            await tx.fieldSurveySession.update({ where: { id: survey.id }, data: { version } });
+          }
+          const accepted = [...stored, ...annotated];
+          return {
+            points: accepted.filter((point) =>
+              body.points.some((input) => input.id === point.id),
+            ),
+            acceptedThroughSequence: accepted.at(-1)?.sequence ?? 0,
+            sessionId: survey.id,
+            version,
+          };
+        },
+      ),
+    );
   }
 
   @Post(":id/survey/complete")
@@ -374,6 +635,7 @@ export class FieldReportsController {
   async completeSurvey(
     @Param("id") id: string,
     @Body() body: CompleteFieldSurveyDto,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Req() req: Request,
   ) {
     const actorId = currentUserId(req);
@@ -382,6 +644,13 @@ export class FieldReportsController {
         where: { id, assignedAgentId: actorId },
       });
       if (!report) throw new NotFoundError("Field report not found");
+      return this.idempotent(
+        tx,
+        idempotencyKey,
+        { actorId, fieldReportId: id, operationType: "COMPLETE_SURVEY" },
+        body,
+        200,
+        async () => {
       if (report.status !== "in-progress") {
         throw new ConflictError("This case has no active field survey to complete");
       }
@@ -392,16 +661,30 @@ export class FieldReportsController {
       if (!survey || survey.status !== "in-progress") {
         throw new ConflictError("This case has no active field survey to complete");
       }
+      if (body.expectedVersion !== undefined && body.expectedVersion !== survey.version) {
+        throw new ConflictError("The field survey changed on the server", {
+          code: "survey-version-conflict",
+          localData: body,
+          serverData: survey,
+        });
+      }
 
       const transition = reviewFieldSurveyTransition("in-progress", "completed");
       if (!transition.allowed) {
         throw new ConflictError("This field survey cannot be completed in its current state");
       }
 
-      const review = filingReview(report as unknown as FieldReport, body.notes);
+      const pointRows = await tx.fieldSurveyGpsPoint.findMany({
+        where: { fieldSurveySessionId: survey.id },
+        orderBy: { sequence: "asc" },
+      });
+      const points = pointRows.map((row) => pointFromRow(row as unknown as Record<string, unknown>));
+      const gpsCount = points.length || (report.gpsCaptures as unknown[]).length;
+      const review = filingReview(report as unknown as FieldReport, body.notes, { gpsCount });
       if (!review.canFile) throw new ValidationError(review.blockers[0], "status");
 
       const now = new Date();
+      const summary = analyzeGpsTrack(points, survey.startedAt.toISOString(), now.toISOString());
       const reportChanged = await tx.fieldReport.updateMany({
         where: { id, assignedAgentId: actorId, status: "in-progress" },
         data: { status: "completed", submittedAt: now, notes: body.notes },
@@ -411,8 +694,18 @@ export class FieldReportsController {
       }
 
       const surveyChanged = await tx.fieldSurveySession.updateMany({
-        where: { id: survey.id, assignedAgentId: actorId, status: "in-progress" },
-        data: { status: "completed", completedAt: now },
+        where: {
+          id: survey.id,
+          assignedAgentId: actorId,
+          status: "in-progress",
+          version: survey.version,
+        },
+        data: {
+          status: "completed",
+          completedAt: now,
+          summary: jsonValue(summary) as unknown as Prisma.InputJsonValue,
+          version: survey.version + 1,
+        },
       });
       if (surveyChanged.count !== 1) {
         throw new ConflictError("This field survey changed; reload and try again");
@@ -474,12 +767,25 @@ export class FieldReportsController {
         payload: {
           fieldReportId: updatedReport.id,
           completedAt: now.toISOString(),
-          gpsCount: (updatedReport.gpsCaptures as unknown[]).length,
+          gpsCount,
+          pathLengthMeters: summary.pathLengthMeters,
+          areaSquareMeters: summary.areaSquareMeters,
+          confidence: summary.confidence,
+          geometry: summary.geometry,
+          issueCounts: summary.issueCounts,
           photoCount: (updatedReport.photos as unknown[]).length,
         },
       });
 
-      return { report: updatedReport, survey: updatedSurvey };
+      return {
+        report: updatedReport,
+        survey: this.surveyResponse(
+          updatedSurvey as unknown as Record<string, unknown>,
+          points,
+        ),
+      };
+        },
+      );
     });
   }
 
