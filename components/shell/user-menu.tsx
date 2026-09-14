@@ -16,11 +16,13 @@ import { useSession } from "@/hooks/queries";
 import { initials } from "@/lib/format";
 import { useT } from "@/lib/i18n/provider";
 import { useSessionStore } from "@/store/session";
+import { profileHrefForRole } from "@/lib/nav";
 
 export function UserMenu() {
   const t = useT();
   const router = useRouter();
   const logout = useSessionStore((s) => s.logout);
+  const role = useSessionStore((s) => s.role);
   const { data } = useSession();
   const user = data?.user;
 
@@ -46,6 +48,11 @@ export function UserMenu() {
             <div className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</div>
           ) : null}
         </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push(profileHrefForRole(role))}>
+          <UserRound className="size-4" />
+          {t.nav.profile}
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"

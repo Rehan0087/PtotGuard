@@ -6,6 +6,7 @@ import {
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { api, qs } from "@/lib/api-client";
 import { useSessionStore } from "@/store/session";
 import type {
@@ -35,8 +36,11 @@ import type {
   AuditEvent,
   AuditVerifyResult,
   Policy,
+  MutationVerificationChecklist,
+  LandRecordDetail,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
+import type { FieldProfileUpdate } from "@/lib/field-profile";
 
 /** The active role scopes every query key so switching roles refetches. */
 export function useRole() {
@@ -51,6 +55,14 @@ export function useSession() {
   return useQuery({
     queryKey: ["auth-me", role],
     queryFn: () => api.get<AuthMe>("/auth/me"),
+  });
+}
+
+export function useUpdateOwnProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: FieldProfileUpdate) => api.patch<User>("/auth/me", body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["auth-me"] }),
   });
 }
 
@@ -110,6 +122,15 @@ export function useParcel(id: string | undefined) {
   return useQuery({
     queryKey: ["parcel", id],
     queryFn: () => api.get<ParcelDetail>(`/parcels/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useLandRecord(id: string | undefined) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["land-record", role, id],
+    queryFn: () => api.get<LandRecordDetail>(`/parcels/${id}/record`),
     enabled: Boolean(id),
   });
 }
@@ -211,7 +232,40 @@ export function useCreateMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<LandMutation>) => api.post<LandMutation>("/mutations", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["mutations"] }),
+    onSuccess: (mutation) => invalidateMutationWorkflow(qc, mutation.id),
+  });
+}
+
+function invalidateMutationWorkflow(qc: QueryClient, id: string) {
+  qc.invalidateQueries({ queryKey: ["mutation", id] });
+  qc.invalidateQueries({ queryKey: ["mutations"] });
+  qc.invalidateQueries({ queryKey: ["audit", "mutation", id] });
+  // Record detail embeds mutation state and its audit trail, so every workflow
+  // action refreshes that aggregate and the Records list projection. Approval
+  // also changes the parcel's owner through the existing backend transaction.
+  qc.invalidateQueries({ queryKey: ["land-record"] });
+  qc.invalidateQueries({ queryKey: ["parcel"] });
+  qc.invalidateQueries({ queryKey: ["parcels"] });
+}
+
+export type CompleteMutationVerificationInput = MutationVerificationChecklist & {
+  notes: string;
+};
+
+export function useStartMutationVerification(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.patch<LandMutation>(`/mutations/${id}/start-verification`),
+    onSuccess: () => invalidateMutationWorkflow(qc, id),
+  });
+}
+
+export function useCompleteMutationVerification(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CompleteMutationVerificationInput) =>
+      api.patch<LandMutation>(`/mutations/${id}/complete-verification`, body),
+    onSuccess: () => invalidateMutationWorkflow(qc, id),
   });
 }
 
@@ -228,15 +282,27 @@ export function useSearchCitizens(query: string) {
   });
 }
 
+export type MutationDecisionBody =
+  | { decision: "approve"; approvalNote?: string }
+  | { decision: "reject"; rejectionReason: string };
+
+export type MutationDecisionInput = MutationDecisionBody | MutationDecisionBody["decision"];
+
+function normalizeMutationDecision(input: MutationDecisionInput): MutationDecisionBody {
+  if (typeof input === "string") {
+    return input === "approve"
+      ? { decision: "approve" }
+      : { decision: "reject", rejectionReason: "" };
+  }
+  return input;
+}
+
 export function useMutationDecision(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (decision: "approve" | "reject") =>
-      api.patch<LandMutation>(`/mutations/${id}/decision`, { decision }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["mutation", id] });
-      qc.invalidateQueries({ queryKey: ["mutations"] });
-    },
+    mutationFn: (input: MutationDecisionInput) =>
+      api.patch<LandMutation>(`/mutations/${id}/decision`, normalizeMutationDecision(input)),
+    onSuccess: () => invalidateMutationWorkflow(qc, id),
   });
 }
 
@@ -603,6 +669,47 @@ export function useFieldReport(id: string | undefined) {
   });
 }
 
+export function useAcceptFieldReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<FieldReport>(`/field-reports/${id}/accept`),
+    onSettled: (_data, _error, id) => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+    },
+  });
+}
+
+type FieldSurveyMutationResult = Pick<FieldReportDetail, "report" | "survey">;
+
+export function useStartFieldSurvey(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<FieldSurveyMutationResult>(`/field-reports/${id}/survey/start`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+    },
+  });
+}
+
+export function useCompleteFieldSurvey(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (notes: string) =>
+      api.post<FieldSurveyMutationResult>(`/field-reports/${id}/survey/complete`, { notes }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
 export function useAddFieldReportMedia(id: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -621,7 +728,7 @@ export function useAddFieldReportMedia(id: string) {
 export function useUpdateFieldReport(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { status?: FieldReportStatus; notes?: string }) =>
+    mutationFn: (body: { status?: Extract<FieldReportStatus, "en-route">; notes?: string }) =>
       api.patch<FieldReport>(`/field-reports/${id}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["field-report", id] });

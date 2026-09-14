@@ -19,6 +19,7 @@ import type {
 /** A visit that has been given out but not yet closed. */
 export const OPEN_VISIT_STATUSES: FieldReportStatus[] = [
   "assigned",
+  "accepted",
   "en-route",
   "in-progress",
 ];

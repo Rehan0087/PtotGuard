@@ -64,7 +64,8 @@ app/
     dashboard/         # Citizen dashboard (built)
     search|documents|disputes|inheritance/   # Citizen
     records|mutations|ocr-queue|fraud-review|agents/   # Land Office
-    visits/            # Field Agent
+    field/             # Field Agent portal (dashboard + case details)
+    visits/            # Compatibility route for the original Field Agent UI
     cases/             # Mediator
     users|jurisdictions|policies/   # Admin
     parcels/[id]/      # Parcel detail (built)
@@ -110,7 +111,7 @@ lib/
   format.ts            # Locale-aware date / area / money / coordinate formatting
   nav.ts               # Per-role navigation config
 store/
-  session.ts           # Active role (Zustand, persisted)
+  session.ts           # Signed session tokens + server-issued role (Zustand, persisted)
 ```
 
 **How the three pieces fit together, if you're new here:** `packages/rules` is imported by
@@ -136,7 +137,7 @@ data for isolated UI work.
 - **`@plotguard/rules/types` is the contract.** Every mock response and every eventual backend DTO
   conforms to these interfaces. Start here when adding a feature.
 - **`lib/api-client.ts` is the only place that talks to the network.** It attaches the
-  active role as a header (stand-in for auth) and is the single swap point for the real API.
+  signed access token and clears expired sessions on `401` responses.
 - **`hooks/queries.ts` is the data API screens use.** Role is part of every query key, so
   switching roles refetches automatically.
 - **`lib/i18n/dictionaries/` is the string contract.** No user-facing text is written inline in
@@ -187,9 +188,6 @@ malformed, and the tests that reach them supply exactly that.
 
 Start the database, backend, and frontend together:
 
-```bash
-./demo.sh start
-```
 
 The frontend proxies `/api` to `http://localhost:3001/api`, where NestJS writes to Postgres.
 Set `NEXT_PUBLIC_API_MOCKING=enabled` before starting Next.js only when you want fixture data.
@@ -201,7 +199,7 @@ Set `NEXT_PUBLIC_API_MOCKING=enabled` before starting Next.js only when you want
 (`/auth/login`, `/refresh`, `/me`), `parcels` (+`/neighbours`, `/history`, dag/khatian/bbox
 search), `documents` (+`/reprocess`, `PATCH /:id/decision`, `PATCH /:id/fields`), `mutations`
 (`PATCH /:id/decision`), `disputes` (`PATCH /:id/status`, `POST /:id/assign-agent`),
-`field-reports` (`/assigned`, `/:id/media`, `POST /` to book a survey), `hearings`
+`field-reports` (`/assigned`, `/:id`, `/:id/accept`, `/:id/media`, `POST /` to book a survey), `hearings`
 (`PATCH /:id/ruling`), `inheritance/calculate`, and `audit` (`/:entityType/:id`, `/verify`).
 
 Two are worth noting: `inheritance/calculate` runs the real (simplified) calculator in
@@ -230,18 +228,19 @@ each resource — check its status table rather than assuming from this list):
 | `GET /audit` | Full ledger for the admin audit page (the spec froze only per-entity + `/verify`). |
 | `POST /jurisdictions` · `PATCH /jurisdictions/:id` · `DELETE /jurisdictions/:id` | Editing the administrative tree (the spec froze only the `GET`). `422` when the body breaks a rule in `jurisdictions.ts`, `409` when other records still point at the node. |
 | `PATCH /field-reports/:id` | The agent's own edits to a survey they are carrying out — status along the ladder, notes, and filing. `status: "completed"` is the filing and `422`s with a code from `field-capture.ts` when the evidence that purpose requires is missing. |
+| `POST /field-reports/:id/accept` | Atomically changes the authenticated agent's case from `assigned` to `accepted` and appends the acceptance audit record. A repeat or racing acceptance returns `409`. |
 | `PATCH /policies` | Admin edits to fees, the objection window, and the fraud threshold (the spec froze only the `GET`). |
 | `POST /hearings/:id/sessions` | Recording a sitting. The ruling gate reads these, so this is the write that unblocks a decision. `422` when the summary is empty. |
 
 Note `GET /documents?fraud=true` means *awaiting review* — it filters on
 `verificationStatus === "flagged"`, so a decision removes the document from the queue.
 
-### Dev role switcher
+### Authentication
 
-There is no real auth yet. The **"Preview as"** control (top bar) sets an active role in
-`store/session.ts`; the api-client sends it as a header and the mock resolves it to a
-canonical user per role (`CURRENT_USER_BY_ROLE` in `lib/mocks/data.ts`). Replace this with
-real authentication later.
+The login screen calls `/auth/login`; the server verifies the seeded scrypt password and
+returns signed access and refresh tokens. The role in the signed token protects each Field
+Agent API, while the `/field` layout keeps other roles out of the portal UI. The in-browser
+mock mirrors the same login, role checks, ownership checks, and acceptance contract.
 
 ---
 
@@ -470,9 +469,10 @@ detail screen reflects the booking without any extra call.
 
 ### Carrying out the survey
 
-`/visits/[id]` is the other half of the booking board: what the agent does once they are
-standing on the land. It moves the visit along its status ladder (assigned → en route → on
-site), collects GPS points and photos, and takes the findings that the case will actually read.
+`/field/[id]` is the other half of the booking board: what the agent does once they are
+standing on the land. It moves the visit along its status ladder (assigned → accepted → en
+route → on site), collects GPS points and photos, and takes the findings that the case will
+actually read. `/visits/[id]` remains as a protected compatibility route.
 
 `field-capture.ts` (`filingReview`) is the pure rule, and it is a rule about *evidence*:
 

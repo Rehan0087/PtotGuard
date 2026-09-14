@@ -113,4 +113,6 @@ export interface OwnershipRecord {
   /** null = current owner. */
   toDate: ISODateString | null;
   documentId?: ID;
+  /** Mutation that produced this ownership row, when applicable. */
+  mutationId?: ID;
 }

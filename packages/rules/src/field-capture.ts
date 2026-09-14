@@ -11,6 +11,25 @@
  * one blanket rule.
  */
 import type { FieldReport, FieldReportPurpose } from "./types";
+import type { FieldReportStatus } from "./types";
+
+export type FieldReportTransitionReview =
+  | { allowed: true }
+  | { allowed: false; code: "invalid-transition" };
+
+const NEXT_FIELD_REPORT_STATUS: Partial<Record<FieldReportStatus, FieldReportStatus>> = {
+  accepted: "en-route",
+};
+
+/** The one-way field workflow. Acceptance is exposed through its own API action. */
+export function reviewFieldReportTransition(
+  from: FieldReportStatus,
+  to: FieldReportStatus,
+): FieldReportTransitionReview {
+  return NEXT_FIELD_REPORT_STATUS[from] === to
+    ? { allowed: true }
+    : { allowed: false, code: "invalid-transition" };
+}
 
 /**
  * What each survey has to come back with. `gps` is a count because a line needs
@@ -49,16 +68,21 @@ export interface FilingReview {
  * @param notes The agent's unsaved draft, so the gate reacts as they type rather
  *   than only to what has already been written to the report.
  */
-export function filingReview(report: FieldReport, notes: string): FilingReview {
+export function filingReview(
+  report: FieldReport,
+  notes: string,
+  evidence: { gpsCount?: number } = {},
+): FilingReview {
   const need = EVIDENCE_REQUIRED[report.purpose];
-  const gpsHave = report.gpsCaptures.length;
+  const gpsHave = evidence.gpsCount ?? report.gpsCaptures.length;
   const photosHave = report.photos.length;
   const hasNotes = notes.trim().length > 0;
 
   const blockers: FilingBlocker[] = [];
 
-  // A report already filed or called off is not a draft to add to.
-  if (report.status === "completed" || report.status === "cancelled") {
+  // Filing is the final transition from active field work. Assigned, accepted,
+  // and travelling reports must move through their explicit workflow first.
+  if (report.status !== "in-progress") {
     blockers.push({ code: "not-actionable" });
   }
   if (gpsHave < need.gps) {

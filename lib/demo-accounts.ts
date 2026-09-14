@@ -1,16 +1,9 @@
 import type { Role } from "@/lib/types";
 
 /**
- * The five seeded identities real auth will eventually replace — one per
- * role, matching CURRENT_USER_BY_ROLE in lib/mocks/data.ts and
- * apps/api/src/auth/dev-current-user.ts exactly, since every request is
- * still scoped by role alone (see api-client.ts).
- *
- * The password check is real (wrong password is rejected) but not secure:
- * one shared value, compared in plain text, in code that ships to the
- * browser. That's a fine trust boundary for a demo login and not a real
- * one — real hashing and a real server-side check arrive with real auth
- * (Phase 4).
+ * The five seeded sign-in choices shown by the demo UI. The real API verifies
+ * their shared local-demo password against a scrypt hash; MSW mirrors that
+ * contract when the frontend runs without Postgres.
  */
 export interface DemoAccount {
   email: string;
@@ -47,12 +40,3 @@ export function findDemoAccount(email: string): DemoAccount | undefined {
 
 /** Why a sign-in attempt didn't go through. A code, not a sentence — the screen words it. */
 export type LoginFailure = { code: "unknown-email" } | { code: "wrong-password" };
-
-export type LoginResult = { ok: true; account: DemoAccount } | ({ ok: false } & LoginFailure);
-
-export function verifyDemoCredentials(email: string, password: string): LoginResult {
-  const account = findDemoAccount(email);
-  if (!account) return { ok: false, code: "unknown-email" };
-  if (password !== DEMO_PASSWORD) return { ok: false, code: "wrong-password" };
-  return { ok: true, account };
-}

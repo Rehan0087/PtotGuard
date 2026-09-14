@@ -1,4 +1,4 @@
-import { getActiveRole } from "@/store/session";
+import { getAccessToken, useSessionStore } from "@/store/session";
 
 /**
  * The single choke point for all data fetching. It uses the same-origin /api
@@ -30,12 +30,12 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const accessToken = getAccessToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",
-      // Stand-in for auth during the mock phase; swap for a bearer token later.
-      "x-plotguard-role": getActiveRole(),
+      ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
       ...init?.headers,
     },
   });
@@ -52,6 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* non-JSON error body */
     }
+    if (res.status === 401 && accessToken) useSessionStore.getState().logout();
     throw new ApiError(res.status, code, message, reason);
   }
 
@@ -63,6 +64,12 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  postIdempotent: <T>(path: string, idempotencyKey: string, body?: unknown) =>
+    request<T>(path, {
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+      headers: { "idempotency-key": idempotencyKey },
+    }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),

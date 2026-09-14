@@ -75,6 +75,7 @@ export const verificationStatusTone: Record<VerificationStatus, StatusTone> = {
 
 export const fieldReportStatusTone: Record<FieldReportStatus, StatusTone> = {
   assigned: "pending",
+  accepted: "review",
   "en-route": "review",
   "in-progress": "review",
   completed: "verified",
