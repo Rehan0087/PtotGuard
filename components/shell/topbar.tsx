@@ -22,7 +22,7 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
   const jurisdiction = data?.jurisdiction;
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-primary/15 bg-background/85 px-3 shadow-[0_1px_0_color-mix(in_oklab,var(--marker)_25%,transparent)] backdrop-blur supports-[backdrop-filter]:bg-background/75 sm:px-4">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/70 sm:px-4">
       <Button
         variant="ghost"
         size="icon-sm"

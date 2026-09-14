@@ -214,10 +214,6 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv05" 1, "ss01" 1;
-    background-image:
-      radial-gradient(circle at 92% -8%, color-mix(in oklab, var(--primary) 11%, transparent), transparent 24rem),
-      radial-gradient(circle at 4% 100%, color-mix(in oklab, var(--marker) 9%, transparent), transparent 22rem);
-    background-attachment: fixed;
   }
   html {
     @apply font-sans;
@@ -276,13 +272,5 @@
   }
   .hero-slide {
     transition: opacity 1s ease-in-out;
-  }
-
-  /* A restrained colour wash for signed-in workspaces. It gives the data
-     screens a clear visual identity while document cards remain readable. */
-  .app-canvas {
-    background:
-      linear-gradient(135deg, color-mix(in oklab, var(--primary) 5%, transparent), transparent 38%),
-      linear-gradient(315deg, color-mix(in oklab, var(--marker) 5%, transparent), transparent 34%);
   }
 }
