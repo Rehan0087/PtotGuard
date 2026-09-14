@@ -450,10 +450,21 @@ export const handlers = [
   http.patch(`${API}/auth/me`, async ({ request }) => {
     await latency();
     const user = currentUser(request);
-    const body = (await request.json()) as Partial<Pick<User, "phone" | "avatarUrl" | "profileDetails">>;
-    
-    if (body.phone !== undefined) user.phone = body.phone;
-    if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
+    const body = (await request.json()) as Partial<Pick<User, "name" | "email" | "phone" | "avatarUrl" | "profileDetails">>;
+    const name = body.name?.trim();
+    const email = body.email?.trim().toLowerCase();
+
+    if (body.name !== undefined && (!name || name.length < 2)) return badRequest("Name must be at least 2 characters.");
+    if (body.email !== undefined && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) return badRequest("Enter a valid email address.");
+    if (email && db.users.some((candidate) => candidate.id !== user.id && candidate.email.toLowerCase() === email)) {
+      return conflict("Email address is already in use.");
+    }
+    if (body.phone !== undefined && body.phone.trim().length < 7) return badRequest("Phone must be at least 7 characters.");
+
+    if (name !== undefined) user.name = name;
+    if (email !== undefined) user.email = email;
+    if (body.phone !== undefined) user.phone = body.phone.trim();
+    if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl.trim() || undefined;
     if (body.profileDetails !== undefined) user.profileDetails = body.profileDetails;
 
     return HttpResponse.json(user);

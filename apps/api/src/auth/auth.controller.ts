@@ -1,7 +1,7 @@
 import { Controller, Get, Req, Patch, Body } from "@nestjs/common";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
-import { NotFoundError } from "../common/domain-exceptions";
+import { ConflictError, NotFoundError } from "../common/domain-exceptions";
 import { currentUserId } from "./dev-current-user";
 import { UpdateProfileDto } from "./update-profile.dto";
 
@@ -22,11 +22,21 @@ export class AuthController {
   @Patch("me")
   async updateMe(@Req() req: Request, @Body() body: UpdateProfileDto) {
     const id = currentUserId(req);
+    const email = body.email?.trim().toLowerCase();
+    if (email) {
+      const emailOwner = await this.prisma.user.findUnique({ where: { email } });
+      if (emailOwner && emailOwner.id !== id) {
+        throw new ConflictError("Email address is already in use.");
+      }
+    }
+
     const user = await this.prisma.user.update({
       where: { id },
       data: {
-        ...(body.phone !== undefined ? { phone: body.phone } : {}),
-        ...(body.avatarUrl !== undefined ? { avatarUrl: body.avatarUrl } : {}),
+        ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+        ...(email !== undefined ? { email } : {}),
+        ...(body.phone !== undefined ? { phone: body.phone.trim() } : {}),
+        ...(body.avatarUrl !== undefined ? { avatarUrl: body.avatarUrl.trim() || null } : {}),
         ...(body.profileDetails !== undefined ? { profileDetails: body.profileDetails } : {}),
       },
     });
