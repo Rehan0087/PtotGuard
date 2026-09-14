@@ -26,6 +26,16 @@ const fieldAgent = {
   createdAt: new Date("2026-01-01T00:00:00Z"),
 };
 
+const landOfficer = {
+  ...fieldAgent,
+  id: "usr-officer",
+  name: "Nasrin Akter",
+  email: "n.akter@minland.gov.bd",
+  role: "land-office",
+  profileDetails: { nameBn: "নাসরিন আক্তার", officeCode: "DEB-01" },
+  title: "Sub-Registrar",
+};
+
 let prismaFixture: Record<string, unknown>;
 let lastUserUpdate: Record<string, unknown> | undefined;
 
@@ -47,14 +57,15 @@ describe("AuthController", () => {
           if (where.email === "used@plotguard.bd") {
             return { ...fieldAgent, id: "usr-other", email: where.email };
           }
+          if (where.email === landOfficer.email || where.id === landOfficer.id) return landOfficer;
           return where.email === fieldAgent.email || where.id === fieldAgent.id ? fieldAgent : null;
         },
-        update: async ({ data }: { data: Record<string, unknown> }) => {
+        update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
           if (data.email === "race@plotguard.bd") {
             throw { code: "P2002", meta: { target: ["email"] } };
           }
           lastUserUpdate = data;
-          return { ...fieldAgent, ...data };
+          return { ...(where.id === landOfficer.id ? landOfficer : fieldAgent), ...data };
         },
       },
       jurisdiction: {
@@ -149,6 +160,43 @@ describe("AuthController", () => {
       },
     });
     expect(response.body.role).toBe("field-agent");
+  });
+
+  it("lets a land officer update personal details while preserving managed office data", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: landOfficer.email, password: "demo1234" });
+
+    const response = await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({
+        name: "Nasrin Sultana",
+        email: "nasrin.sultana@minland.gov.bd",
+        phone: "+8801712345678",
+        profileDetails: {
+          nameBn: "নাসরিন সুলতানা",
+          fatherName: "Abdul Hakim",
+          currentAddress: "Debidwar, Cumilla",
+          permanentAddress: "Cumilla, Bangladesh",
+        },
+      })
+      .expect(200);
+
+    expect(lastUserUpdate).toMatchObject({
+      name: "Nasrin Sultana",
+      email: "nasrin.sultana@minland.gov.bd",
+      phone: "+8801712345678",
+      profileDetails: {
+        nameBn: "নাসরিন সুলতানা",
+        officeCode: "DEB-01",
+        fatherName: "Abdul Hakim",
+        currentAddress: "Debidwar, Cumilla",
+        permanentAddress: "Cumilla, Bangladesh",
+      },
+    });
+    expect(response.body).toMatchObject({ role: "land-office", title: "Sub-Registrar" });
+    expect(response.body.passwordHash).toBeUndefined();
   });
 
   it("accepts a supported local profile photo and rejects unsafe or oversized image data", async () => {

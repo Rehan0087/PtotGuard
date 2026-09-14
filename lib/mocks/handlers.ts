@@ -508,10 +508,30 @@ export const handlers = [
       }
     }
 
-    if (typeof body.phone === "string") user.phone = body.phone;
-    if (typeof body.avatarUrl === "string") user.avatarUrl = body.avatarUrl;
+    const allowed = new Set([
+      "name", "email", "phone", "avatarUrl", "currentAddress", "emergencyContact", "profileDetails",
+    ]);
+    if (Object.keys(body).some((key) => !allowed.has(key))) return badRequest("Profile update contains a managed field");
+
+    const name = typeof body.name === "string" ? body.name.trim() : undefined;
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : undefined;
+    const phone = typeof body.phone === "string" ? body.phone.trim() : undefined;
+    if (body.name !== undefined && (!name || name.length < 2 || name.length > 100)) return badRequest("Name must be between 2 and 100 characters");
+    if (body.email !== undefined && (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) return badRequest("Enter a valid email address");
+    if (body.phone !== undefined && (phone === undefined || phone.length > 32)) return badRequest("Enter a valid phone number");
+    if (email && db.users.some((candidate) => candidate.id !== user.id && candidate.email.toLowerCase() === email)) {
+      return conflict("This email address is already used by another account", { code: "email-in-use" });
+    }
+
+    if (name !== undefined) user.name = name;
+    if (email !== undefined) user.email = email;
+    if (phone !== undefined) user.phone = phone || undefined;
+    if (typeof body.avatarUrl === "string") user.avatarUrl = body.avatarUrl.trim() || undefined;
     if (body.profileDetails && typeof body.profileDetails === "object") {
-      user.profileDetails = body.profileDetails as Record<string, string>;
+      user.profileDetails = {
+        ...(user.profileDetails ?? {}),
+        ...(body.profileDetails as Record<string, string>),
+      };
     }
 
     return HttpResponse.json(user);
