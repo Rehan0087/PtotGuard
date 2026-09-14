@@ -134,7 +134,8 @@ cmd_start() {
   if is_up "$WEB_PORT"; then
     echo "  already running on :$WEB_PORT"
   else
-    pnpm dev >"$LOG_DIR/web.log" 2>&1 &
+    # A demo must never quietly fall back to browser-only fixture data.
+    NEXT_PUBLIC_API_MOCKING=disabled pnpm dev >"$LOG_DIR/web.log" 2>&1 &
     save_pid web "$!"
     echo "  starting (pid $!, log: $LOG_DIR/web.log)…"
     wait_for_port "$WEB_PORT" "frontend" 30

@@ -2,8 +2,9 @@
 
 The real PlotGuard backend — NestJS + Postgres, behind the same frozen API
 spec the frontend's mock (`lib/mocks/handlers.ts` in the web app) already
-implements. Point the frontend at this instead of the mock by setting
-`NEXT_PUBLIC_API_MOCKING=disabled` — nothing in a screen or hook changes.
+implements. The frontend uses this persistent backend by default; set
+`NEXT_PUBLIC_API_MOCKING=enabled` only to use the mock — nothing in a screen
+or hook changes.
 
 If you haven't read the root [`README.md`](../../README.md) yet, start there:
 it explains the product, the design system, and `@plotguard/rules`, the
