@@ -11,6 +11,19 @@ export interface FieldProfileFormValues {
 
 export type FieldProfileUpdate = FieldProfileFormValues;
 
+export const PROFILE_PHOTO_MAX_BYTES = 512 * 1024;
+export const PROFILE_PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+
+type ProfilePhotoFile = Pick<File, "type" | "size">;
+
+export function validateProfilePhotoFile(file: ProfilePhotoFile): "type" | "size" | undefined {
+  if (!PROFILE_PHOTO_TYPES.includes(file.type as (typeof PROFILE_PHOTO_TYPES)[number])) {
+    return "type";
+  }
+  if (file.size > PROFILE_PHOTO_MAX_BYTES) return "size";
+  return undefined;
+}
+
 export class MockProfileUpdateError extends Error {
   readonly status: 400 | 404 | 409;
   readonly code: string;
@@ -48,12 +61,22 @@ export function validateFieldProfile(values: FieldProfileFormValues): Array<keyo
 
 function isValidUrl(value: string): boolean {
   if (!value) return true;
+  if (isValidProfilePhotoDataUrl(value)) return true;
   try {
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
+}
+
+function isValidProfilePhotoDataUrl(value: string): boolean {
+  const match = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match) return false;
+  const encoded = match[1];
+  if (encoded.length % 4 !== 0) return false;
+  const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
+  return (encoded.length * 3) / 4 - padding <= PROFILE_PHOTO_MAX_BYTES;
 }
 
 export function applyMockProfileUpdate(

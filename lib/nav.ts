@@ -79,7 +79,6 @@ export const NAV: Record<Role, PortalNav> = {
     home: "/field",
     items: [
       { labelKey: "assignedVisits", href: "/field", icon: MapPin },
-      { labelKey: "profile", href: "/field/profile", icon: UserCog },
     ],
   },
   mediator: {

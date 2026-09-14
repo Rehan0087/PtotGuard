@@ -1,9 +1,11 @@
-import { INestApplication, Module, ValidationPipe } from "@nestjs/common";
+import { Module, ValidationPipe } from "@nestjs/common";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthController } from "./auth.controller";
 import { PrismaService } from "../prisma/prisma.service";
+import { configureBodyParser } from "../common/configure-body-parser";
 
 const passwordHash =
   "scrypt$00112233445566778899aabbccddeeff$f2d31dd4461c5a6fe9b09ec97830ac3071d4314ded688bad919900cc7f645f15f70fa942dccd598209270ae8510abe83c4e54a92b58d420f216cc9c7cefcbede";
@@ -34,7 +36,7 @@ let lastUserUpdate: Record<string, unknown> | undefined;
 class AuthTestModule {}
 
 describe("AuthController", () => {
-  let app: INestApplication;
+  let app: NestExpressApplication;
 
   beforeEach(async () => {
     process.env.AUTH_TOKEN_SECRET = "test-secret-that-is-long-enough";
@@ -67,7 +69,8 @@ describe("AuthController", () => {
     };
 
     const testingModule = await Test.createTestingModule({ imports: [AuthTestModule] }).compile();
-    app = testingModule.createNestApplication();
+    app = testingModule.createNestApplication<NestExpressApplication>({ bodyParser: false });
+    configureBodyParser(app);
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
     await app.init();
   });
@@ -146,6 +149,49 @@ describe("AuthController", () => {
       },
     });
     expect(response.body.role).toBe("field-agent");
+  });
+
+  it("accepts a supported local profile photo and rejects unsafe or oversized image data", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: fieldAgent.email, password: "demo1234" });
+    const avatarUrl = "data:image/webp;base64,UklGRg==";
+
+    await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({ avatarUrl })
+      .expect(200);
+    expect(lastUserUpdate).toMatchObject({ avatarUrl });
+
+    lastUserUpdate = undefined;
+    await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({ avatarUrl: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" })
+      .expect(400);
+    expect(lastUserUpdate).toBeUndefined();
+
+    const oversized = Buffer.alloc(512 * 1024 + 1).toString("base64");
+    await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({ avatarUrl: `data:image/jpeg;base64,${oversized}` })
+      .expect(400);
+    expect(lastUserUpdate).toBeUndefined();
+  });
+
+  it("accepts a profile photo at the documented 512 KB limit", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: fieldAgent.email, password: "demo1234" });
+    const encoded = Buffer.alloc(512 * 1024).toString("base64");
+
+    await request(app.getHttpServer())
+      .patch("/auth/me")
+      .set("authorization", `Bearer ${login.body.tokens.accessToken}`)
+      .send({ avatarUrl: `data:image/jpeg;base64,${encoded}` })
+      .expect(200);
   });
 
   it("rejects role and employment-controlled fields on self-service updates", async () => {
