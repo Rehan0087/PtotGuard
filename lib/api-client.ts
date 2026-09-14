@@ -64,6 +64,12 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  postIdempotent: <T>(path: string, idempotencyKey: string, body?: unknown) =>
+    request<T>(path, {
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+      headers: { "idempotency-key": idempotencyKey },
+    }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
