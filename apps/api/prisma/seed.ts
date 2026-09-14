@@ -1,7 +1,7 @@
 /**
  * Seeds the local Postgres database. Ported from the frontend's mock dataset
  * (lib/mocks/data.ts in the web app) so the two look identical when someone
- * flips NEXT_PUBLIC_API_MOCKING off and browses the real API — divergence
+ * enables NEXT_PUBLIC_API_MOCKING and browses the fixture API — divergence
  * between the two becomes visible on sight instead of needing a diff.
  *
  * `npx prisma db seed`, or automatically after `prisma migrate reset`.
