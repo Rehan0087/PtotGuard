@@ -16,9 +16,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <AppSidebar />
       </aside>
 
-      <div className="app-canvas flex min-h-svh min-w-0 flex-col">
+      <div className="flex min-h-svh min-w-0 flex-col">
         <Topbar onOpenMobileNav={() => setMobileOpen(true)} />
-        <main className="flex-1 cadastral-grid">
+        <main className="flex-1">
           <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             {children}
           </div>
