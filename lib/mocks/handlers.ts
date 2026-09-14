@@ -33,6 +33,7 @@ import {
   executionGate,
   extractionReview,
   filingReview,
+  analyzeGpsTrack,
   normaliseUlpin,
   maskNationalId,
   mutationActionGate,
@@ -51,6 +52,7 @@ import {
   verificationGate,
   type LandTaxRates,
   type RulingOutcome,
+  type GpsPointInput,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
@@ -58,6 +60,12 @@ import { DEMO_PASSWORD, findDemoAccount } from "../demo-accounts";
 import { hydrateMutationState } from "./mutation-store";
 import { filterMutationReads } from "./mutation-contract.mjs";
 import { filterLandOfficeRecords, recordAuditEvents } from "./records-contract.mjs";
+import {
+  appendMockGpsPoints,
+  MockSurveyValidationError,
+  MockSyncConflict,
+  runMockIdempotent,
+} from "./field-survey-sync-contract";
 
 // Restore mutation-owned preview state before any handler (including parcel
 // reads) can observe the in-memory seed after a hard refresh.
@@ -2428,40 +2436,110 @@ export const handlers = [
       (candidate) => candidate.id === params.id && candidate.assignedAgentId === me.id,
     );
     if (!report) return notFound("Field report not found");
-    if (db.fieldSurveySessions.some((candidate) => candidate.fieldReportId === report.id)) {
-      return conflict("A field survey already exists for this case");
-    }
-    if (report.status !== "accepted" && report.status !== "en-route") {
-      return conflict("This case cannot start field verification in its current state");
-    }
-    const transition = reviewFieldSurveyTransition("not-started", "in-progress");
-    if (!transition.allowed) return conflict("This field survey cannot be started", transition);
+    const body = (await request.json().catch(() => ({}))) as { localSessionId?: string };
+    try {
+      const execute = async () => {
+        if (db.fieldSurveySessions.some((candidate) => candidate.fieldReportId === report.id)) {
+          throw new MockSyncConflict("gps-point-conflict", {
+            message: "A field survey already exists for this case",
+          });
+        }
+        if (report.status !== "accepted" && report.status !== "en-route") {
+          throw new MockSyncConflict("gps-point-conflict", {
+            message: "This case cannot start field verification in its current state",
+          });
+        }
+        const transition = reviewFieldSurveyTransition("not-started", "in-progress");
+        if (!transition.allowed) throw new MockSyncConflict("gps-point-conflict", transition);
 
-    const now = new Date().toISOString();
-    const survey = {
-      id: `fs-${Date.now()}`,
-      fieldReportId: report.id,
-      bhumiId: db.parcels.find((parcel) => parcel.id === report.parcelId)?.ulpin,
-      assignedAgentId: me.id,
-      status: "in-progress" as const,
-      startedAt: now,
-    };
-    report.status = "in-progress";
-    db.fieldSurveySessions.push(survey);
-    await appendAudit({
-      entityType: "field-survey",
-      entityId: survey.id,
-      action: "start",
-      actorId: me.id,
-      actorName: me.name,
-      payload: {
-        fieldReportId: report.id,
-        bhumiId: survey.bhumiId,
-        startedAt: now,
-      },
-      createdAt: now,
-    });
-    return HttpResponse.json({ report, survey }, { status: 201 });
+        const now = new Date().toISOString();
+        const survey = {
+          id: body.localSessionId ?? crypto.randomUUID(),
+          ...(body.localSessionId ? { localSessionId: body.localSessionId } : {}),
+          fieldReportId: report.id,
+          bhumiId: db.parcels.find((parcel) => parcel.id === report.parcelId)?.ulpin,
+          assignedAgentId: me.id,
+          status: "in-progress" as const,
+          version: 1,
+          startedAt: now,
+          points: [],
+        };
+        report.status = "in-progress";
+        db.fieldSurveySessions.push(survey);
+        await appendAudit({
+          entityType: "field-survey",
+          entityId: survey.id,
+          action: "start",
+          actorId: me.id,
+          actorName: me.name,
+          payload: { fieldReportId: report.id, bhumiId: survey.bhumiId, startedAt: now },
+          createdAt: now,
+        });
+        return { report, survey };
+      };
+      const key = request.headers.get("idempotency-key");
+      const result = key
+        ? await runMockIdempotent(
+            db.fieldSurveySyncReceipts,
+            { key, actorId: me.id, fieldReportId: report.id, operationType: "START_SURVEY", payload: body },
+            execute,
+          )
+        : await execute();
+      return HttpResponse.json(result, { status: 201 });
+    } catch (error) {
+      if (error instanceof MockSyncConflict) {
+        const message = (error.detail as { message?: string } | undefined)?.message ?? error.message;
+        return conflict(message, { code: error.code, ...(error.detail ? { detail: error.detail } : {}) });
+      }
+      throw error;
+    }
+  }),
+
+  http.post(`${API}/field-reports/:id/survey/points`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find(
+      (candidate) => candidate.id === params.id && candidate.assignedAgentId === me.id,
+    );
+    if (!report) return notFound("Field report not found");
+    const body = (await request.json()) as { points: GpsPointInput[] };
+    if (!Array.isArray(body.points) || body.points.length < 1 || body.points.length > 50) {
+      return unprocessable({ points: { code: "invalid-gps-batch" } });
+    }
+    try {
+      const execute = () => {
+        const survey = db.fieldSurveySessions.find(
+          (candidate) =>
+            candidate.fieldReportId === report.id &&
+            candidate.assignedAgentId === me.id &&
+            candidate.status === "in-progress",
+        );
+        if (!survey) throw new MockSyncConflict("gps-point-conflict", { message: "This case has no active field survey" });
+        const before = db.fieldSurveyGpsPoints.length;
+        const appended = appendMockGpsPoints(db.fieldSurveyGpsPoints, survey.id, body.points);
+        if (db.fieldSurveyGpsPoints.length > before) survey.version += 1;
+        return { ...appended, sessionId: survey.id, version: survey.version };
+      };
+      const key = request.headers.get("idempotency-key");
+      const result = key
+        ? await runMockIdempotent(
+            db.fieldSurveySyncReceipts,
+            { key, actorId: me.id, fieldReportId: report.id, operationType: "APPEND_POINTS", payload: body },
+            execute,
+          )
+        : execute();
+      return HttpResponse.json(result, { status: 201 });
+    } catch (error) {
+      if (error instanceof TypeError) {
+        return unprocessable({ points: { code: "invalid-gps-point" } });
+      }
+      if (error instanceof MockSyncConflict) {
+        return conflict(error.message, { code: error.code, detail: error.detail });
+      }
+      throw error;
+    }
   }),
 
   http.post(`${API}/field-reports/:id/media`, async ({ params, request }) => {
@@ -2510,30 +2588,46 @@ export const handlers = [
     const survey = db.fieldSurveySessions.find(
       (candidate) => candidate.fieldReportId === report.id && candidate.assignedAgentId === me.id,
     );
-    if (!survey || report.status !== "in-progress" || survey.status !== "in-progress") {
-      return conflict("This case has no active field survey to complete");
-    }
-
-    const body = (await request.json()) as { notes?: string };
+    const body = (await request.json()) as { notes?: string; expectedVersion?: number };
     const notes = body.notes ?? "";
-    const transition = reviewFieldSurveyTransition("in-progress", "completed");
-    if (!transition.allowed) {
-      return conflict("This field survey cannot be completed in its current state", transition);
-    }
-    const review = filingReview(report, notes);
-    if (!review.canFile) return unprocessable({ status: review.blockers[0] });
+    const key = request.headers.get("idempotency-key");
+    try {
+      const execute = async () => {
+        if (!survey || report.status !== "in-progress" || survey.status !== "in-progress") {
+          throw new MockSyncConflict("gps-point-conflict", {
+            message: "This case has no active field survey to complete",
+          });
+        }
+        const transition = reviewFieldSurveyTransition("in-progress", "completed");
+        if (!transition.allowed) throw new MockSyncConflict("gps-point-conflict", transition);
+        if (body.expectedVersion !== undefined && body.expectedVersion !== survey.version) {
+          throw new MockSyncConflict("gps-point-conflict", {
+            code: "survey-version-conflict",
+            localData: body,
+            serverData: survey,
+          });
+        }
+        const points = db.fieldSurveyGpsPoints
+          .filter((point) => point.fieldSurveySessionId === survey.id)
+          .sort((a, b) => a.sequence - b.sequence);
+        const review = filingReview(report, notes, {
+          gpsCount: points.length || report.gpsCaptures.length,
+        });
+        if (!review.canFile) throw new MockSurveyValidationError(review.blockers[0]);
 
-    const now = new Date().toISOString();
-    report.status = "completed";
-    report.submittedAt = now;
-    report.notes = notes;
-    survey.status = "completed";
-    survey.completedAt = now;
+        const now = new Date().toISOString();
+        report.status = "completed";
+        report.submittedAt = now;
+        report.notes = notes;
+        survey.status = "completed";
+        survey.completedAt = now;
+        survey.version += 1;
+        survey.summary = analyzeGpsTrack(points, survey.startedAt, now);
 
-    const dispute = report.disputeId
+        const dispute = report.disputeId
       ? db.disputes.find((candidate) => candidate.id === report.disputeId)
       : undefined;
-    if (dispute && dispute.status === "field-visit-scheduled") {
+        if (dispute && dispute.status === "field-visit-scheduled") {
       dispute.status = "under-review";
       dispute.updatedAt = now;
       db.disputeEvents.push({
@@ -2547,9 +2641,9 @@ export const handlers = [
         actorId: me.id,
         actorName: me.name,
       });
-    }
+        }
 
-    await appendAudit({
+        await appendAudit({
       entityType: "field-survey",
       entityId: survey.id,
       action: "complete",
@@ -2558,12 +2652,30 @@ export const handlers = [
       payload: {
         fieldReportId: report.id,
         completedAt: now,
-        gpsCount: report.gpsCaptures.length,
+        gpsCount: points.length || report.gpsCaptures.length,
         photoCount: report.photos.length,
       },
       createdAt: now,
-    });
-    return HttpResponse.json({ report, survey });
+        });
+        return { report, survey: { ...survey, points } };
+      };
+      const result = key
+        ? await runMockIdempotent(
+            db.fieldSurveySyncReceipts,
+            { key, actorId: me.id, fieldReportId: report.id, operationType: "COMPLETE_SURVEY", payload: body },
+            execute,
+          )
+        : await execute();
+      return HttpResponse.json(result);
+    } catch (error) {
+      if (error instanceof MockSurveyValidationError) {
+        return unprocessable({ status: error.blocker });
+      }
+      if (error instanceof MockSyncConflict) {
+        return conflict(error.message, { code: error.code, detail: error.detail });
+      }
+      throw error;
+    }
   }),
 
   // Notes and the optional travel marker. Survey start/completion use the
@@ -2612,8 +2724,19 @@ export const handlers = [
     return HttpResponse.json({
       report,
       parcel: db.parcels.find((p) => p.id === report.parcelId) ?? null,
-      survey:
-        db.fieldSurveySessions.find((candidate) => candidate.fieldReportId === report.id) ?? null,
+      survey: (() => {
+        const survey = db.fieldSurveySessions.find(
+          (candidate) => candidate.fieldReportId === report.id,
+        );
+        return survey
+          ? {
+              ...survey,
+              points: db.fieldSurveyGpsPoints
+                .filter((point) => point.fieldSurveySessionId === survey.id)
+                .sort((a, b) => a.sequence - b.sequence),
+            }
+          : null;
+      })(),
     });
   }),
 
