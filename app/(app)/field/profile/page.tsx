@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { AtSign, BadgeCheck, Building2, IdCard, Save, ShieldCheck, UserRound } from "lucide-react";
+import { useForm, useWatch } from "react-hook-form";
+import { BadgeCheck, Building2, IdCard, ImageUp, Save, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,6 +18,7 @@ import { useSession, useUpdateOwnProfile } from "@/hooks/queries";
 import { ApiError } from "@/lib/api-client";
 import {
   fieldProfilePayload,
+  validateProfilePhotoFile,
   validateFieldProfile,
   type FieldProfileFormValues,
 } from "@/lib/field-profile";
@@ -53,6 +54,8 @@ export default function FieldProfilePage() {
   });
   const user = session.data?.user;
   const details = user?.profileDetails ?? {};
+  const previewAvatarUrl = useWatch({ control: form.control, name: "avatarUrl" });
+  const previewName = useWatch({ control: form.control, name: "name" });
 
   useEffect(() => {
     if (!user) return;
@@ -89,6 +92,29 @@ export default function FieldProfilePage() {
     }
   });
 
+  const selectProfilePhoto = (file: File | undefined) => {
+    if (!file) return;
+    const fileError = validateProfilePhotoFile(file);
+    if (fileError) {
+      form.setError("avatarUrl", {
+        message: fileError === "type" ? t.errors.avatarType : t.errors.avatarSize,
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        form.setError("avatarUrl", { message: t.errors.avatarUrl });
+        return;
+      }
+      form.clearErrors("avatarUrl");
+      form.setValue("avatarUrl", reader.result, { shouldDirty: true, shouldValidate: true });
+    };
+    reader.onerror = () => form.setError("avatarUrl", { message: t.errors.avatarUrl });
+    reader.readAsDataURL(file);
+  };
+
   if (session.isLoading) {
     return <div className="space-y-6"><Skeleton className="h-20" /><Skeleton className="h-96 rounded-xl" /></div>;
   }
@@ -115,9 +141,9 @@ export default function FieldProfilePage() {
           <Card>
             <CardContent className="flex flex-col items-center py-4 text-center">
               <Avatar className="size-20">
-                {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
+                {previewAvatarUrl ? <AvatarImage src={previewAvatarUrl} alt="" /> : null}
                 <AvatarFallback className="bg-primary/10 text-xl font-semibold text-primary">
-                  {initials(user.name)}
+                  {initials(previewName || user.name)}
                 </AvatarFallback>
               </Avatar>
               <h2 className="mt-4 text-lg font-semibold text-foreground">{user.name}</h2>
@@ -174,7 +200,17 @@ export default function FieldProfilePage() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="field-profile-avatar">{t.avatarUrl}</Label>
-                <div className="relative"><AtSign className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input id="field-profile-avatar" className="pl-9" type="url" placeholder="https://" {...form.register("avatarUrl")} aria-invalid={Boolean(form.formState.errors.avatarUrl)} /></div>
+                <div className="relative">
+                  <ImageUp className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                  <Input
+                    id="field-profile-avatar"
+                    className="pl-9 file:mr-3"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    aria-invalid={Boolean(form.formState.errors.avatarUrl)}
+                    onChange={(event) => selectProfilePhoto(event.target.files?.[0])}
+                  />
+                </div>
                 {form.formState.errors.avatarUrl ? <p className="text-xs text-destructive">{form.formState.errors.avatarUrl.message}</p> : <p className="text-xs text-muted-foreground">{t.avatarHint}</p>}
               </div>
               <div className="grid gap-2">

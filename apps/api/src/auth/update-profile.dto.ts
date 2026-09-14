@@ -4,11 +4,10 @@ import {
   IsObject,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
   MinLength,
-  ValidateIf,
 } from "class-validator";
+import { IsProfileImageSource } from "./profile-image-source";
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -34,9 +33,7 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2048)
-  @ValidateIf((_object, value) => value !== "")
-  @IsUrl({ protocols: ["http", "https"], require_protocol: true })
+  @IsProfileImageSource()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   avatarUrl?: string;
 
