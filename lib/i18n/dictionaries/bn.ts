@@ -675,6 +675,16 @@ export const bn: Dictionary = {
       submitted: (when: string) => `জমা ${when}`,
     },
 
+    fieldSearch: {
+      description: "আপনার ওপর অর্পিত জরিপের মামলাগুলো খুঁজুন।",
+      placeholder: "দাগ, জরিপের উদ্দেশ্য বা ঠিকানা দিয়ে খুঁজুন",
+      statusLabel: "জরিপের অবস্থা",
+      resultCount: (count: number) => `${n(count)}টি অর্পিত মামলা`,
+      emptyTitle: "কোনো অর্পিত মামলা পাওয়া যায়নি",
+      emptyBody: "অন্য শব্দ বা জরিপের অবস্থা দিয়ে আবার খুঁজুন।",
+      openCase: "মামলা খুলুন",
+    },
+
     capture: {
       startVerification: "মাঠ যাচাই শুরু করুন",
       startingVerification: "শুরু হচ্ছে…",

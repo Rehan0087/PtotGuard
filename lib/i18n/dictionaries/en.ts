@@ -710,6 +710,16 @@ export const en = {
       submitted: (when: string) => `Submitted ${when}`,
     },
 
+    fieldSearch: {
+      description: "Search the survey cases assigned to you.",
+      placeholder: "Search by dag, survey purpose, or address",
+      statusLabel: "Survey status",
+      resultCount: (count: number) => `${n(count)} assigned ${count === 1 ? "case" : "cases"}`,
+      emptyTitle: "No assigned cases found",
+      emptyBody: "Try another search term or survey status.",
+      openCase: "Open case",
+    },
+
     capture: {
       eyebrow: "Field survey",
       notFound: "That visit could not be found.",
