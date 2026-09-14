@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PaymentConfirmationDialog } from "@/components/payment-confirmation-dialog";
 import { cn } from "@/lib/utils";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
@@ -93,6 +94,7 @@ function FileCaseForm({ onDone }: { onDone: () => void }) {
   const parcels = parcelsQ.data?.items ?? [];
   const { data: policy } = usePolicies();
   const file = useFileRevenueCase();
+  const [pendingPayment, setPendingPayment] = useState<FormValues | null>(null);
 
   const {
     control,
@@ -118,17 +120,20 @@ function FileCaseForm({ onDone }: { onDone: () => void }) {
 
   const fee = policy ? { amount: policy.revenueCaseFilingFeeBdt, currency: "BDT" as const } : null;
 
-  function onSubmit(values: FormValues) {
+  function confirmPayment(paymentMethod: PaymentMethod) {
+    if (!pendingPayment) return;
     file.mutate(
       {
-        parcelId: values.parcelId,
-        caseType: values.caseType,
-        grounds: values.grounds,
-        againstReference: values.caseType === "appeal" ? values.againstReference : undefined,
-        paymentMethod: values.paymentMethod,
+        parcelId: pendingPayment.parcelId,
+        caseType: pendingPayment.caseType,
+        grounds: pendingPayment.grounds,
+        againstReference:
+          pendingPayment.caseType === "appeal" ? pendingPayment.againstReference : undefined,
+        paymentMethod,
       },
       {
         onSuccess: (application) => {
+          setPendingPayment(null);
           toast.success(t.pages.revenueCases.filedTitle, {
             description: t.pages.revenueCases.filedBody(application.applicationNo),
           });
@@ -144,7 +149,7 @@ function FileCaseForm({ onDone }: { onDone: () => void }) {
 
   return (
     <Card className="gap-4 px-5">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(setPendingPayment)} className="space-y-5">
         <div className="grid gap-2 sm:grid-cols-2">
           {CASE_TYPES.map((option) => {
             const Icon = option.icon;
@@ -298,6 +303,18 @@ function FileCaseForm({ onDone }: { onDone: () => void }) {
           </Button>
         </div>
       </form>
+      {pendingPayment ? (
+        <PaymentConfirmationDialog
+          open
+          amount={fee ? f.money(fee) : ""}
+          defaultMethod={pendingPayment.paymentMethod}
+          busy={file.isPending}
+          onOpenChange={(open) => {
+            if (!open && !file.isPending) setPendingPayment(null);
+          }}
+          onConfirm={confirmPayment}
+        />
+      ) : null}
     </Card>
   );
 }

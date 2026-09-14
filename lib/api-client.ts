@@ -1,15 +1,15 @@
 import { getAccessToken, useSessionStore } from "@/store/session";
 
 /**
- * The single choke point for all data fetching. Today it talks to the MSW mock
- * (same-origin /api). To point at the real backend later, set
- * NEXT_PUBLIC_API_BASE and NEXT_PUBLIC_API_MOCKING=disabled — nothing else in
- * the app changes.
+ * The single choke point for all data fetching. It uses the same-origin /api
+ * proxy; production and local demo traffic goes to the NestJS
+ * backend by default. Set NEXT_PUBLIC_API_MOCKING=enabled only when working
+ * with the in-browser fixture API.
  */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
-/** Mocking is opt-out: on unless explicitly disabled. */
-export const API_MOCKING = process.env.NEXT_PUBLIC_API_MOCKING !== "disabled";
+/** Mocking is deliberately opt-in: persistence must not silently be bypassed. */
+export const API_MOCKING = process.env.NEXT_PUBLIC_API_MOCKING === "enabled";
 
 export class ApiError extends Error {
   constructor(
