@@ -4,12 +4,9 @@ A civic platform for secure land records, ownership mutations, dispute resolutio
 field surveys. Five role-based portals — **Citizen**, **Land Office**, **Field Agent**,
 **Mediator**, and **Administrator** — over one shared record system.
 
-> **Status: frontend done, backend underway.** The UI (this repo's root) is built against a
-> mock API (MSW) matching the **frozen Core API spec** exactly. `apps/api` is a real
-> NestJS + Postgres implementation of that same spec, growing endpoint by endpoint — see its
-> [status table](apps/api/README.md#endpoint-status). Every `GET` is done; writes are landing
-> gate-by-gate. Swapping the mock for it is a config change, not a rewrite, for whatever part
-> is already live (see [Mock → real backend](#mock--real-backend)).
+> **Status: persistent local stack ready.** The UI uses the real NestJS + Postgres API in
+> `apps/api` by default. MSW fixtures remain available for isolated UI work, but must be
+> explicitly enabled (see [Persistent local stack](#persistent-local-stack)).
 >
 > **Setting:** Cumilla District, Bangladesh — dag/khatian records, upazila/mouza hierarchy,
 > namjari (mutation), Faraiz + Hindu succession, BDT.
@@ -121,9 +118,9 @@ store/
 *both* of the other two — it's the one place a domain rule (a share of an estate, a filing
 gate, a deletion check) is written down, so the frontend and the backend can never quietly
 disagree about what one means. The root `app/`/`components/`/`lib/` tree is the Next.js
-frontend, and today it talks to `lib/mocks/handlers.ts`, an in-browser mock of the API —
-not `apps/api` yet, even though that backend is real and growing. Point it there by setting
-`NEXT_PUBLIC_API_MOCKING=disabled`; see [Mock → real backend](#mock--real-backend). If a
+frontend, and it talks to `apps/api` through a same-origin `/api` proxy, so records are stored
+in Postgres. `lib/mocks/handlers.ts` remains available for isolated UI work when
+`NEXT_PUBLIC_API_MOCKING=enabled`. If a
 question is about *what a rule allows*, look in `packages/rules`. If it's about *how a
 screen behaves*, look in `app/`. If it's about *what the server actually enforces*, look in
 `apps/api` — and start with [`apps/api/README.md`](apps/api/README.md), not this file.
@@ -133,9 +130,9 @@ screen behaves*, look in `app/`. If it's about *what the server actually enforce
 ## Architecture
 
 **Data flow:** screen → `hooks/queries.ts` (TanStack Query) → `lib/api-client.ts` →
-MSW handler (`lib/mocks/handlers.ts`) → seed data (`lib/mocks/data.ts`). Once
-`NEXT_PUBLIC_API_MOCKING=disabled`, the last two steps are `apps/api`'s controllers and
-Postgres instead — same shapes, same rules, real persistence.
+Next.js `/api` proxy → `apps/api` controllers → Postgres. With
+`NEXT_PUBLIC_API_MOCKING=enabled`, MSW replaces the final three steps with in-browser fixture
+data for isolated UI work.
 
 - **`@plotguard/rules/types` is the contract.** Every mock response and every eventual backend DTO
   conforms to these interfaces. Start here when adding a feature.
@@ -187,19 +184,13 @@ untested, and the tests say so instead of implying coverage: every node carries 
 filter and `reviewDraft`'s cycle branch are both defence in depth for data that is *already*
 malformed, and the tests that reach them supply exactly that.
 
-### Mock → real backend
+### Persistent local stack
 
-**The backend exists now** — `apps/api`, a NestJS + Postgres app implementing this same
-spec. It's not fully caught up to the mock yet; see
-[its endpoint status table](apps/api/README.md#endpoint-status) for exactly what's real
-today versus still mock-only. To point the frontend at it instead of the mock:
+Start the database, backend, and frontend together:
 
-1. `NEXT_PUBLIC_API_BASE=http://localhost:3001/api` and `NEXT_PUBLIC_API_MOCKING=disabled`.
-2. Set `AUTH_TOKEN_SECRET` in `apps/api/.env`, migrate, and seed the database. The documented
-   demo accounts authenticate through `/auth/login` with the displayed demo password.
 
-Nothing in the screens or hooks changes either way, as long as whichever backend is live
-honors the shapes in `lib/types/` (`@plotguard/rules/types`, really — see below).
+The frontend proxies `/api` to `http://localhost:3001/api`, where NestJS writes to Postgres.
+Set `NEXT_PUBLIC_API_MOCKING=enabled` before starting Next.js only when you want fixture data.
 
 ### API surface
 

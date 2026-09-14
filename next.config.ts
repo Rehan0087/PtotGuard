@@ -6,14 +6,14 @@ const nextConfig: NextConfig = {
   // a stale dist. Next has to be told to run it through its own pipeline.
   transpilePackages: ["@plotguard/rules"],
   async rewrites() {
-    return process.env.NEXT_PUBLIC_API_MOCKING === "disabled"
-      ? [
+    return process.env.NEXT_PUBLIC_API_MOCKING === "enabled"
+      ? []
+      : [
           {
             source: "/api/:path*",
             destination: "http://localhost:3001/api/:path*", // Proxy to NestJS backend
           },
-        ]
-      : [];
+        ];
   },
 };
 

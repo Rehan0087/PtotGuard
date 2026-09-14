@@ -22,7 +22,8 @@ function startWorker() {
 
 /**
  * Boots the MSW worker in the browser before rendering the app, so no query
- * ever races ahead of the mock. When mocking is disabled, renders instantly.
+ * ever races ahead of the mock. When mocking is not explicitly enabled,
+ * renders instantly and requests go to the persistent API.
  */
 export function MswProvider({ children }: { children: React.ReactNode }) {
   // When mocking is off, we're ready immediately (no synchronous setState needed).

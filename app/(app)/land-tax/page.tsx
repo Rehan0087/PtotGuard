@@ -6,12 +6,8 @@ import {
   AlertCircle,
   Banknote,
   CheckCircle2,
-  CreditCard,
-  Loader2,
   MapPin,
-  Smartphone,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -19,6 +15,7 @@ import { IdChip } from "@/components/id-chip";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PaymentConfirmationDialog } from "@/components/payment-confirmation-dialog";
 import { cn } from "@/lib/utils";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
@@ -26,12 +23,6 @@ import type { Dictionary } from "@/lib/i18n";
 import { useLandTaxHoldings, usePayLandTax } from "@/hooks/queries";
 import type { ExemptionReason } from "@plotguard/rules";
 import type { LandTaxHolding, PaymentMethod } from "@/lib/types";
-
-const PAYMENT_METHODS: { value: PaymentMethod; icon: LucideIcon }[] = [
-  { value: "bkash", icon: Smartphone },
-  { value: "nagad", icon: Smartphone },
-  { value: "card", icon: CreditCard },
-];
 
 /** The rule states why nothing is owed as a code; the wording is the screen's job. */
 function exemptionText(reason: ExemptionReason, t: Dictionary, f: ReturnType<typeof useFmt>): string {
@@ -45,15 +36,14 @@ function HoldingCard({ holding }: { holding: LandTaxHolding }) {
   const f = useFmt();
   const pay = usePayLandTax();
   const [paying, setPaying] = useState(false);
-  const [method, setMethod] = useState<PaymentMethod>("bkash");
 
   const { assessment } = holding;
   const bdt = (amount: number) => f.money({ amount, currency: "BDT" });
   const settled = assessment.total <= 0 && !assessment.exemption;
 
-  function submit() {
+  function submit(paymentMethod: PaymentMethod) {
     pay.mutate(
-      { parcelId: holding.parcelId, paymentMethod: method },
+      { parcelId: holding.parcelId, paymentMethod },
       {
         onSuccess: (application) => {
           setPaying(false);
@@ -152,52 +142,16 @@ function HoldingCard({ holding }: { holding: LandTaxHolding }) {
 
           <div className="border-t border-border pt-3">
             {paying ? (
-              <div className="space-y-3">
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {PAYMENT_METHODS.map((option) => {
-                    const Icon = option.icon;
-                    const active = method === option.value;
-                    return (
-                      <button
-                        type="button"
-                        key={option.value}
-                        onClick={() => setMethod(option.value)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left transition-colors",
-                          active
-                            ? "border-primary ring-1 ring-primary"
-                            : "border-border hover:bg-muted/50",
-                        )}
-                      >
-                        <Icon
-                          className={cn(
-                            "size-4 shrink-0",
-                            active ? "text-marker" : "text-muted-foreground",
-                          )}
-                        />
-                        <span className="text-sm font-medium text-foreground">
-                          {t.pages.landTax.paymentMethods[option.value]}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">{t.pages.landTax.paymentNote}</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button size="sm" disabled={pay.isPending} onClick={submit}>
-                    {pay.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-                    {t.pages.landTax.confirmPay(bdt(assessment.total))}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={pay.isPending}
-                    onClick={() => setPaying(false)}
-                  >
-                    {t.common.cancel}
-                  </Button>
-                </div>
-              </div>
+              <PaymentConfirmationDialog
+                open
+                amount={bdt(assessment.total)}
+                defaultMethod="bkash"
+                busy={pay.isPending}
+                onOpenChange={(open) => {
+                  if (!open && !pay.isPending) setPaying(false);
+                }}
+                onConfirm={submit}
+              />
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" onClick={() => setPaying(true)}>
