@@ -60,8 +60,15 @@ describe("field report assignment authorization", () => {
   let app: INestApplication;
   let report: ReportFixture;
   let survey: SurveyFixture | null;
-  let dispute: { id: string; status: string; updatedAt: Date };
+  let dispute: {
+    id: string;
+    caseNumber: string;
+    filedById: string;
+    status: string;
+    updatedAt: Date;
+  };
   let disputeEvents: Array<Record<string, unknown>>;
+  let notifications: Array<Record<string, unknown>>;
   let auditEntries: Array<Record<string, unknown>>;
 
   beforeEach(async () => {
@@ -87,10 +94,13 @@ describe("field report assignment authorization", () => {
     survey = null;
     dispute = {
       id: "ds-1",
+      caseNumber: "DSP-2026-00001",
+      filedById: "usr-citizen",
       status: "field-visit-scheduled",
       updatedAt: new Date("2026-09-10T08:00:00Z"),
     };
     disputeEvents = [];
+    notifications = [];
 
     const fieldReport = {
       findMany: async ({ where }: { where: { assignedAgentId?: string } }) =>
@@ -197,6 +207,12 @@ describe("field report assignment authorization", () => {
       disputeEvent: {
         create: async ({ data }: { data: Record<string, unknown> }) => {
           disputeEvents.push(data);
+          return data;
+        },
+      },
+      appNotification: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          notifications.push(data);
           return data;
         },
       },
@@ -477,6 +493,14 @@ describe("field report assignment authorization", () => {
     expect(disputeEvents.at(-1)).toMatchObject({
       type: "field-visit",
       title: "Field survey filed",
+    });
+    expect(notifications.at(-1)).toMatchObject({
+      userId: "usr-citizen",
+      content: {
+        code: "dispute-status",
+        caseNumber: "DSP-2026-00001",
+        status: "under-review",
+      },
     });
     expect(auditEntries.at(-1)).toMatchObject({
       entityType: "field-survey",
