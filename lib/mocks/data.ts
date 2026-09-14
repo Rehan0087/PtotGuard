@@ -88,8 +88,9 @@ export const users: User[] = [
     createdAt: "2024-06-19T09:00:00Z",
   },
   {
-    id: "usr-officer", name: "Nasrin Akter", email: "n.akter@minland.gov.bd",
+    id: "usr-officer", name: "Nasrin Akter", email: "n.akter@minland.gov.bd", phone: "+8801712-345678",
     role: "land-office", jurisdictionId: "j-debidwar", title: "Sub-Registrar", status: "active",
+    profileDetails: { nameBn: "নাসরিন আক্তার", fatherName: "Abdul Hakim", motherName: "Rahima Begum", birthDate: "1987-08-19", bloodGroup: "B+", gender: "Female", occupation: "Government Officer", currentAddress: "Debidwar, Cumilla", permanentAddress: "Cumilla, Bangladesh" },
     createdAt: "2021-01-05T09:00:00Z",
   },
   {
