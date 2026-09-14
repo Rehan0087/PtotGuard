@@ -70,6 +70,11 @@ ensure_api_env() {
 DATABASE_URL="postgresql://postgres:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?schema=public"
 EOF
   fi
+  # Access tokens need a persistent signing secret. Keep an existing secret so
+  # restarting the demo does not invalidate active browser sessions.
+  if ! grep -q '^AUTH_TOKEN_SECRET=' apps/api/.env; then
+    printf 'AUTH_TOKEN_SECRET="%s"\n' "$(openssl rand -hex 32)" >>apps/api/.env
+  fi
 }
 
 save_pid() {
@@ -118,7 +123,9 @@ cmd_start() {
   ensure_api_env
 
   echo "== Database schema =="
-  (cd apps/api && pnpm exec prisma migrate deploy)
+  # Prisma's generated client is not committed. Regenerate it after pulling a
+  # schema change, before Nest type-checks the controllers against it.
+  (cd apps/api && pnpm exec prisma generate && pnpm exec prisma migrate deploy)
 
   echo "== Backend (NestJS) =="
   if is_up "$API_PORT"; then
