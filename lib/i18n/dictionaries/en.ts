@@ -507,6 +507,11 @@ export const en = {
 
   pages: {
     application: {
+      payTitle: "Pay this fee",
+      payBody: "The fee was set when you filed, but the payment did not go through.",
+      payAction: (amount: string) => `Pay ${amount}`,
+      paid: "Payment recorded",
+      payFailed: "That payment didn't go through",
       description: "Everything recorded against this application, in the order it happened.",
       timeline: "Application timeline",
       noEvents: "Nothing has been recorded yet.",
