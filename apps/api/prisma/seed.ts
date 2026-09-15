@@ -86,7 +86,7 @@ async function main(): Promise<void> {
     { id: "p-802", dagNo: "RS-802", khatianNo: "502", title: "Fish Pond", jurisdictionId: "j-rajamehar", landUse: "agricultural", area: { value: 30, unit: "decimal" }, ownerId: "usr-ayesha", ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.541, lng: 90.991 }, boundary: square({ lat: 23.541, lng: 90.991 }), marketValue: { amount: 1200000, currency: "BDT" }, registeredAt: new Date("2019-01-10T00:00:00Z"), lastMutationAt: null },
     { id: "p-803", dagNo: "RS-803", khatianNo: "503", title: "Village Home", jurisdictionId: "j-payalgacha", landUse: "residential", area: { value: 10, unit: "katha" }, ownerId: "usr-ayesha", ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.350, lng: 91.030 }, boundary: square({ lat: 23.350, lng: 91.030 }), marketValue: { amount: 2500000, currency: "BDT" }, registeredAt: new Date("2017-11-05T00:00:00Z"), lastMutationAt: null },
     { id: "p-804", dagNo: "RS-804", khatianNo: "504", title: "Corner Store", jurisdictionId: "j-payalgacha", landUse: "commercial", area: { value: 2, unit: "katha" }, ownerId: "usr-ayesha", ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.351, lng: 91.031 }, boundary: square({ lat: 23.351, lng: 91.031 }), marketValue: { amount: 4500000, currency: "BDT" }, registeredAt: new Date("2021-04-15T00:00:00Z"), lastMutationAt: null },
-    { id: "p-888", dagNo: "RS-888", khatianNo: "305", title: "River-adjacent land, Payalgacha", jurisdictionId: "j-payalgacha", landUse: "vacant", area: { value: 150, unit: "decimal" }, ownerId: "usr-ayesha", ownershipType: "sole", registryStatus: "pending", centroid: { lat: 23.360, lng: 91.035 }, boundary: square({ lat: 23.360, lng: 91.035 }, 0.002), marketValue: { amount: 5000000, currency: "BDT" }, registeredAt: new Date("2010-06-15T00:00:00Z"), lastMutationAt: null },
+    { id: "p-888", dagNo: "RS-888", khatianNo: "305", title: "River-adjacent land, Payalgacha", jurisdictionId: "j-payalgacha", landUse: "vacant", area: { value: 150, unit: "decimal" }, ownerId: "usr-ayesha", ownershipType: "sole", registryStatus: "flagged", centroid: { lat: 23.360, lng: 91.035 }, boundary: square({ lat: 23.360, lng: 91.035 }, 0.002), marketValue: { amount: 5000000, currency: "BDT" }, registeredAt: new Date("2010-06-15T00:00:00Z"), lastMutationAt: null },
     { id: "p-999", dagNo: "BS-999", khatianNo: "2205", title: "Commercial Plot, Rajamehar", jurisdictionId: "j-rajamehar", landUse: "commercial", area: { value: 20, unit: "decimal" }, ownerId: "usr-ayesha", ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.555, lng: 90.995 }, boundary: square({ lat: 23.555, lng: 90.995 }), marketValue: { amount: 15000000, currency: "BDT" }, registeredAt: new Date("2020-01-01T00:00:00Z"), lastMutationAt: null },
   ] satisfies Prisma.ParcelCreateManyInput[];
 
@@ -273,8 +273,37 @@ async function main(): Promise<void> {
   // --- Policy (singleton) ---------------------------------------------------
   await prisma.policy.upsert({
     where: { id: "singleton" },
-    update: {},
-    create: { id: "singleton", mutationFeeBdt: 5400, objectionWindowDays: 15, fraudScoreThreshold: 0.5 },
+    update: {
+      landTaxRatePerDecimalBdt: {
+        agricultural: 2,
+        residential: 22,
+        commercial: 125,
+        industrial: 150,
+        vacant: 5
+      },
+      landTaxAgriculturalExemptionDecimals: 825,
+      landTaxArrearSurchargePercent: 6.25,
+      landTaxMaxArrearYears: 3,
+      mutationFeeBdt: 5400,
+      objectionWindowDays: 15,
+      fraudScoreThreshold: 0.5,
+    },
+    create: { 
+      id: "singleton", 
+      mutationFeeBdt: 5400, 
+      objectionWindowDays: 15, 
+      fraudScoreThreshold: 0.5,
+      landTaxRatePerDecimalBdt: {
+        agricultural: 2,
+        residential: 22,
+        commercial: 125,
+        industrial: 150,
+        vacant: 5
+      },
+      landTaxAgriculturalExemptionDecimals: 825,
+      landTaxArrearSurchargePercent: 6.25,
+      landTaxMaxArrearYears: 3,
+    },
   });
 
   // --- Notifications ---------------------------------------------------------
