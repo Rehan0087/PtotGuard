@@ -8,6 +8,7 @@ import { MutationDecisionDialog } from "@/components/mutations/mutation-decision
 import { MutationVerificationForm } from "@/components/mutations/mutation-verification-form";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -18,11 +19,16 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   useMutationById,
   useRole,
   useSession,
   useStartMutationVerification,
+  useAssignFieldSurvey,
+  useFlagMutationDispute,
+  useUsers,
 } from "@/hooks/queries";
 import { mutationActionState } from "@/components/mutations/mutation-action-state";
 import {
@@ -44,6 +50,7 @@ const CHECKLIST_KEYS: (keyof MutationVerificationChecklist)[] = [
   "deedVerified",
   "landRecordMatched",
   "documentsPresent",
+  "khajnaReceiptVerified",
 ];
 
 function timelineActionLabel(
@@ -91,7 +98,17 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
   const role = useRole();
   const session = useSession();
   const start = useStartMutationVerification(detail.mutation.id);
+  const assignSurvey = useAssignFieldSurvey();
+  const flagDispute = useFlagMutationDispute(detail.mutation.id);
+  const agents = useUsers({ role: "field-agent", pageSize: 50 });
+  const [agentId, setAgentId] = useState("");
+  const [scheduledFor, setScheduledFor] = useState(() => {
+    const date = new Date(Date.now() + 86_400_000);
+    date.setHours(10, 0, 0, 0);
+    return date.toISOString().slice(0, 16);
+  });
   const [decision, setDecision] = useState<"approve" | "reject" | null>(null);
+  const [disputeDescription, setDisputeDescription] = useState("");
   const {
     mutation,
     parcel,
@@ -102,6 +119,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
     jurisdiction,
     objectionSummary,
     timeline,
+    fieldReport,
   } = detail;
   const presentation = mutationDetailPresentation(detail);
   const actorId = session.data?.user.id;
@@ -148,6 +166,45 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                 },
               ]}
             />
+          </DetailSection>
+
+          <DetailSection title={t.pages.mutations.fieldInvestigation}>
+            {fieldReport ? (
+              <DefinitionList rows={[
+                { label: t.pages.mutations.assignedFieldAgent, value: agents.data?.items.find((agent) => agent.id === fieldReport.assignedAgentId)?.name ?? fieldReport.assignedAgentId },
+                { label: t.pages.mutations.currentStatus, value: <StatusMetaBadge meta={s.fieldReport[fieldReport.status]} /> },
+                { label: t.pages.mutations.scheduledFor, value: f.dateTime(fieldReport.scheduledFor) },
+                { label: t.pages.mutations.fieldReport, value: fieldReport.notes ?? t.common.notAvailable },
+              ]} />
+            ) : role === "land-office" && mutation.status === "field-investigation" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select value={agentId} onValueChange={(value) => setAgentId(value ?? "")}>
+                  <SelectTrigger><SelectValue placeholder={t.pages.mutations.selectFieldAgent} /></SelectTrigger>
+                  <SelectContent>
+                    {(agents.data?.items ?? []).filter((agent) => agent.status === "active").map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} />
+                <Button
+                  disabled={!agentId || !scheduledFor || assignSurvey.isPending}
+                  onClick={() => assignSurvey.mutate({
+                    parcelId: mutation.parcelId,
+                    mutationId: mutation.id,
+                    purpose: "boundary-survey",
+                    assignedAgentId: agentId,
+                    scheduledFor: new Date(scheduledFor).toISOString(),
+                    addressHint: parcel?.title,
+                  })}
+                >
+                  {assignSurvey.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {t.pages.mutations.assignFieldAgent}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t.pages.mutations.fieldInvestigationPending}</p>
+            )}
           </DetailSection>
 
           <DetailSection title={t.pages.mutations.ownershipChange}>
@@ -283,6 +340,25 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
 
           <DetailSection title={t.pages.mutations.objections}>
             <div className="space-y-3">
+              {mutation.disputeId ? (
+                <StatusMetaBadge meta={s.registry.disputed} />
+              ) : role === "land-office" ? (
+                <div className="space-y-2 rounded-lg border border-border p-3">
+                  <Textarea
+                    value={disputeDescription}
+                    onChange={(event) => setDisputeDescription(event.target.value)}
+                    placeholder={t.pages.capture.disputeDescription}
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={!disputeDescription.trim() || flagDispute.isPending}
+                    onClick={() => flagDispute.mutate(disputeDescription.trim())}
+                  >
+                    {t.pages.capture.disputeFound}
+                  </Button>
+                </div>
+              ) : null}
               <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-3">
                 <div>
                   <dt className="text-xs text-muted-foreground">{t.pages.mutations.objectionTotal}</dt>

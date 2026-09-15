@@ -4,7 +4,7 @@
  * Keep this deliberately narrow: mutations may change parcel ownership, but
  * they must not turn sessionStorage into a second copy of the entire mock DB.
  */
-import type { AuditEvent, Mutation, OwnershipRecord } from "@/lib/types";
+import type { AuditEvent, Mutation, MutationStatus, OwnershipRecord } from "@/lib/types";
 import * as db from "./data";
 
 const STORAGE_KEY = "plotguard.mutation-workflow.v1";
@@ -44,8 +44,32 @@ function isStoredState(value: unknown): value is StoredMutationState {
     && Array.isArray(candidate.auditChain);
 }
 
+/** Upgrade snapshots created before the five-step mutation workflow. */
+function currentMutationStatus(value: unknown): MutationStatus {
+  if (value === "verification") return "under-primary-verification";
+  if (value === "objection-period") return "field-investigation";
+  const current: MutationStatus[] = [
+    "submitted",
+    "under-primary-verification",
+    "field-investigation",
+    "field-verification-complete",
+    "approved",
+    "rejected",
+    "awaiting-dcr-payment",
+    "complete",
+  ];
+  return typeof value === "string" && current.includes(value as MutationStatus)
+    ? value as MutationStatus
+    : "submitted";
+}
+
 /** Restore the workflow snapshot at most once in a browser module lifetime. */
 export function hydrateMutationState(): AuditEvent[] | null {
+  // Also cover Fast Refresh, where this module can retain `hydrated` while
+  // the in-memory fixture array still contains values loaded by older code.
+  for (const mutation of db.mutations) {
+    mutation.status = currentMutationStatus((mutation as { status?: unknown }).status);
+  }
   const storage = browserStorage();
   if (!storage) return null;
   if (hydrated) return hydratedAuditChain;
@@ -57,7 +81,11 @@ export function hydrateMutationState(): AuditEvent[] | null {
     const state: unknown = JSON.parse(raw);
     if (!isStoredState(state)) return null;
 
-    db.mutations.splice(0, db.mutations.length, ...state.mutations);
+    const mutations = state.mutations.map((mutation) => ({
+      ...mutation,
+      status: currentMutationStatus((mutation as { status?: unknown }).status),
+    }));
+    db.mutations.splice(0, db.mutations.length, ...mutations);
     db.ownershipRecords.splice(0, db.ownershipRecords.length, ...state.ownershipRecords);
     for (const stored of state.parcels) {
       const parcel = db.parcels.find((item) => item.id === stored.id);
@@ -68,6 +96,7 @@ export function hydrateMutationState(): AuditEvent[] | null {
       else delete parcel.lastMutationAt;
     }
     hydratedAuditChain = state.auditChain;
+    storage.setItem(STORAGE_KEY, JSON.stringify({ ...state, mutations }));
   } catch {
     // A damaged or unavailable preview snapshot must never stop the mock API.
   }

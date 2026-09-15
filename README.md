@@ -95,7 +95,7 @@ packages/
     src/
       types/           # The domain model — single source of truth
       inheritance.ts   # Pure Faraiz + Hindu succession calc
-      mutations.ts     # Pure namjari approval gate (objection window + objections)
+      mutations.ts     # Pure namjari workflow and officer action gates
       ocr.ts           # Pure extraction gate (required fields + register mismatch)
       field-capture.ts # Pure survey filing gate (evidence required per purpose)
       hearings.ts      # Pure ruling gate (a party never heard is never ruled against)
@@ -198,7 +198,7 @@ Set `NEXT_PUBLIC_API_MOCKING=enabled` before starting Next.js only when you want
 `apps/api` builds against, endpoint for endpoint. Endpoint groups: `auth`
 (`/auth/login`, `/refresh`, `/me`), `parcels` (+`/neighbours`, `/history`, dag/khatian/bbox
 search), `documents` (+`/reprocess`, `PATCH /:id/decision`, `PATCH /:id/fields`), `mutations`
-(`PATCH /:id/decision`), `disputes` (`PATCH /:id/status`, `POST /:id/assign-agent`),
+(`PATCH /:id/decision`, `/:id/dcr-payment`, `/:id/flag-dispute`), `disputes` (`PATCH /:id/status`, `POST /:id/assign-agent`),
 `field-reports` (`/assigned`, `/:id`, `/:id/accept`, `/:id/media`, `POST /` to book a survey), `hearings`
 (`PATCH /:id/ruling`), `inheritance/calculate`, and `audit` (`/:entityType/:id`, `/verify`).
 
@@ -395,24 +395,19 @@ axes, so relative position and size stay honest). Hovering a card highlights its
 vice versa. It's a locator, not the primary path — the card grid stays the accessible route
 to a parcel.
 
-### Mutations and the approval gate
+### Mutation workflow
 
-A namjari can't be approved just because an officer clicks approve. `mutations.ts`
-(`approvalGate`) is the pure rule: a **standing objection** blocks approval outright, and an
-**open statutory objection window** blocks it until the window closes. Rejection stays
-available in both cases — an officer can turn down a bad application without waiting out the
-clock. Decided mutations expose no actions at all.
+Namjari uses one status sequence in the citizen, Land Office, Field Agent, and record views:
+`submitted` -> `under-primary-verification` -> `field-investigation` ->
+`field-verification-complete` -> `awaiting-dcr-payment` -> `complete` (or `rejected`).
+Primary verification records deed, Khatian, Khajna-receipt, party, and document checks plus
+officer comments. The officer then assigns a field agent, whose report includes GPS/photo
+evidence and a sketch-map upload. Final approval requires an order sheet and digital-signature
+confirmation, generates a Mutation Khatian number, and opens DCR payment.
 
-The screen renders the *reason* for a hold, not just a disabled button, and the approve action
-takes an inline confirmation naming the incoming owner, since the transfer is what actually
-moves the record.
-
-Treat `approvalGate` the way you treat `inheritance.ts` — the backend must enforce the
-same rule server-side; this copy exists so the UI can explain itself.
-
-The gate returns a **code**, not a sentence (`{ code: "objections", count: 2 }`), and the screen
-words it per locale. Every pure rule module works this way — see
-[Rules explain themselves in both languages](#rules-explain-themselves-in-both-languages).
+Disputes run in parallel: either the officer or field agent can create a linked mediator case.
+The mutation and parcel record show `disputed`, while the assigned officer's workflow remains
+available. The API, mock handlers, and shared rules enforce the same transitions.
 
 ### The OCR queue and the extraction gate
 

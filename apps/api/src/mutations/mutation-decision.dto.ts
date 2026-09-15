@@ -14,4 +14,15 @@ export class MutationDecisionDto {
   @IsOptional()
   @IsString()
   approvalNote?: string;
+
+  @ValidateIf((body: MutationDecisionDto) => body.decision === "approve")
+  @IsString()
+  @MinLength(1)
+  @Matches(/\S/)
+  orderSheet?: string;
+
+  @ValidateIf((body: MutationDecisionDto) => body.decision === "approve")
+  @IsString()
+  @MinLength(1)
+  digitalSignature?: string;
 }

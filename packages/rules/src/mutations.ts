@@ -108,12 +108,16 @@ const VERIFICATION_KEYS: (keyof MutationVerificationChecklist)[] = [
   "deedVerified",
   "landRecordMatched",
   "documentsPresent",
+  "khajnaReceiptVerified",
 ];
 
 const ACTIVE_STATUSES: MutationStatus[] = [
   "submitted",
-  "verification",
-  "objection-period",
+  "under-primary-verification",
+  "field-investigation",
+  "field-verification-complete",
+  "approved",
+  "awaiting-dcr-payment",
 ];
 
 function daysToWindowClose(mutation: Mutation, now: Date): number | null {
@@ -214,7 +218,7 @@ export function mutationActionGate(
   actorId: ID,
   now: Date = new Date(),
 ): MutationActionGate {
-  if (mutation.status === "approved" || mutation.status === "rejected") {
+  if (mutation.status === "approved" || mutation.status === "rejected" || mutation.status === "complete") {
     return {
       canStartVerification: false,
       canCompleteVerification: false,
@@ -239,16 +243,16 @@ export function mutationActionGate(
   }
 
   const canStartVerification = mutation.status === "submitted";
-  const canCompleteVerification = mutation.status === "verification";
+  const canCompleteVerification = mutation.status === "under-primary-verification";
   const canReject = ACTIVE_STATUSES.includes(mutation.status);
 
-  if (mutation.status !== "objection-period") {
+  if (mutation.status !== "field-verification-complete") {
     return {
       canStartVerification,
       canCompleteVerification,
       canApprove: false,
       canReject,
-      hold: { code: "wrong-status", expected: ["objection-period"] },
+      hold: { code: "wrong-status", expected: ["field-verification-complete"] },
       daysToWindowClose: remainingDays,
     };
   }
@@ -260,32 +264,6 @@ export function mutationActionGate(
       canApprove: false,
       canReject,
       hold: { code: "no-recipient" },
-      daysToWindowClose: remainingDays,
-    };
-  }
-
-  const objections = unresolvedObjections(mutation);
-
-  // A standing objection outranks the clock: it has to be settled before the
-  // record moves, even once the window has closed.
-  if (objections.length > 0) {
-    return {
-      canStartVerification,
-      canCompleteVerification,
-      canApprove: false,
-      canReject,
-      hold: { code: "objections", count: objections.length },
-      daysToWindowClose: remainingDays,
-    };
-  }
-
-  if (remainingDays !== null) {
-    return {
-      canStartVerification,
-      canCompleteVerification,
-      canApprove: false,
-      canReject,
-      hold: { code: "objection-window", days: remainingDays },
       daysToWindowClose: remainingDays,
     };
   }
