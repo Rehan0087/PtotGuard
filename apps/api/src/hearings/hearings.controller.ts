@@ -76,6 +76,8 @@ export class HearingsController {
    * the hearing is over that record, so re-sending them would only create a
    * way for the two to disagree.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("mediator")
   @Post()
   @HttpCode(201)
   async convene(@Body() body: ConveneHearingDto, @Req() req: Request) {
@@ -184,6 +186,8 @@ export class HearingsController {
    * decision, not a decision. The ruling that follows is what gets recorded
    * on the ledger, and it carries the sittings with it.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("mediator")
   @Post(":id/sessions")
   @HttpCode(201)
   async recordSession(
@@ -257,6 +261,8 @@ export class HearingsController {
    * mutations decision gate, "already decided" is one of this gate's own
    * blocker codes (RulingBlocker), so no separate pre-check is needed here.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("mediator")
   @Patch(":id/ruling")
   async issueRuling(
     @Param("id") id: string,

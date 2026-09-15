@@ -339,6 +339,8 @@ export class DisputesController {
    * ruling is executed: it unblocks the record for the real transfer
    * channel rather than reimplementing one here.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/execute")
   async execute(@Param("id") id: string, @Body() body: ExecuteRulingDto, @Req() req: Request) {
     const dispute = await this.prisma.dispute.findUnique({ where: { id } });

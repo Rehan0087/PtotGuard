@@ -340,6 +340,17 @@ function unauthorized(message = "Authentication required") {
   return HttpResponse.json({ error: "unauthorized", message }, { status: 401 });
 }
 
+/**
+ * Mirrors @Roles() on the real controller: the same refusal, in the same
+ * shape, so a screen that works against the fixture API works against the
+ * real one and a screen that is refused is refused by both.
+ */
+function requireRole(request: Request, ...roles: User["role"][]) {
+  return roles.includes(currentUser(request).role)
+    ? null
+    : forbidden("This portal is restricted to the assigned role");
+}
+
 function forbidden(message = "This portal is restricted to the assigned role") {
   return HttpResponse.json({ error: "forbidden", message }, { status: 403 });
 }
@@ -610,6 +621,8 @@ export const handlers = [
 
   http.post(`${API}/jurisdictions`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const body = (await request.json()) as Partial<Jurisdiction>;
     const draft = {
       name: (body.name ?? "").trim(),
@@ -639,6 +652,8 @@ export const handlers = [
 
   http.patch(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const target = db.jurisdictions.find((j) => j.id === params.id);
     if (!target) return notFound("Jurisdiction not found");
 
@@ -677,6 +692,8 @@ export const handlers = [
 
   http.delete(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const index = db.jurisdictions.findIndex((j) => j.id === params.id);
     if (index === -1) return notFound("Jurisdiction not found");
 
@@ -968,8 +985,10 @@ export const handlers = [
   }),
 
   // Documents --------------------------------------------------------------
-  http.post(`${API}/documents/:id/reprocess`, async ({ params }) => {
+  http.post(`${API}/documents/:id/reprocess`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     doc.ocrStatus = "processing";
@@ -987,6 +1006,8 @@ export const handlers = [
    */
   http.patch(`${API}/documents/:id/decision`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     const { decision } = (await request.json()) as {
@@ -1039,6 +1060,8 @@ export const handlers = [
   // fields a human keyed in.
   http.patch(`${API}/documents/:id/fields`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     const { fields } = (await request.json()) as { fields: Record<string, string> };
@@ -2022,6 +2045,8 @@ export const handlers = [
 
   http.patch(`${API}/revenue-cases/:id/schedule-hearing`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (!application.paidAt) {
@@ -2135,6 +2160,8 @@ export const handlers = [
   // under-review. Mirrors acquisition.controller.ts.
   http.post(`${API}/acquisition/notice`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as {
       parcelId: string;
@@ -2536,6 +2563,8 @@ export const handlers = [
 
   http.patch(`${API}/service-applications/:id/decision`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (application.status === "draft") {
@@ -2624,6 +2653,8 @@ export const handlers = [
    */
   http.patch(`${API}/disputes/:id/execute`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const dispute = db.disputes.find((d) => d.id === params.id);
     if (!dispute) return notFound("Dispute not found");
 
@@ -3393,6 +3424,8 @@ export const handlers = [
   // Hearings ---------------------------------------------------------------
   http.patch(`${API}/hearings/:id/ruling`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
     const { ruling } = (await request.json()) as { ruling: string };
@@ -3620,6 +3653,8 @@ export const handlers = [
 
   http.post(`${API}/hearings/:id/sessions`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
 
@@ -3696,6 +3731,8 @@ export const handlers = [
   // hearing is over that record. Mirrors hearings.controller.ts's convene().
   http.post(`${API}/hearings`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const body = (await request.json()) as { disputeId: string; hearingDate: string };
     const me = currentUser(request);
 
@@ -4058,6 +4095,8 @@ export const handlers = [
 
   http.patch(`${API}/policies`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const updates = (await request.json()) as Partial<Policy>;
     // Recorded as before/after: a fee or a threshold changing is exactly the
     // kind of thing someone later needs to date precisely.

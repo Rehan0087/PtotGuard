@@ -216,6 +216,8 @@ export class LandTaxController {
   }
 
   /** Record an assisted/counter collection for a landowner in this office. */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Post("collect")
   @HttpCode(201)
   @UseGuards(AccessTokenGuard, RolesGuard)
