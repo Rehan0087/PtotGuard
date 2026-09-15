@@ -262,6 +262,7 @@ export const en = {
       deliberation: "Deliberation",
       ruled: "Ruled",
       appealed: "Appealed",
+      closed: "Closed",
     },
     user: {
       active: "Active",
@@ -327,6 +328,9 @@ export const en = {
     "field-visit-scheduled": "Field visit scheduled",
     "field-visit-completed": "Field survey filed",
     ruled: "Ruling issued",
+    "hearing-adjourned": "Hearing adjourned",
+    "hearing-closed": "Hearing closed without a ruling",
+    "hearing-appealed": "Ruling appealed",
   },
 
   // ── Domain enums that appear as plain text, not badges ───────────────────
@@ -718,6 +722,19 @@ export const en = {
     },
 
     hearing: {
+      actions: "Case actions",
+      adjournTo: "Adjourn to",
+      adjournReason: "Reason (optional)",
+      adjournAction: "Adjourn",
+      adjourned: "Hearing adjourned",
+      moveTo: "Move case to",
+      statusChanged: (status: string) => `Case moved to ${status.toLowerCase()}.`,
+      reassignTo: "Reassign to",
+      pickMediator: "Choose a mediator",
+      reassignAction: "Reassign",
+      reassigned: "Case reassigned",
+      evidence: "Evidence",
+      actionFailed: "Couldn't update this case",
       eyebrow: "Mediation",
       notFound: "That case could not be found.",
       backToCases: "Back to cases",

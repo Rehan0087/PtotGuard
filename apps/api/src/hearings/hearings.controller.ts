@@ -2,10 +2,13 @@ import { randomUUID } from "node:crypto";
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import {
+  hearingTransition,
+  isHearingOpen,
   rulingGate,
   type DisputeParty,
   type Hearing,
   type HearingSession,
+  type HearingStatus,
 } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -17,6 +20,9 @@ import { disputeAudience } from "../disputes/dispute-audience";
 import { ConveneHearingDto } from "./convene-hearing.dto";
 import { IssueRulingDto } from "./issue-ruling.dto";
 import { RecordSessionDto } from "./record-session.dto";
+import { ReassignHearingDto } from "./reassign-hearing.dto";
+import { RescheduleHearingDto } from "./reschedule-hearing.dto";
+import { UpdateHearingStatusDto } from "./update-hearing-status.dto";
 
 /** A hearing still open to sittings — one of these blocks convening another. */
 const OPEN_HEARING_STATUSES = ["scheduled", "in-hearing", "deliberation"];
@@ -311,6 +317,275 @@ export class HearingsController {
             })),
           });
         }
+      }
+
+      return updated;
+    });
+  }
+
+  /**
+   * The rest of a hearing's life: reserving a ruling, reopening for another
+   * sitting, closing without one, and recording an appeal against one.
+   *
+   * `ruled` and `in-hearing` are refused by name — the ruling endpoint writes
+   * the first (along with the ruling text and the dispute's resolution) and a
+   * recorded sitting writes the second. hearingTransition() is the same gate
+   * the mediator's screen asks what to offer.
+   */
+  @Patch(":id/status")
+  async updateStatus(
+    @Param("id") id: string,
+    @Body() body: UpdateHearingStatusDto,
+    @Req() req: Request,
+  ) {
+    const hearing = await this.prisma.hearing.findUnique({ where: { id } });
+    if (!hearing) throw new NotFoundError("Hearing not found");
+
+    const from = hearing.status as HearingStatus;
+    const review = hearingTransition(from, body.status);
+    if (!review.canChange) throw new ValidationError(review.blockers[0], "status");
+
+    const actorId = currentUserId(req);
+    const note = body.note?.trim();
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.hearing.update({
+        where: { id },
+        data: { status: body.status },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "hearing",
+        entityId: id,
+        action: "status-change",
+        actorId,
+        payload: { caseNumber: hearing.caseNumber, from, to: body.status },
+      });
+
+      // Closing and appealing are outcomes the parties are owed; deliberation
+      // and reopening are the mediator's own working state, and stay off the
+      // citizen's timeline.
+      const publicCodes: Partial<Record<HearingStatus, { code: string; title: string }>> = {
+        closed: { code: "hearing-closed", title: "Hearing closed without a ruling" },
+        appealed: { code: "hearing-appealed", title: "Ruling appealed" },
+      };
+      const publicEvent = publicCodes[body.status];
+      const dispute = await tx.dispute.findUnique({ where: { id: hearing.disputeId } });
+
+      if (dispute && publicEvent) {
+        await tx.disputeEvent.create({
+          data: {
+            id: `de-${randomUUID()}`,
+            disputeId: dispute.id,
+            at: now,
+            type: "hearing",
+            title: publicEvent.title,
+            content: { code: publicEvent.code },
+            ...(note ? { description: note } : {}),
+            actorId,
+          },
+        });
+
+        // A case whose hearing ended without a ruling is back with the
+        // mediator, not still listed — otherwise it reads as awaiting a
+        // sitting that will never come.
+        if (
+          body.status === "closed" &&
+          !CLOSED_DISPUTE_STATUSES.includes(dispute.status) &&
+          dispute.status === "hearing-scheduled"
+        ) {
+          await tx.dispute.update({
+            where: { id: dispute.id },
+            data: { status: "in-mediation", updatedAt: now },
+          });
+        }
+
+        const audience = disputeAudience(
+          { filedById: dispute.filedById, parties: dispute.parties as never },
+          actorId,
+        );
+        if (audience.length > 0) {
+          await tx.appNotification.createMany({
+            data: audience.map((userId) => ({
+              id: `n-${randomUUID()}`,
+              userId,
+              at: now,
+              severity: "info",
+              title: publicEvent.title,
+              body: `Case ${dispute.caseNumber}: ${publicEvent.title.toLowerCase()}.`,
+              content: { code: "dispute-status", caseNumber: dispute.caseNumber, status: dispute.status },
+              read: false,
+              href: `/disputes/${dispute.id}`,
+            })),
+          });
+        }
+      }
+
+      return updated;
+    });
+  }
+
+  /**
+   * Adjournment — the most ordinary thing that happens to a hearing, and the
+   * one move the record could not express. The date was writable once, at
+   * convening, and never again.
+   */
+  @Patch(":id/schedule")
+  async reschedule(
+    @Param("id") id: string,
+    @Body() body: RescheduleHearingDto,
+    @Req() req: Request,
+  ) {
+    const hearing = await this.prisma.hearing.findUnique({ where: { id } });
+    if (!hearing) throw new NotFoundError("Hearing not found");
+    if (!isHearingOpen(hearing.status as HearingStatus)) {
+      throw new ValidationError({ code: "already-decided", status: hearing.status }, "status");
+    }
+
+    const hearingDate = new Date(body.hearingDate);
+    if (Number.isNaN(hearingDate.getTime())) {
+      throw new ValidationError({ code: "need-date" }, "hearingDate");
+    }
+
+    const actorId = currentUserId(req);
+    const reason = body.reason?.trim();
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.hearing.update({ where: { id }, data: { hearingDate } });
+
+      await this.audit.append(tx, {
+        entityType: "hearing",
+        entityId: id,
+        action: "update",
+        actorId,
+        payload: {
+          caseNumber: hearing.caseNumber,
+          from: hearing.hearingDate?.toISOString() ?? "",
+          to: hearingDate.toISOString(),
+        },
+      });
+
+      const dispute = await tx.dispute.findUnique({ where: { id: hearing.disputeId } });
+      if (dispute) {
+        await tx.dispute.update({
+          where: { id: dispute.id },
+          data: { hearingDate, updatedAt: now },
+        });
+        await tx.disputeEvent.create({
+          data: {
+            id: `de-${randomUUID()}`,
+            disputeId: dispute.id,
+            at: now,
+            type: "hearing",
+            title: "Hearing adjourned",
+            content: { code: "hearing-adjourned" },
+            ...(reason ? { description: reason } : {}),
+            actorId,
+          },
+        });
+
+        const audience = disputeAudience(
+          { filedById: dispute.filedById, parties: dispute.parties as never },
+          actorId,
+        );
+        if (audience.length > 0) {
+          await tx.appNotification.createMany({
+            data: audience.map((userId) => ({
+              id: `n-${randomUUID()}`,
+              userId,
+              at: now,
+              severity: "info",
+              title: "Hearing adjourned",
+              body: `Case ${dispute.caseNumber} has been adjourned to a new date.`,
+              content: { code: "hearing-scheduled", caseNumber: dispute.caseNumber },
+              read: false,
+              href: `/disputes/${dispute.id}`,
+            })),
+          });
+        }
+      }
+
+      return updated;
+    });
+  }
+
+  /**
+   * Handing the case to another mediator — leave, recusal, or workload. The
+   * dispute's own assignment moves with it, because that is what puts the
+   * case on the new mediator's board and takes it off the old one's.
+   */
+  @Patch(":id/mediator")
+  async reassign(
+    @Param("id") id: string,
+    @Body() body: ReassignHearingDto,
+    @Req() req: Request,
+  ) {
+    const hearing = await this.prisma.hearing.findUnique({ where: { id } });
+    if (!hearing) throw new NotFoundError("Hearing not found");
+    if (!isHearingOpen(hearing.status as HearingStatus)) {
+      throw new ValidationError({ code: "already-decided", status: hearing.status }, "status");
+    }
+
+    const mediator = await this.prisma.user.findUnique({ where: { id: body.mediatorId } });
+    // Missing, not a mediator, and suspended are one answer: a case cannot be
+    // handed to them, and which of the three it is tells a caller nothing
+    // they are entitled to know.
+    if (!mediator || mediator.role !== "mediator" || mediator.status !== "active") {
+      throw new NotFoundError("Mediator not found");
+    }
+    if (mediator.id === hearing.mediatorId) {
+      throw new ConflictError("This case is already with that mediator.");
+    }
+
+    const actorId = currentUserId(req);
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.hearing.update({
+        where: { id },
+        data: { mediatorId: mediator.id },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "hearing",
+        entityId: id,
+        action: "assign",
+        actorId,
+        payload: { caseNumber: hearing.caseNumber, from: hearing.mediatorId, to: mediator.id },
+      });
+
+      const dispute = await tx.dispute.findUnique({ where: { id: hearing.disputeId } });
+      if (dispute) {
+        await tx.dispute.update({
+          where: { id: dispute.id },
+          data: { assignedMediatorId: mediator.id, updatedAt: now },
+        });
+        await tx.disputeEvent.create({
+          data: {
+            id: `de-${randomUUID()}`,
+            disputeId: dispute.id,
+            at: now,
+            type: "assignment",
+            title: `Assigned to ${mediator.name}`,
+            content: { code: "assigned", to: mediator.name },
+            actorId,
+          },
+        });
+        await tx.appNotification.create({
+          data: {
+            id: `n-${randomUUID()}`,
+            userId: mediator.id,
+            at: now,
+            severity: "info",
+            title: "Case assigned to you",
+            body: `Case ${dispute.caseNumber} has been handed to you for mediation.`,
+            content: { code: "dispute-assigned", caseNumber: dispute.caseNumber },
+            read: false,
+            href: `/cases/${id}`,
+          },
+        });
       }
 
       return updated;

@@ -241,6 +241,7 @@ export const bn: Dictionary = {
       deliberation: "বিবেচনাধীন",
       ruled: "রায় হয়েছে",
       appealed: "আপিলকৃত",
+      closed: "বন্ধ",
     },
     user: {
       active: "সক্রিয়",
@@ -305,6 +306,9 @@ export const bn: Dictionary = {
     "field-visit-scheduled": "সরেজমিন পরিদর্শন নির্ধারিত",
     "field-visit-completed": "সরেজমিন প্রতিবেদন জমা হয়েছে",
     ruled: "রায় দেওয়া হয়েছে",
+    "hearing-adjourned": "শুনানি মুলতবি",
+    "hearing-closed": "রায় ছাড়াই শুনানি বন্ধ",
+    "hearing-appealed": "রায়ের বিরুদ্ধে আপিল",
   },
 
   serviceApplicationEvents: {
@@ -687,6 +691,19 @@ export const bn: Dictionary = {
     },
 
     hearing: {
+      actions: "মামলার কার্যক্রম",
+      adjournTo: "যে তারিখে মুলতবি",
+      adjournReason: "কারণ (ঐচ্ছিক)",
+      adjournAction: "মুলতবি রাখুন",
+      adjourned: "শুনানি মুলতবি হয়েছে",
+      moveTo: "মামলাটি নিয়ে যান",
+      statusChanged: (status: string) => `মামলাটি এখন ${status}।`,
+      reassignTo: "অন্য মধ্যস্থতাকারীকে দিন",
+      pickMediator: "মধ্যস্থতাকারী বাছুন",
+      reassignAction: "হস্তান্তর করুন",
+      reassigned: "মামলা হস্তান্তর হয়েছে",
+      evidence: "প্রমাণাদি",
+      actionFailed: "মামলাটি হালনাগাদ করা যায়নি",
       eyebrow: "মধ্যস্থতা",
       notFound: "এই মামলাটি পাওয়া যায়নি।",
       backToCases: "মামলার তালিকায় ফিরুন",
