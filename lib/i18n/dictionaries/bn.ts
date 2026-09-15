@@ -307,7 +307,24 @@ export const bn: Dictionary = {
     ruled: "রায় দেওয়া হয়েছে",
   },
 
+  serviceApplicationEvents: {
+    created: "আবেদন শুরু হয়েছে",
+    submitted: "জমা দেওয়া হয়েছে",
+    "payment-recorded": "পরিশোধ লিপিবদ্ধ হয়েছে",
+    "status-change": "অবস্থা হালনাগাদ হয়েছে",
+    "document-added": "দলিল যুক্ত হয়েছে",
+    decided: "সিদ্ধান্ত লিপিবদ্ধ হয়েছে",
+  },
   domain: {
+    serviceType: {
+      "land-tax": "ভূমি উন্নয়ন কর",
+      "land-admin": "ভূমি প্রশাসন",
+      "revenue-case": "রাজস্ব মামলা",
+      "lease-settlement": "ইজারা ও বন্দোবস্ত",
+      acquisition: "অধিগ্রহণ ও হুকুমদখল",
+      "info-bank-request": "ভূমি তথ্য ব্যাংক",
+      appointment: "সাক্ষাৎকার",
+    },
     jurisdictionLevel: {
       division: "বিভাগ",
       district: "জেলা",
@@ -455,6 +472,25 @@ export const bn: Dictionary = {
   },
 
   pages: {
+    application: {
+      description: "এই আবেদনের বিপরীতে যা যা লিপিবদ্ধ হয়েছে, ঘটনাক্রম অনুসারে।",
+      timeline: "আবেদনের ঘটনাক্রম",
+      noEvents: "এখনও কিছু লিপিবদ্ধ হয়নি।",
+      details: "বিবরণ",
+      service: "সেবা",
+      fee: "ফি",
+      unpaid: "এখনও পরিশোধ হয়নি",
+      paidOn: "পরিশোধিত",
+      method: "যেভাবে পরিশোধ",
+      transaction: "লেনদেন",
+      submittedOn: "জমা",
+      decidedOn: "সিদ্ধান্ত",
+      parcel: "ভূমি রেকর্ড",
+      back: "ফিরে যান",
+      notFoundTitle: "আবেদন পাওয়া যায়নি",
+      notFoundBody: "এটি প্রত্যাহার করা হয়ে থাকতে পারে, বা লিংকটি ভুল।",
+      methods: { bkash: "বিকাশ", nagad: "নগদ", card: "কার্ড" },
+    },
 
     disputes: {
       description: "আপনার দাখিল করা প্রতিটি মামলা, বর্তমান পর্যায় ও সর্বশেষ হালনাগাদসহ।",

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
@@ -310,7 +311,9 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <IdChip>{application.applicationNo}</IdChip>
+            <Link href={`/applications/${application.id}`} className="hover:underline">
+                <IdChip>{application.applicationNo}</IdChip>
+              </Link>
             <span className="text-sm text-muted-foreground">
               {t.pages.leaseSettlement.landUse[isAgricultural ? "agricultural" : "nonAgricultural"]}
             </span>
@@ -429,7 +432,9 @@ function QueueCard({ application }: { application: ServiceApplication }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <IdChip>{application.applicationNo}</IdChip>
+            <Link href={`/applications/${application.id}`} className="hover:underline">
+                <IdChip>{application.applicationNo}</IdChip>
+              </Link>
             <span className="text-sm font-medium text-foreground">
               {t.pages.leaseSettlement.landUse[isAgricultural ? "agricultural" : "nonAgricultural"]}
             </span>

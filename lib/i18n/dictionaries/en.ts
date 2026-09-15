@@ -330,7 +330,24 @@ export const en = {
   },
 
   // ── Domain enums that appear as plain text, not badges ───────────────────
+  serviceApplicationEvents: {
+    created: "Application started",
+    submitted: "Submitted",
+    "payment-recorded": "Payment recorded",
+    "status-change": "Status updated",
+    "document-added": "Document added",
+    decided: "Decision recorded",
+  },
   domain: {
+    serviceType: {
+      "land-tax": "Land development tax",
+      "land-admin": "Land administration",
+      "revenue-case": "Revenue case",
+      "lease-settlement": "Lease & settlement",
+      acquisition: "Acquisition & requisition",
+      "info-bank-request": "Land information bank",
+      appointment: "Appointment",
+    },
     jurisdictionLevel: {
       division: "Division",
       district: "District",
@@ -485,6 +502,25 @@ export const en = {
   } as Record<string, string | undefined>,
 
   pages: {
+    application: {
+      description: "Everything recorded against this application, in the order it happened.",
+      timeline: "Application timeline",
+      noEvents: "Nothing has been recorded yet.",
+      details: "Details",
+      service: "Service",
+      fee: "Fee",
+      unpaid: "Not paid yet",
+      paidOn: "Paid",
+      method: "Paid with",
+      transaction: "Transaction",
+      submittedOn: "Submitted",
+      decidedOn: "Decided",
+      parcel: "Land record",
+      back: "Back",
+      notFoundTitle: "Application not found",
+      notFoundBody: "It may have been withdrawn, or this link may be wrong.",
+      methods: { bkash: "bKash", nagad: "Nagad", card: "Card" },
+    },
 
     disputes: {
       description: "Every case you've filed, with its current stage and latest update.",
