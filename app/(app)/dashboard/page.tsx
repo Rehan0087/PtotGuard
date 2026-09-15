@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   Activity,
+  Building2,
   ArrowRight,
   Banknote,
   Bell,
@@ -15,9 +16,11 @@ import {
   ScanLine,
   Scale,
   ShieldAlert,
+  ShieldCheck,
   Sprout,
   Upload,
   UserRoundSearch,
+  Users,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatTile } from "@/components/stat-tile";
@@ -29,11 +32,13 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
+import { sentenceCase } from "@/lib/format";
 import { useFmt } from "@/lib/i18n/format";
 import { useNotificationText } from "@/lib/i18n/content";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import {
+  useAdminDashboard,
   useLandOfficerDashboard,
   useLandTaxCollection,
   useRole,
@@ -451,6 +456,154 @@ function LandOfficerDashboard() {
   );
 }
 
+/**
+ * The administrator's landing view.
+ *
+ * Oversight rather than a worklist: an administrator does not decide
+ * mutations or rule on disputes, so the queue numbers are there to show
+ * where the system is backing up, and only the three surfaces they actually
+ * govern are links.
+ */
+function AdminDashboard() {
+  const t = useT();
+  const f = useFmt();
+  const a = t.pages.dashboard.admin;
+  const { data, isLoading } = useAdminDashboard();
+
+  if (isLoading || !data) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-16 rounded-xl" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const { queues, accounts, ledger, jurisdictionCount, recentAudit } = data;
+  const tiles: { label: string; value: number; icon: typeof Activity; tone?: "marker" | "flagged" }[] = [
+    { label: a.serviceApplications, value: queues.serviceApplications, icon: ClipboardCheck },
+    { label: a.mutations, value: queues.mutations, icon: GitBranch },
+    { label: a.disputes, value: queues.disputes, icon: Scale, tone: "flagged" },
+    { label: a.hearings, value: queues.hearings, icon: CalendarClock },
+    { label: a.fieldReports, value: queues.fieldReports, icon: Map },
+    { label: a.documentsToVerify, value: queues.documentsToVerify, icon: FileWarning, tone: "marker" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow={t.nav.portals.administration}
+        title={t.nav.dashboard}
+        description={a.description}
+      />
+
+      <section className="space-y-3">
+        <h2 className="font-heading text-base font-semibold text-foreground">{a.queuesTitle}</h2>
+        <div className="settle-stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {tiles.map((tile) => (
+            <StatTile
+              key={tile.label}
+              label={tile.label}
+              value={f.number(tile.value)}
+              icon={tile.icon}
+              tone={tile.value === 0 ? "default" : (tile.tone ?? "default")}
+            />
+          ))}
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="gap-3 px-4 lg:col-span-1">
+          <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+            <Users className="size-4 text-marker" />
+            {a.accountsTitle}
+          </h2>
+          <dl className="grid gap-2 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{a.active}</dt>
+              <dd className="tabular font-medium text-foreground">{f.number(accounts.active)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{a.suspended}</dt>
+              <dd className="tabular font-medium text-foreground">{f.number(accounts.suspended)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{a.invited}</dt>
+              <dd className="tabular font-medium text-foreground">{f.number(accounts.invited)}</dd>
+            </div>
+          </dl>
+          <ul className="grid gap-1 border-t border-border pt-3 text-xs text-muted-foreground">
+            {(Object.keys(accounts.byRole) as (keyof typeof accounts.byRole)[]).map((role) => (
+              <li key={role} className="flex justify-between gap-3">
+                <span>{t.roles[role]}</span>
+                <span className="tabular">{f.number(accounts.byRole[role])}</span>
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/users"
+            className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
+          >
+            {a.manageAccounts} <ArrowRight className="size-3.5" />
+          </Link>
+        </Card>
+
+        <Card className="gap-3 px-4 lg:col-span-2">
+          <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+            <ShieldCheck className="size-4 text-marker" />
+            {a.ledgerTitle}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {a.events(ledger.events)}
+            {ledger.lastAt ? ` · ${a.lastEntry(f.dateTime(ledger.lastAt))}` : ""}
+          </p>
+
+          <ul className="grid gap-2 border-t border-border pt-3">
+            {recentAudit.map((event) => (
+              <li key={event.id} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="text-foreground">
+                  {t.domain.auditAction[event.action as keyof typeof t.domain.auditAction] ??
+                    sentenceCase(event.action)}{" "}
+                  <span className="text-muted-foreground">
+                    {event.entityType}/{event.entityId}
+                  </span>
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {f.dateTime(event.createdAt)}
+                  {event.actorName ? ` · ${event.actorName}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex flex-wrap items-center gap-4 border-t border-border pt-3">
+            <Link
+              href="/audit"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              {a.openLedger} <ArrowRight className="size-3.5" />
+            </Link>
+            <Link
+              href="/jurisdictions"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              <Building2 className="size-3.5" />
+              {a.jurisdictions(jurisdictionCount)}
+            </Link>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
-  return useRole() === "land-office" ? <LandOfficerDashboard /> : <CitizenDashboard />;
+  const role = useRole();
+  if (role === "land-office") return <LandOfficerDashboard />;
+  if (role === "admin") return <AdminDashboard />;
+  return <CitizenDashboard />;
 }

@@ -3783,6 +3783,50 @@ export const handlers = [
     return HttpResponse.json(await verifyAuditChain());
   }),
 
+  /** Mirrors AdminDashboardController — counts, not queues, and no chain walk. */
+  http.get(`${API}/admin/dashboard`, async ({ request }) => {
+    await latency();
+    if (currentUser(request).role !== "admin") {
+      return forbidden("Administrator access required.");
+    }
+    const CLOSED_SERVICES = ["approved", "rejected", "withdrawn"];
+    const TERMINAL_MUTATIONS = ["complete", "rejected"];
+    const CLOSED_DISPUTES = ["resolved", "rejected", "withdrawn"];
+    const CLOSED_FIELD_REPORTS = ["completed", "cancelled"];
+    const OPEN_HEARINGS = ["scheduled", "in-hearing", "deliberation"];
+    const ROLE_LIST = ["citizen", "land-office", "field-agent", "mediator", "admin"] as const;
+
+    const chain = await getAuditChain();
+    const newest = [...chain].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const byStatus = (status: string) => db.users.filter((u) => u.status === status).length;
+
+    return HttpResponse.json({
+      queues: {
+        serviceApplications: db.serviceApplications.filter((a) => !CLOSED_SERVICES.includes(a.status)).length,
+        mutations: db.mutations.filter((m) => !TERMINAL_MUTATIONS.includes(m.status)).length,
+        disputes: db.disputes.filter((d) => !CLOSED_DISPUTES.includes(d.status)).length,
+        hearings: db.hearings.filter((h) => OPEN_HEARINGS.includes(h.status)).length,
+        fieldReports: db.fieldReports.filter((r) => !CLOSED_FIELD_REPORTS.includes(r.status)).length,
+        documentsToVerify: db.documents.filter((d) => d.verificationStatus === "unverified").length,
+      },
+      accounts: {
+        total: db.users.length,
+        active: byStatus("active"),
+        suspended: byStatus("suspended"),
+        invited: byStatus("invited"),
+        byRole: Object.fromEntries(
+          ROLE_LIST.map((role) => [role, db.users.filter((u) => u.role === role).length]),
+        ),
+      },
+      ledger: {
+        events: chain.length,
+        ...(newest[0] ? { lastAt: newest[0].createdAt } : {}),
+      },
+      jurisdictionCount: db.jurisdictions.length,
+      recentAudit: newest.slice(0, 5),
+    });
+  }),
+
   // The entity types actually present, so the filter offers real options.
   http.get(`${API}/audit/entity-types`, async () => {
     await latency();

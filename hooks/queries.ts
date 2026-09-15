@@ -31,6 +31,7 @@ import type {
   LandTaxHolding,
   LandTaxCollection,
   LandOfficerDashboard,
+  AdminDashboard,
   FieldReportDetail,
   HearingDetail,
   InheritanceInput,
@@ -750,6 +751,16 @@ export function useLandTaxCollection() {
   return useQuery({
     queryKey: ["land-tax-collection", role],
     queryFn: () => api.get<LandTaxCollection>("/land-tax/collection"),
+  });
+}
+
+/** The administrator's landing view. Counts and the last few ledger entries. */
+export function useAdminDashboard() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["admin-dashboard", role],
+    queryFn: () => api.get<AdminDashboard>("/admin/dashboard"),
+    enabled: role === "admin",
   });
 }
 

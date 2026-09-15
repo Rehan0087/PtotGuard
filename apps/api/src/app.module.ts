@@ -24,6 +24,7 @@ import { HearingsModule } from "./hearings/hearings.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
+import { AdminDashboardModule } from "./admin-dashboard/admin-dashboard.module";
 import { LandOfficeDashboardModule } from "./land-office-dashboard/land-office-dashboard.module";
 
 /**
@@ -54,6 +55,7 @@ import { LandOfficeDashboardModule } from "./land-office-dashboard/land-office-d
     NotificationsModule,
     AuditModule,
     AuthModule,
+    AdminDashboardModule,
     LandOfficeDashboardModule,
   ],
   controllers: [HealthController],
