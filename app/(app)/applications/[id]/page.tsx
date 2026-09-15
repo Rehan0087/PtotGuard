@@ -1,19 +1,26 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, MapPin, SearchX } from "lucide-react";
+import { ArrowLeft, CreditCard, MapPin, SearchX, Smartphone } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import { useServiceApplicationEventTitle } from "@/lib/i18n/content";
-import { useServiceApplication } from "@/hooks/queries";
+import {
+  usePayServiceApplication,
+  useServiceApplication,
+  useSession,
+} from "@/hooks/queries";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -42,6 +49,9 @@ export default function ApplicationTrackingPage() {
   const a = t.pages.application;
   const eventTitle = useServiceApplicationEventTitle();
   const { data, isLoading } = useServiceApplication(id);
+  const { data: session } = useSession();
+  const pay = usePayServiceApplication(id ?? "");
+  const [method, setMethod] = useState<"bkash" | "nagad" | "card">("bkash");
 
   if (isLoading) {
     return (
@@ -123,6 +133,47 @@ export default function ApplicationTrackingPage() {
         </div>
 
         <div className="space-y-6">
+          {/* The one state this screen could show but never resolve: a fee
+              stamped at filing whose payment never went through. Every
+              service pays on apply, so this is the retry, not the norm. */}
+          {application.feeAmount != null &&
+          !application.paidAt &&
+          session?.user.id === application.applicantId ? (
+            <Card className="gap-3 px-4">
+              <h3 className="font-heading text-sm font-semibold text-foreground">{a.payTitle}</h3>
+              <p className="text-xs text-muted-foreground">{a.payBody}</p>
+              <div className="flex flex-wrap gap-2">
+                {(["bkash", "nagad", "card"] as const).map((option) => {
+                  const Icon = option === "card" ? CreditCard : Smartphone;
+                  return (
+                    <Button
+                      key={option}
+                      type="button"
+                      size="sm"
+                      variant={method === option ? "default" : "outline"}
+                      onClick={() => setMethod(option)}
+                    >
+                      <Icon className="size-3.5" />
+                      {methods[option] ?? option}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                size="sm"
+                disabled={pay.isPending}
+                onClick={() =>
+                  pay.mutate(method, {
+                    onSuccess: () => toast.success(a.paid),
+                    onError: () => toast.error(a.payFailed),
+                  })
+                }
+              >
+                {a.payAction(f.money({ amount: application.feeAmount ?? 0, currency: "BDT" }))}
+              </Button>
+            </Card>
+          ) : null}
+
           <Card className="gap-3 px-4">
             <h3 className="font-heading text-sm font-semibold text-foreground">{a.details}</h3>
             <dl className="grid gap-2.5 text-sm">

@@ -12,7 +12,6 @@ import { useSessionStore } from "@/store/session";
 import type {
   Paginated,
   Parcel,
-  OwnershipRecord,
   Dispute,
   Mutation as LandMutation,
   ServiceApplication,
@@ -141,14 +140,6 @@ export function useParcelNeighbours(id: string | undefined) {
   return useQuery({
     queryKey: ["parcel-neighbours", id],
     queryFn: () => api.get<Parcel[]>(`/parcels/${id}/neighbours`),
-    enabled: Boolean(id),
-  });
-}
-
-export function useParcelHistory(id: string | undefined) {
-  return useQuery({
-    queryKey: ["parcel-history", id],
-    queryFn: () => api.get<OwnershipRecord[]>(`/parcels/${id}/history`),
     enabled: Boolean(id),
   });
 }
@@ -370,15 +361,6 @@ export function useServiceApplication(id: string | undefined) {
   });
 }
 
-export function useCreateServiceApplication() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Partial<ServiceApplication>) =>
-      api.post<ServiceApplication>("/service-applications", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
-  });
-}
-
 function useServiceApplicationWrite(id: string) {
   const qc = useQueryClient();
   return {
@@ -387,14 +369,6 @@ function useServiceApplicationWrite(id: string) {
       qc.invalidateQueries({ queryKey: ["service-applications"] });
     },
   };
-}
-
-export function useSubmitServiceApplication(id: string) {
-  const { invalidate } = useServiceApplicationWrite(id);
-  return useMutation({
-    mutationFn: () => api.patch<ServiceApplication>(`/service-applications/${id}/submit`),
-    onSuccess: invalidate,
-  });
 }
 
 export function usePayServiceApplication(id: string) {
@@ -588,14 +562,6 @@ export function useDocuments(params: ListParams = {}) {
       );
       return working ? 2500 : false;
     },
-  });
-}
-
-export function useDocument(id: string | undefined) {
-  return useQuery({
-    queryKey: ["document", id],
-    queryFn: () => api.get<LandDocument>(`/documents/${id}`),
-    enabled: Boolean(id),
   });
 }
 
@@ -956,14 +922,6 @@ export function useAuditEntityTypes() {
   return useQuery({
     queryKey: ["audit-entity-types"],
     queryFn: () => api.get<string[]>("/audit/entity-types"),
-  });
-}
-
-export function useAuditTrail(entityType: string | undefined, id: string | undefined) {
-  return useQuery({
-    queryKey: ["audit", entityType, id],
-    queryFn: () => api.get<AuditEvent[]>(`/audit/${entityType}/${id}`),
-    enabled: Boolean(entityType && id),
   });
 }
 

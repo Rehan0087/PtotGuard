@@ -477,6 +477,11 @@ export const bn: Dictionary = {
 
   pages: {
     application: {
+      payTitle: "এই ফি পরিশোধ করুন",
+      payBody: "আবেদনের সময় ফি নির্ধারিত হয়েছিল, কিন্তু পরিশোধ সম্পন্ন হয়নি।",
+      payAction: (amount: string) => `${amount} পরিশোধ করুন`,
+      paid: "পরিশোধ লিপিবদ্ধ হয়েছে",
+      payFailed: "পরিশোধ সম্পন্ন হয়নি",
       description: "এই আবেদনের বিপরীতে যা যা লিপিবদ্ধ হয়েছে, ঘটনাক্রম অনুসারে।",
       timeline: "আবেদনের ঘটনাক্রম",
       noEvents: "এখনও কিছু লিপিবদ্ধ হয়নি।",
