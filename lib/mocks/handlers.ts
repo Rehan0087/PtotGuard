@@ -3885,6 +3885,9 @@ export const handlers = [
   /** Mirrors UsersController.invite(). */
   http.post(`${API}/users`, async ({ request }) => {
     await latency();
+    const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
+
     const body = (await request.json()) as Partial<{
       name: string;
       email: string;
@@ -3903,7 +3906,6 @@ export const handlers = [
       return notFound("Jurisdiction not found");
     }
 
-    const me = currentUser(request);
     const user: User = {
       id: `usr-${Math.random().toString(36).slice(2, 10)}`,
       name: body.name.trim(),
@@ -3939,10 +3941,11 @@ export const handlers = [
     const user = db.users.find((u) => u.id === params.id);
     if (!user) return notFound("User not found");
 
+    const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
+
     const review = passwordResetGate({ status: user.status });
     if (!review.canReset) return unprocessable({ status: review.blockers[0] });
-
-    const me = currentUser(request);
     await appendAudit({
       entityType: "user",
       entityId: user.id,
@@ -3968,6 +3971,7 @@ export const handlers = [
     }>;
 
     const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
     if (body.status === "suspended" && user.id === me.id) {
       return conflict("You cannot suspend your own account.");
     }

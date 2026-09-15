@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import {
   passwordResetGate,
@@ -7,6 +18,9 @@ import {
   type Role,
   type UserStatus,
 } from "@plotguard/rules";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -83,6 +97,19 @@ export class UsersController {
    * no real auth system behind them. Role changes and account creation stay
    * out — both need vetting this demo has no way to do honestly.
    */
+  /**
+   * Guarded per-method rather than per-controller: the two reads below stay
+   * open because other portals need them — a mediator lists mediators to hand
+   * a case over, a citizen searches for a transfer recipient — while every
+   * write here is administration.
+   *
+   * The guard also fixes who the ledger blames. currentUserId() falls back to
+   * the dev role header and defaults to citizen, so an unguarded write from
+   * the browser recorded the wrong actor: a verified token identity is what
+   * makes the entry true.
+   */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("admin")
   @Patch(":id")
   async update(@Param("id") id: string, @Body() body: UpdateUserDto, @Req() req: Request) {
     const user = await this.prisma.user.findUnique({ where: { id } });
@@ -147,6 +174,8 @@ export class UsersController {
    * — the invitation is handed over, not emailed. Signing in with it is what
    * turns the invitation into an account.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("admin")
   @Post()
   @HttpCode(201)
   async invite(@Body() body: InviteUserDto, @Req() req: Request) {
@@ -195,6 +224,8 @@ export class UsersController {
    * A new temporary password for somebody locked out. Same stand-in as the
    * invitation: handed over, not emailed, and shown once.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("admin")
   @Post(":id/password-reset")
   @HttpCode(200)
   async resetPassword(@Param("id") id: string, @Req() req: Request) {
