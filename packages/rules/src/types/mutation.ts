@@ -9,10 +9,13 @@ export type MutationType =
 
 export type MutationStatus =
   | "submitted"
-  | "verification"
-  | "objection-period"
+  | "under-primary-verification"
+  | "field-investigation"
+  | "field-verification-complete"
   | "approved"
-  | "rejected";
+  | "rejected"
+  | "awaiting-dcr-payment"
+  | "complete";
 
 export interface MutationVerificationChecklist {
   applicantVerified: boolean;
@@ -22,6 +25,7 @@ export interface MutationVerificationChecklist {
   deedVerified: boolean;
   landRecordMatched: boolean;
   documentsPresent: boolean;
+  khajnaReceiptVerified: boolean;
 }
 
 export type MutationObjectionStatus = "open" | "resolved";
@@ -63,6 +67,9 @@ export interface Mutation {
   requestedById: ID;
   requestedAt: ISODateString;
   assignedOfficerId?: ID;
+  /** Parallel case flag; it never replaces or pauses the workflow status. */
+  disputeId?: ID;
+  fieldReportId?: ID;
   documentIds: ID[];
   objections: MutationObjection[];
   fee?: Money;
@@ -90,6 +97,10 @@ export interface Mutation {
   rejectedAt?: ISODateString;
   rejectedById?: ID;
   rejectionReason?: string;
+  orderSheet?: string;
+  digitalSignature?: string;
+  mutationKhatianNumber?: string;
+  dcrPaidAt?: ISODateString;
   decidedAt?: ISODateString;
   createdAt?: ISODateString;
   updatedAt?: ISODateString;

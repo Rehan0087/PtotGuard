@@ -33,6 +33,7 @@ import {
   useCompleteMutationVerification,
   useMutations,
   useMutationDecision,
+  usePayMutationDcr,
   useRole,
   useSession,
   useStartMutationVerification,
@@ -47,19 +48,25 @@ import type { Mutation as LandMutation, MutationStatus } from "@/lib/types";
 
 const MUTATION_STATUSES = [
   "submitted",
-  "verification",
-  "objection-period",
+  "under-primary-verification",
+  "field-investigation",
+  "field-verification-complete",
   "approved",
   "rejected",
+  "awaiting-dcr-payment",
+  "complete",
 ] as const satisfies readonly MutationStatus[];
 
 const STATUS_FILTERS = [
   "all",
   "submitted",
-  "verification",
-  "objection-period",
+  "under-primary-verification",
+  "field-investigation",
+  "field-verification-complete",
   "approved",
   "rejected",
+  "awaiting-dcr-payment",
+  "complete",
 ] as const;
 
 const SCOPE_FILTERS = ["all", "assigned"] as const;
@@ -160,6 +167,7 @@ function MutationCard({
         <div className="flex items-center gap-2">
           <IdChip icon={MapPin}>{mutation.parcelDagNo}</IdChip>
           <StatusMetaBadge meta={s.mutation[mutation.status]} />
+          {mutation.disputeId ? <StatusMetaBadge meta={s.registry.disputed} /> : null}
         </div>
       </div>
 
@@ -337,7 +345,8 @@ function MyMutationCard({ mutation }: { mutation: LandMutation }) {
   const f = useFmt();
   const s = useStatusMeta();
   const gate = approvalGate(mutation);
-  const decided = mutation.status === "approved" || mutation.status === "rejected";
+  const payDcr = usePayMutationDcr(mutation.id);
+  const decided = mutation.status === "complete" || mutation.status === "rejected";
 
   return (
     <Card className="gap-4 px-5">
@@ -361,6 +370,7 @@ function MyMutationCard({ mutation }: { mutation: LandMutation }) {
         <div className="flex items-center gap-2">
           <IdChip icon={MapPin}>{mutation.parcelDagNo}</IdChip>
           <StatusMetaBadge meta={s.mutation[mutation.status]} />
+          {mutation.disputeId ? <StatusMetaBadge meta={s.registry.disputed} /> : null}
         </div>
       </div>
 
@@ -438,6 +448,12 @@ function MyMutationCard({ mutation }: { mutation: LandMutation }) {
         >
           {t.pages.mutations.viewParcel}
         </Link>
+        {mutation.status === "awaiting-dcr-payment" ? (
+          <Button size="sm" disabled={payDcr.isPending} onClick={() => payDcr.mutate()}>
+            {payDcr.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {t.pages.mutations.payDcr}
+          </Button>
+        ) : null}
       </div>
     </Card>
   );

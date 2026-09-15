@@ -15,6 +15,10 @@ export class BookFieldSurveyDto {
   @IsString()
   disputeId?: string;
 
+  @IsOptional()
+  @IsString()
+  mutationId?: string;
+
   @IsIn(PURPOSES)
   purpose!: (typeof PURPOSES)[number];
 

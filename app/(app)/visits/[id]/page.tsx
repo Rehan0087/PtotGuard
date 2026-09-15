@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Camera, Calendar, Crosshair, Image as ImageIcon, MapPin, Navigation, Ruler, Send, WifiOff } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, Crosshair, FileUp, Image as ImageIcon, MapPin, Navigation, Ruler, Send, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -14,11 +14,12 @@ import { BoundaryWalkMap } from "@/components/boundary-walk-map";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useFieldReport, useAddFieldReportMedia, useAcceptFieldReport, useUpdateFieldReport } from "@/hooks/queries";
+import { useFieldReport, useAddFieldReportMedia, useAcceptFieldReport, useUpdateFieldReport, useFlagFieldReportDispute } from "@/hooks/queries";
 import { useBoundaryWalk } from "@/hooks/use-boundary-walk";
 import { filingReview, type FilingBlocker } from "@plotguard/rules";
 import { formatCoord } from "@/lib/format";
@@ -52,8 +53,11 @@ export default function CapturePage() {
   const addMedia = useAddFieldReportMedia(id);
   const acceptCase = useAcceptFieldReport();
   const updateReport = useUpdateFieldReport(id);
+  const flagDispute = useFlagFieldReportDispute(id);
   const [caption, setCaption] = useState("");
   const [notes, setNotes] = useState<string | null>(null);
+  const [disputeFound, setDisputeFound] = useState(false);
+  const [disputeDescription, setDisputeDescription] = useState("");
 
   useEffect(() => {
     if (!storedAgentId && data?.report.assignedAgentId) {
@@ -90,9 +94,20 @@ export default function CapturePage() {
     await addMedia.mutateAsync({ photo: { url: "", caption: caption.trim() || undefined } });
     setCaption("");
   };
+  const addSketchMap = async (selected: File | undefined) => {
+    if (!selected) return;
+    const url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(selected);
+    });
+    await addMedia.mutateAsync({ sketchMap: { url, fileName: selected.name } });
+  };
   const file = async () => {
     try {
       await walk.complete(draftNotes);
+      if (disputeFound) await flagDispute.mutateAsync(disputeDescription.trim() || draftNotes);
       toast.success(t.pages.capture.filed);
       if (walk.online) void refetch();
     } catch { toast.error(t.common.somethingWentWrong); }
@@ -137,8 +152,17 @@ export default function CapturePage() {
     </div>
 
     <Card className="gap-3 px-4">
+      <div className="space-y-2">
+        <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground"><FileUp className="size-4 text-marker" />{t.pages.capture.sketchMap}</h2>
+        <p className="text-xs text-muted-foreground">{report.sketchMapFileName ? t.pages.capture.sketchMapUploaded(report.sketchMapFileName) : t.pages.capture.sketchMapHint}</p>
+        {!closed ? <Input type="file" accept="image/*,.pdf" disabled={!active || addMedia.isPending || !walk.online} onChange={(event) => void addSketchMap(event.target.files?.[0])} /> : null}
+      </div>
+    </Card>
+
+    <Card className="gap-3 px-4">
       <div><h2 className="text-sm font-medium text-foreground">{t.pages.capture.notes}</h2><p className="text-xs text-muted-foreground">{t.pages.capture.notesHint}</p></div>
       {closed ? <p className="rounded-md bg-secondary/50 px-3 py-2 text-sm text-secondary-foreground">{report.notes ?? t.common.notAvailable}</p> : <Textarea value={draftNotes} onChange={(event) => setNotes(event.target.value)} placeholder={t.pages.capture.notesPlaceholder} rows={5} />}
+      {!closed && report.mutationId ? <div className="space-y-2 rounded-lg border border-border p-3"><label className="flex items-center gap-2 text-sm font-medium"><Checkbox checked={disputeFound} onCheckedChange={(value) => setDisputeFound(value === true)} />{t.pages.capture.disputeFound}</label>{disputeFound ? <Textarea value={disputeDescription} onChange={(event) => setDisputeDescription(event.target.value)} placeholder={t.pages.capture.disputeDescription} /> : null}</div> : null}
       {!closed ? <>{review.blockers.length > 0 ? <Alert><AlertDescription><span className="font-medium">{t.pages.capture.needsBefore}</span><ul className="mt-1 list-disc space-y-0.5 pl-4">{review.blockers.map((blocker) => <li key={blocker.code}>{blockerText(t, blocker)}</li>)}</ul></AlertDescription></Alert> : null}<Button className="w-fit" disabled={!active || !review.canFile} onClick={() => void file()}><Send className="size-3.5" />{t.pages.capture.fileReport}</Button></> : report.submittedAt ? <p className="text-xs text-muted-foreground">{t.pages.visits.submitted(f.dateTime(report.submittedAt))}</p> : null}
     </Card>
   </div>;

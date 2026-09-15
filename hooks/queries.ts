@@ -283,26 +283,35 @@ export function useSearchCitizens(query: string) {
 }
 
 export type MutationDecisionBody =
-  | { decision: "approve"; approvalNote?: string }
+  | { decision: "approve"; approvalNote?: string; orderSheet: string; digitalSignature: string }
   | { decision: "reject"; rejectionReason: string };
-
-export type MutationDecisionInput = MutationDecisionBody | MutationDecisionBody["decision"];
-
-function normalizeMutationDecision(input: MutationDecisionInput): MutationDecisionBody {
-  if (typeof input === "string") {
-    return input === "approve"
-      ? { decision: "approve" }
-      : { decision: "reject", rejectionReason: "" };
-  }
-  return input;
-}
 
 export function useMutationDecision(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: MutationDecisionInput) =>
-      api.patch<LandMutation>(`/mutations/${id}/decision`, normalizeMutationDecision(input)),
+    mutationFn: (input: MutationDecisionBody) =>
+      api.patch<LandMutation>(`/mutations/${id}/decision`, input),
     onSuccess: () => invalidateMutationWorkflow(qc, id),
+  });
+}
+
+export function usePayMutationDcr(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.patch<LandMutation>(`/mutations/${id}/dcr-payment`),
+    onSuccess: () => invalidateMutationWorkflow(qc, id),
+  });
+}
+
+export function useFlagMutationDispute(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (description: string) =>
+      api.patch<LandMutation>(`/mutations/${id}/flag-dispute`, { description }),
+    onSuccess: () => {
+      invalidateMutationWorkflow(qc, id);
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
   });
 }
 
@@ -647,16 +656,19 @@ export function useAssignFieldSurvey() {
     mutationFn: (body: {
       parcelId: string;
       disputeId?: string;
+      mutationId?: string;
       purpose: string;
       assignedAgentId: string;
       scheduledFor: string;
       addressHint?: string;
       allowOutsideJurisdiction?: boolean;
     }) => api.post<FieldReport>("/field-reports", body),
-    onSuccess: () => {
+    onSuccess: (_report, variables) => {
       qc.invalidateQueries({ queryKey: ["field-reports"] });
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      if (variables.mutationId) qc.invalidateQueries({ queryKey: ["mutation", variables.mutationId] });
     },
   });
 }
@@ -699,13 +711,15 @@ export function useStartFieldSurvey(id: string) {
 export function useCompleteFieldSurvey(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (notes: string) =>
-      api.post<FieldSurveyMutationResult>(`/field-reports/${id}/survey/complete`, { notes }),
+    mutationFn: (input: string | { notes: string; disputeFound?: boolean; disputeDescription?: string }) =>
+      api.post<FieldSurveyMutationResult>(`/field-reports/${id}/survey/complete`,
+        typeof input === "string" ? { notes: input } : input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["field-report", id] });
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
       qc.invalidateQueries({ queryKey: ["field-reports"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
     },
   });
 }
@@ -716,6 +730,7 @@ export function useAddFieldReportMedia(id: string) {
     mutationFn: (body: {
       photo?: { url: string; caption?: string };
       gps?: { lat: number; lng: number; accuracyMeters: number; label?: string };
+      sketchMap?: { url: string; fileName: string };
     }) => api.post<FieldReport>(`/field-reports/${id}/media`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["field-report", id] });
@@ -735,6 +750,20 @@ export function useUpdateFieldReport(id: string) {
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
       qc.invalidateQueries({ queryKey: ["field-reports"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+export function useFlagFieldReportDispute(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (description: string) =>
+      api.patch<FieldReport>(`/field-reports/${id}/flag-dispute`, { description }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["parcels"] });
     },
   });
 }

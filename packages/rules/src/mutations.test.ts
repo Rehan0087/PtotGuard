@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   approvalGate,
   mutationActionGate,
@@ -31,7 +31,7 @@ function completeChecklist(): MutationVerificationChecklist {
     dagKhatianVerified: true,
     deedVerified: true,
     landRecordMatched: true,
-    documentsPresent: true,
+    documentsPresent: true, khajnaReceiptVerified: true,
   };
 }
 
@@ -42,7 +42,7 @@ function mutation(over: Partial<Mutation> = {}): Mutation {
     parcelId: "p-1",
     parcelDagNo: "CS-1",
     type: "sale",
-    status: "objection-period",
+    status: "field-verification-complete",
     fromOwnerName: "Aleya Begum",
     toOwnerId: "usr-2",
     toOwnerName: "Sohel Rana",
@@ -82,11 +82,11 @@ describe("approvalGate", () => {
     expect(gate.canReject).toBe(true);
   });
 
-  it("holds approval while the statutory window is open", () => {
+  it("does not interrupt approval while a parallel dispute window is open", () => {
     const gate = approvalGate(mutation({ objectionWindowEndsAt: fromNow(3) }), NOW);
 
-    expect(gate.canApprove).toBe(false);
-    expect(gate.hold).toEqual({ code: "objection-window", days: 3 });
+    expect(gate.canApprove).toBe(true);
+    expect(gate.hold).toBeNull();
   });
 
   it("still allows rejection during the window", () => {
@@ -96,33 +96,35 @@ describe("approvalGate", () => {
     expect(gate.canReject).toBe(true);
   });
 
-  it("lets a standing objection outrank a closed window", () => {
+  it("does not interrupt approval for a standing parallel dispute", () => {
     // The clock running out does not settle an objection.
     const gate = approvalGate(
       mutation({ objectionWindowEndsAt: fromNow(-5), objections: [objection()] }),
       NOW,
     );
 
-    expect(gate.canApprove).toBe(false);
-    expect(gate.hold).toEqual({ code: "objections", count: 1 });
+    expect(gate.canApprove).toBe(true);
+    expect(gate.hold).toBeNull();
   });
 
-  it("reports the objection, not the clock, when both would hold it", () => {
+  it("keeps disputes parallel when both a window and objection exist", () => {
     const gate = approvalGate(
       mutation({ objectionWindowEndsAt: fromNow(3), objections: [objection()] }),
       NOW,
     );
 
-    expect(gate.hold).toEqual({ code: "objections", count: 1 });
+    expect(gate.canApprove).toBe(true);
+    expect(gate.hold).toBeNull();
   });
 
-  it("counts every objection so the officer knows the scale", () => {
+  it("does not turn multiple disputes into a workflow hold", () => {
     const gate = approvalGate(
       mutation({ objections: [objection("o-1"), objection("o-2")] }),
       NOW,
     );
 
-    expect(gate.hold).toEqual({ code: "objections", count: 2 });
+    expect(gate.canApprove).toBe(true);
+    expect(gate.hold).toBeNull();
   });
 
   it("approves when no window was ever set", () => {
@@ -150,8 +152,8 @@ describe("approvalGate", () => {
       NOW,
     );
 
-    expect(gate.daysToWindowClose).toBe(1);
-    expect(gate.canApprove).toBe(false);
+    expect(gate.daysToWindowClose).toBeNull();
+    expect(gate.canApprove).toBe(true);
   });
 
   it("treats the moment of expiry as closed", () => {
@@ -161,7 +163,6 @@ describe("approvalGate", () => {
     expect(gate.canApprove).toBe(true);
   });
 });
-
 describe("mutation verification references", () => {
   const recipient = { id: "usr-2", role: "citizen", status: "active" };
   const deed = {
@@ -269,7 +270,7 @@ describe("mutationActionGate", () => {
   it("allows an assigned verification mutation to be completed or rejected", () => {
     expect(
       mutationActionGate(
-        mutation({ status: "verification", assignedOfficerId: "usr-officer" }),
+        mutation({ status: "under-primary-verification", assignedOfficerId: "usr-officer" }),
         "usr-officer",
         NOW,
       ),
@@ -300,7 +301,7 @@ describe("mutationActionGate", () => {
     });
   });
 
-  it.each(["submitted", "verification", "objection-period"] as const)(
+  it.each(["submitted", "under-primary-verification", "field-investigation"] as const)(
     "allows rejection from the active %s state",
     (status) => {
       expect(mutationActionGate(mutation({ status }), "usr-officer", NOW).canReject).toBe(true);
@@ -310,7 +311,7 @@ describe("mutationActionGate", () => {
   it("blocks every workflow action when another officer owns the assignment", () => {
     expect(
       mutationActionGate(
-        mutation({ status: "verification", assignedOfficerId: "usr-other-officer" }),
+        mutation({ status: "under-primary-verification", assignedOfficerId: "usr-other-officer" }),
         "usr-officer",
         NOW,
       ),
@@ -323,7 +324,7 @@ describe("mutationActionGate", () => {
     });
   });
 
-  it("holds approval while the objection window is open using whole-day rounding", () => {
+  it("keeps approval available while the dispute window runs in parallel", () => {
     expect(
       mutationActionGate(
         mutation({ objectionWindowEndsAt: fromNow(0.25) }),
@@ -331,14 +332,14 @@ describe("mutationActionGate", () => {
         NOW,
       ),
     ).toMatchObject({
-      canApprove: false,
+      canApprove: true,
       canReject: true,
-      hold: { code: "objection-window", days: 1 },
-      daysToWindowClose: 1,
+      hold: null,
+      daysToWindowClose: null,
     });
   });
 
-  it("holds approval when an objection without a resolution status remains open", () => {
+  it("keeps approval available when an unresolved dispute exists", () => {
     expect(
       mutationActionGate(
         mutation({ objectionWindowEndsAt: fromNow(-1), objections: [objection()] }),
@@ -346,9 +347,9 @@ describe("mutationActionGate", () => {
         NOW,
       ),
     ).toMatchObject({
-      canApprove: false,
+      canApprove: true,
       canReject: true,
-      hold: { code: "objections", count: 1 },
+      hold: null,
     });
   });
 
@@ -399,3 +400,4 @@ describe("verificationGate", () => {
     });
   });
 });
+

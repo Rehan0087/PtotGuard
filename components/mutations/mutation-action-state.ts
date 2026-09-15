@@ -3,7 +3,7 @@ import { mutationActionGate, type Mutation, type MutationWorkflowHold } from "@p
 export interface MutationActionState {
   primary: "start-verification" | "complete-verification" | "approve" | null;
   canReject: boolean;
-  terminal: "approved" | "rejected" | null;
+  terminal: "complete" | "rejected" | null;
   hold: MutationWorkflowHold | null;
   holdCode?: string;
 }
@@ -14,7 +14,7 @@ export function mutationActionState(
   now: Date = new Date(),
 ): MutationActionState {
   const gate = mutationActionGate(mutation, actorId, now);
-  const terminal = mutation.status === "approved" || mutation.status === "rejected"
+  const terminal = mutation.status === "complete" || mutation.status === "rejected"
     ? mutation.status
     : null;
 
