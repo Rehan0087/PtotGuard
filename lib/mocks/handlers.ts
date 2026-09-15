@@ -32,6 +32,8 @@ import {
   descendantIds,
   disputeTransition,
   executionGate,
+  hearingTransition,
+  isHearingOpen,
   extractionReview,
   filingReview,
   analyzeGpsTrack,
@@ -108,6 +110,15 @@ function mutationReadActor(request: Request): User | null {
     ? actor
     : null;
 }
+
+const HEARING_STATUS_VALUES: string[] = [
+  "scheduled",
+  "in-hearing",
+  "deliberation",
+  "ruled",
+  "appealed",
+  "closed",
+];
 
 const DISPUTE_STATUS_VALUES: string[] = [
   "submitted",
@@ -3123,6 +3134,162 @@ export const handlers = [
 
   // Additive to the frozen spec: recording what happened in a sitting. The
   // ruling gate reads these, so this is the write that unblocks a decision.
+  // Mirrors hearings.controller.ts's updateStatus(): deliberation, reopening,
+  // closing without a ruling, and recording an appeal.
+  http.patch(`${API}/hearings/:id/status`, async ({ params, request }) => {
+    await latency();
+    const hearing = db.hearings.find((h) => h.id === params.id);
+    if (!hearing) return notFound("Hearing not found");
+
+    const body = (await request.json()) as Partial<{ status: string; note: string }>;
+    const to = body.status;
+    if (!to || !HEARING_STATUS_VALUES.includes(to)) return badRequest("Invalid status");
+
+    const review = hearingTransition(hearing.status, to as never);
+    if (!review.canChange) return unprocessable({ status: review.blockers[0] });
+
+    const now = new Date().toISOString();
+    const me = currentUser(request);
+    // Read before the write: the ledger records where it came from.
+    const from = hearing.status;
+    hearing.status = to as never;
+
+    await appendAudit({
+      entityType: "hearing",
+      entityId: hearing.id,
+      action: "status-change",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { caseNumber: hearing.caseNumber, from, to },
+    });
+
+    const publicEvent =
+      to === "closed"
+        ? { code: "hearing-closed" as const, title: "Hearing closed without a ruling" }
+        : to === "appealed"
+          ? { code: "hearing-appealed" as const, title: "Ruling appealed" }
+          : null;
+
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute && publicEvent) {
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "hearing",
+        title: publicEvent.title,
+        content: { code: publicEvent.code },
+        ...(body.note?.trim() ? { description: body.note.trim() } : {}),
+        actorId: me.id,
+        actorName: me.name,
+      } as never);
+      if (to === "closed" && !isClosed(dispute.status) && dispute.status === "hearing-scheduled") {
+        dispute.status = "in-mediation";
+        dispute.updatedAt = now;
+      }
+    }
+
+    return HttpResponse.json(hearing);
+  }),
+
+  // Adjournment. Mirrors hearings.controller.ts's reschedule().
+  http.patch(`${API}/hearings/:id/schedule`, async ({ params, request }) => {
+    await latency();
+    const hearing = db.hearings.find((h) => h.id === params.id);
+    if (!hearing) return notFound("Hearing not found");
+    if (!isHearingOpen(hearing.status)) {
+      return unprocessable({ status: { code: "already-decided" } });
+    }
+
+    const body = (await request.json()) as Partial<{ hearingDate: string; reason: string }>;
+    const at = body.hearingDate ? new Date(body.hearingDate) : new Date(NaN);
+    if (Number.isNaN(at.getTime())) return unprocessable({ hearingDate: { code: "need-date" } });
+
+    const now = new Date().toISOString();
+    const me = currentUser(request);
+    const from = hearing.hearingDate ?? "";
+    hearing.hearingDate = at.toISOString();
+
+    await appendAudit({
+      entityType: "hearing",
+      entityId: hearing.id,
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { caseNumber: hearing.caseNumber, from, to: hearing.hearingDate },
+    });
+
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute) {
+      dispute.hearingDate = hearing.hearingDate;
+      dispute.updatedAt = now;
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "hearing",
+        title: "Hearing adjourned",
+        content: { code: "hearing-adjourned" },
+        ...(body.reason?.trim() ? { description: body.reason.trim() } : {}),
+        actorId: me.id,
+        actorName: me.name,
+      } as never);
+    }
+
+    return HttpResponse.json(hearing);
+  }),
+
+  // Handing the case to another mediator. Mirrors reassign().
+  http.patch(`${API}/hearings/:id/mediator`, async ({ params, request }) => {
+    await latency();
+    const hearing = db.hearings.find((h) => h.id === params.id);
+    if (!hearing) return notFound("Hearing not found");
+    if (!isHearingOpen(hearing.status)) {
+      return unprocessable({ status: { code: "already-decided" } });
+    }
+
+    const body = (await request.json()) as Partial<{ mediatorId: string }>;
+    const mediator = db.users.find((u) => u.id === body.mediatorId);
+    if (!mediator || mediator.role !== "mediator" || mediator.status !== "active") {
+      return notFound("Mediator not found");
+    }
+    if (mediator.id === hearing.mediatorId) {
+      return conflict("This case is already with that mediator.");
+    }
+
+    const now = new Date().toISOString();
+    const me = currentUser(request);
+    const from = hearing.mediatorId;
+    hearing.mediatorId = mediator.id;
+
+    await appendAudit({
+      entityType: "hearing",
+      entityId: hearing.id,
+      action: "assign",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { caseNumber: hearing.caseNumber, from, to: mediator.id },
+    });
+
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute) {
+      dispute.assignedMediatorId = mediator.id;
+      dispute.updatedAt = now;
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "assignment",
+        title: `Assigned to ${mediator.name}`,
+        content: { code: "assigned", to: mediator.name },
+        actorId: me.id,
+        actorName: me.name,
+      } as never);
+    }
+
+    return HttpResponse.json(hearing);
+  }),
+
   http.post(`${API}/hearings/:id/sessions`, async ({ params, request }) => {
     await latency();
     const hearing = db.hearings.find((h) => h.id === params.id);

@@ -91,6 +91,7 @@ export const hearingStatusTone: Record<HearingStatus, StatusTone> = {
   deliberation: "review",
   ruled: "verified",
   appealed: "flagged",
+  closed: "neutral",
 };
 
 export const userStatusTone: Record<UserStatus, StatusTone> = {

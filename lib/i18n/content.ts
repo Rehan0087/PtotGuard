@@ -75,6 +75,12 @@ export function useDisputeEventTitle() {
           return t.disputeEvents["status-change"](t.status.dispute[c.status]);
         case "hearing-held":
           return t.disputeEvents["hearing-held"](c.ordinal);
+        case "hearing-adjourned":
+          return t.disputeEvents["hearing-adjourned"];
+        case "hearing-closed":
+          return t.disputeEvents["hearing-closed"];
+        case "hearing-appealed":
+          return t.disputeEvents["hearing-appealed"];
         case "field-visit-scheduled":
           return t.disputeEvents["field-visit-scheduled"];
         case "field-visit-completed":

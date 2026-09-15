@@ -813,6 +813,48 @@ export function useCreateHearing() {
   });
 }
 
+/** Deliberation, reopening, closing without a ruling, and recording an appeal. */
+export function useUpdateHearingStatus(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { status: string; note?: string }) =>
+      api.patch<Hearing>(`/hearings/${id}/status`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearing", id] });
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+/** Adjourning to a new date. */
+export function useRescheduleHearing(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { hearingDate: string; reason?: string }) =>
+      api.patch<Hearing>(`/hearings/${id}/schedule`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearing", id] });
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+/** Handing the case to another mediator — leave, recusal, or workload. */
+export function useReassignHearing(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { mediatorId: string }) =>
+      api.patch<Hearing>(`/hearings/${id}/mediator`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearing", id] });
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
 /** Recording a sitting. The ruling gate reads these, so this is what unblocks a decision. */
 export function useRecordHearingSession(id: string) {
   const qc = useQueryClient();

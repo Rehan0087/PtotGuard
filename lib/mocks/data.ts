@@ -124,6 +124,11 @@ export const users: User[] = [
     createdAt: "2020-09-01T09:00:00Z",
   },
   {
+    id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@landtribunal.gov.bd",
+    role: "mediator", jurisdictionId: "j-cumilla", title: "Land Tribunal Mediator", status: "active",
+    createdAt: "2021-03-15T09:00:00Z",
+  },
+  {
     id: "usr-admin", name: "Registry Administrator", email: "admin@plotguard.gov.bd",
     role: "admin", jurisdictionId: "j-cumilla", title: "Registry Administrator", status: "active",
     createdAt: "2020-01-01T09:00:00Z",
