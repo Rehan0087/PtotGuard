@@ -4,8 +4,23 @@
     {
       "name": "plotguard-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeArgs": [
+        "dev"
+      ],
       "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "plotguard-mock",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "NEXT_PUBLIC_API_MOCKING=enabled",
+        "pnpm",
+        "dev",
+        "--port",
+        "3002"
+      ],
+      "port": 3002,
       "autoPort": true
     }
   ]
