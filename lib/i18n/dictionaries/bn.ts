@@ -933,6 +933,20 @@ export const bn: Dictionary = {
     },
 
     audit: {
+      entityFilter: "রেকর্ডের ধরন",
+      actionFilter: "পরিবর্তন",
+      actorFilter: "যিনি করেছেন",
+      fromFilter: "শুরু",
+      toFilter: "শেষ",
+      allEntities: "যেকোনো রেকর্ড",
+      allActions: "যেকোনো পরিবর্তন",
+      allActors: "যে কেউ",
+      clear: "ফিল্টার মুছুন",
+      resultCount: (shown: number, total: number) => `${n(total)}টির মধ্যে ${n(shown)}টি ঘটনা দেখানো হচ্ছে`,
+      prev: "আগের",
+      next: "পরের",
+      emptyTitle: "মিলে যাওয়া কোনো ঘটনা নেই",
+      emptyBody: "এই ফিল্টারে লেজারে কিছুই মেলেনি। তারিখের সীমা বাড়ান, বা একটি ফিল্টার মুছুন।",
       description:
         "প্রতিটি রেকর্ড পরিবর্তন কেবল-যোগযোগ্য SHA-256 হ্যাশ-চেইন লেজারে লেখা হয়। কোনো একটি এন্ট্রি বদলালেই চেইন ভেঙে যায় — গঠনগতভাবেই কারচুপি ধরা পড়ে।",
       verify: "অখণ্ডতা যাচাই করুন",

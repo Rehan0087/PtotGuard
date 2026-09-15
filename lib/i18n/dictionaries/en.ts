@@ -972,6 +972,20 @@ export const en = {
     },
 
     audit: {
+      entityFilter: "Record type",
+      actionFilter: "Change",
+      actorFilter: "By",
+      fromFilter: "From",
+      toFilter: "To",
+      allEntities: "Any record",
+      allActions: "Any change",
+      allActors: "Anyone",
+      clear: "Clear filters",
+      resultCount: (shown: number, total: number) => `Showing ${n(shown)} of ${n(total)} events`,
+      prev: "Previous",
+      next: "Next",
+      emptyTitle: "No matching events",
+      emptyBody: "Nothing in the ledger matches these filters. Widen the dates, or clear one.",
       description:
         "Every record change is written to an append-only, SHA-256 hash-chained ledger. Altering any entry breaks the chain — tamper-evident by construction.",
       verify: "Verify integrity",

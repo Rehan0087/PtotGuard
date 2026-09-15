@@ -835,10 +835,31 @@ export function useCalculateInheritance() {
 }
 
 // --- Audit -----------------------------------------------------------------
-export function useAuditLedger() {
+/** A type alias, not an interface: qs() takes a Record, and only aliases get an implicit index signature. */
+export type AuditLedgerParams = {
+  entityType?: string;
+  action?: string;
+  actorId?: string;
+  /** Date-only (YYYY-MM-DD); `to` covers the whole day named. */
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export function useAuditLedger(params: AuditLedgerParams = {}) {
   return useQuery({
-    queryKey: ["audit-ledger"],
-    queryFn: () => api.get<AuditEvent[]>("/audit"),
+    queryKey: ["audit-ledger", params],
+    queryFn: () => api.get<Paginated<AuditEvent>>(`/audit${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Filter options drawn from what the ledger actually holds, not a guessed list. */
+export function useAuditEntityTypes() {
+  return useQuery({
+    queryKey: ["audit-entity-types"],
+    queryFn: () => api.get<string[]>("/audit/entity-types"),
   });
 }
 

@@ -303,6 +303,15 @@ function paginate<T>(items: T[], url: URL): Paginated<T> {
   return { items: items.slice(start, start + pageSize), page, pageSize, total: items.length };
 }
 
+/** Mirrors bound() in audit.controller.ts: a date-only `to` covers that whole day. */
+function auditBound(value: string | undefined, endOfDay = false): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+}
+
 function notFound(message = "Not found") {
   return HttpResponse.json({ error: "not_found", message }, { status: 404 });
 }
@@ -3279,11 +3288,35 @@ export const handlers = [
     return HttpResponse.json(await verifyAuditChain());
   }),
 
-  // Full ledger (admin). Additive to the frozen spec's per-entity + verify routes.
-  http.get(`${API}/audit`, async () => {
+  // The entity types actually present, so the filter offers real options.
+  http.get(`${API}/audit/entity-types`, async () => {
     await latency();
     const chain = await getAuditChain();
-    return HttpResponse.json([...chain].reverse());
+    return HttpResponse.json([...new Set(chain.map((e) => e.entityType))].sort());
+  }),
+
+  // Full ledger (admin), filtered and paged — mirrors AuditController.list().
+  http.get(`${API}/audit`, async ({ request }) => {
+    await latency();
+    const url = new URL(request.url);
+    const chain = await getAuditChain();
+    const p = (key: string) => url.searchParams.get(key)?.trim() || undefined;
+    const entityType = p("entityType");
+    const action = p("action");
+    const actorId = p("actorId");
+    const from = auditBound(p("from"));
+    const to = auditBound(p("to"), true);
+
+    const items = [...chain].reverse().filter((e) => {
+      if (entityType && e.entityType !== entityType) return false;
+      if (action && e.action !== action) return false;
+      if (actorId && e.actorId !== actorId) return false;
+      const at = new Date(e.createdAt).getTime();
+      if (from && at < from.getTime()) return false;
+      if (to && at >= to.getTime()) return false;
+      return true;
+    });
+    return HttpResponse.json(paginate(items, url));
   }),
 
   http.get(`${API}/audit/:entityType/:id`, async ({ params }) => {
