@@ -5,7 +5,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, MapPin, FileText, Scale, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { executionGate, type ParcelRestriction, type RestrictionType, type RulingOutcome } from "@plotguard/rules";
+import {
+  disputeNextStatuses,
+  executionGate,
+  type DisputeStatus,
+  type ParcelRestriction,
+  type RestrictionType,
+  type RulingOutcome,
+} from "@plotguard/rules";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { IdChip } from "@/components/id-chip";
@@ -14,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useDispute, useExecuteRuling, useRole } from "@/hooks/queries";
+import { useDispute, useExecuteRuling, useRole, useUpdateDisputeStatus } from "@/hooks/queries";
 import { useDisputeEventTitle } from "@/lib/i18n/content";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
@@ -39,6 +46,51 @@ const selectClass =
  * endpoint enforces, so this is explanation, not the only thing stopping a
  * bad request.
  */
+/**
+ * Moving a case along, for whoever is handling it. Only the moves
+ * `disputeTransition()` accepts are offered, so the screen never shows a
+ * button the endpoint would refuse — and `hearing-scheduled` and `resolved`
+ * are absent by design, because convening a hearing and recording a ruling
+ * each write more than a status through their own endpoint.
+ */
+function MoveCaseCard({ disputeId, status }: { disputeId: string; status: DisputeStatus }) {
+  const t = useT();
+  const s = useStatusMeta();
+  const mt = t.pages.dispute.move;
+  const update = useUpdateDisputeStatus(disputeId);
+  const next = disputeNextStatuses(status);
+
+  if (next.length === 0) return null;
+
+  return (
+    <Card className="gap-3 px-4">
+      <h3 className="font-heading text-sm font-semibold text-foreground">{mt.title}</h3>
+      <p className="text-xs text-muted-foreground">{mt.description}</p>
+      <div className="flex flex-wrap gap-2">
+        {next.map((to) => (
+          <Button
+            key={to}
+            variant="outline"
+            size="sm"
+            disabled={update.isPending}
+            onClick={() =>
+              update.mutate(to, {
+                onSuccess: () =>
+                  toast.success(mt.successTitle, {
+                    description: mt.successBody(s.dispute[to].label),
+                  }),
+                onError: () => toast.error(mt.failedTitle),
+              })
+            }
+          >
+            {s.dispute[to].label}
+          </Button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function ExecuteRulingCard({
   disputeId,
   status,
@@ -324,6 +376,10 @@ export default function DisputeDetailPage() {
               </Link>
             ) : null}
           </Card>
+
+          {role === "mediator" || role === "land-office" ? (
+            <MoveCaseCard disputeId={dispute.id} status={dispute.status as DisputeStatus} />
+          ) : null}
 
           {role === "land-office" && dispute.status === "resolved" ? (
             <ExecuteRulingCard

@@ -30,6 +30,7 @@ import {
   calcInheritance,
   deletionGate,
   descendantIds,
+  disputeTransition,
   executionGate,
   extractionReview,
   filingReview,
@@ -107,6 +108,17 @@ function mutationReadActor(request: Request): User | null {
     ? actor
     : null;
 }
+
+const DISPUTE_STATUS_VALUES: string[] = [
+  "submitted",
+  "under-review",
+  "field-visit-scheduled",
+  "in-mediation",
+  "hearing-scheduled",
+  "resolved",
+  "rejected",
+  "withdrawn",
+];
 
 function badRequest(message = "Bad Request") {
   return HttpResponse.json({ error: "bad_request", message }, { status: 400 });
@@ -2242,6 +2254,11 @@ export const handlers = [
     if (!dispute) return notFound("Dispute not found");
     const { status } = (await request.json()) as { status: string };
     const from = dispute.status;
+    // Mirrors UpdateDisputeStatusDto's @IsIn, then the same gate the real
+    // endpoint runs: an unknown value is a 400, a disallowed move a 422.
+    if (!DISPUTE_STATUS_VALUES.includes(status)) return badRequest("Invalid status");
+    const review = disputeTransition(from as never, status as never);
+    if (!review.canChange) return unprocessable({ status: review.blockers[0] });
     dispute.status = status as never;
     dispute.updatedAt = new Date().toISOString();
 

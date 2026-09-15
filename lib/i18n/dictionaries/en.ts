@@ -1047,6 +1047,14 @@ export const en = {
     },
 
     dispute: {
+      move: {
+        title: "Move this case",
+        description:
+          "Where the case sits in mediation. Listing a hearing and recording a ruling are separate steps, and each sets its own status.",
+        successTitle: "Case updated",
+        successBody: (status: string) => `This case is now marked ${status}.`,
+        failedTitle: "Couldn't update this case",
+      },
       notFoundTitle: "Dispute not found",
       notFoundBody: "This case may have been withdrawn or the link is incorrect.",
       backToDisputes: "Back to disputes",

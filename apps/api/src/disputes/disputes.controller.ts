@@ -3,11 +3,13 @@ import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from 
 import type { Request } from "express";
 import {
   activeRestrictions,
+  disputeTransition,
   executionGate,
   registryStatusAfter,
   routeDisputeToOfficer,
   type Dispute,
   type DisputeParty,
+  type DisputeStatus,
   type Jurisdiction,
   type ParcelRestriction,
   type RulingOutcome,
@@ -22,6 +24,7 @@ import { findParcelView } from "../parcels/parcel-view";
 import { disputeAudience } from "./dispute-audience";
 import { CreateDisputeDto } from "./create-dispute.dto";
 import { ExecuteRulingDto } from "./execute-ruling.dto";
+import { UpdateDisputeStatusDto } from "./update-dispute-status.dto";
 
 function toOutcome(body: ExecuteRulingDto): RulingOutcome {
   switch (body.action) {
@@ -231,18 +234,28 @@ export class DisputesController {
     });
   }
 
+  /**
+   * A mediator or officer moving a case along. Two statuses are missing from
+   * what this will accept, on purpose: `hearing-scheduled` belongs to
+   * POST /hearings and `resolved` to PATCH /hearings/:id/ruling, each of
+   * which writes more than a status. `disputeTransition()` is the same gate
+   * the mediator's screen uses to decide what to offer.
+   */
   @Patch(":id/status")
   async updateStatus(
     @Param("id") id: string,
-    @Body() body: { status: string },
+    @Body() body: UpdateDisputeStatusDto,
     @Req() req: Request,
   ) {
     const dispute = await this.prisma.dispute.findUnique({ where: { id } });
     if (!dispute) throw new NotFoundError("Dispute not found");
 
     const actorId = currentUserId(req);
-    const from = dispute.status;
-    const to = body.status as any;
+    const from = dispute.status as DisputeStatus;
+    const to = body.status;
+
+    const review = disputeTransition(from, to);
+    if (!review.canChange) throw new ValidationError(review.blockers[0], "status");
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
