@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import {
   hearingTransition,
@@ -10,6 +21,9 @@ import {
   type HearingSession,
   type HearingStatus,
 } from "@plotguard/rules";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -332,6 +346,8 @@ export class HearingsController {
    * recorded sitting writes the second. hearingTransition() is the same gate
    * the mediator's screen asks what to offer.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("mediator")
   @Patch(":id/status")
   async updateStatus(
     @Param("id") id: string,
@@ -431,6 +447,8 @@ export class HearingsController {
    * one move the record could not express. The date was writable once, at
    * convening, and never again.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("mediator")
   @Patch(":id/schedule")
   async reschedule(
     @Param("id") id: string,
@@ -516,6 +534,8 @@ export class HearingsController {
    * dispute's own assignment moves with it, because that is what puts the
    * case on the new mediator's board and takes it off the old one's.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("mediator")
   @Patch(":id/mediator")
   async reassign(
     @Param("id") id: string,

@@ -3778,8 +3778,9 @@ export const handlers = [
   }),
 
   // Audit ------------------------------------------------------------------
-  http.get(`${API}/audit/verify`, async () => {
+  http.get(`${API}/audit/verify`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     return HttpResponse.json(await verifyAuditChain());
   }),
 
@@ -3828,8 +3829,9 @@ export const handlers = [
   }),
 
   // The entity types actually present, so the filter offers real options.
-  http.get(`${API}/audit/entity-types`, async () => {
+  http.get(`${API}/audit/entity-types`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     const chain = await getAuditChain();
     return HttpResponse.json([...new Set(chain.map((e) => e.entityType))].sort());
   }),
@@ -3837,6 +3839,7 @@ export const handlers = [
   // Full ledger (admin), filtered and paged — mirrors AuditController.list().
   http.get(`${API}/audit`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     const url = new URL(request.url);
     const chain = await getAuditChain();
     const p = (key: string) => url.searchParams.get(key)?.trim() || undefined;
