@@ -47,9 +47,7 @@ async function main(): Promise<void> {
       { id: "j-barura", code: "CTG-CUM-BAR", name: "Barura Upazila", nameBn: "বরুড়া উপজেলা", level: "upazila", parentId: "j-cumilla" },
       { id: "j-rajamehar", code: "CTG-CUM-DEB-RAJ", name: "Rajamehar Mouza", nameBn: "রাজামেহার মৌজা", level: "mouza", parentId: "j-debidwar" },
       { id: "j-payalgacha", code: "CTG-CUM-BAR-PAY", name: "Payalgacha Mouza", nameBn: "পয়ালগাছা মৌজা", level: "mouza", parentId: "j-barura" },
-    ] as Prisma.UserCreateManyInput[]).map((user) =>
-      user.status === "active" ? { ...user, passwordHash: DEMO_PASSWORD_HASH } : user,
-    ),
+    ] satisfies Prisma.JurisdictionCreateManyInput[]),
   });
 
   // --- Users ------------------------------------------------------------
@@ -71,7 +69,9 @@ async function main(): Promise<void> {
       // Legacy owners referenced only from ownership history — never sign in.
       { id: "usr-legacy-1", name: "Abdul Jalil Sarkar", email: "legacy-1@example.bd", role: "citizen", jurisdictionId: "j-rajamehar", status: "invited", createdAt: new Date("1998-03-01T00:00:00Z") },
       { id: "usr-legacy-2", name: "Late Fazlul Haque", email: "legacy-2@example.bd", role: "citizen", jurisdictionId: "j-rajamehar", status: "invited", createdAt: new Date("1990-04-02T00:00:00Z") },
-    ],
+    ].map((user) =>
+      user.status === "active" ? { ...user, passwordHash: DEMO_PASSWORD_HASH } : user,
+    ),
   });
 
   // --- Parcels ------------------------------------------------------------
