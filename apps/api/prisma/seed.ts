@@ -11,14 +11,12 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { ancestryOf, buildUlpin, type Jurisdiction } from "@plotguard/rules";
 import { computeHash } from "../src/audit/audit-hash";
+import { DEMO_PASSWORD_HASH } from "./demo-password";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
-// scrypt hash of the documented local demo password: demo1234.
-const DEMO_PASSWORD_HASH =
-  "scrypt$00112233445566778899aabbccddeeff$f2d31dd4461c5a6fe9b09ec97830ac3071d4314ded688bad919900cc7f645f15f70fa942dccd598209270ae8510abe83c4e54a92b58d420f216cc9c7cefcbede";
 
 function square(c: { lat: number; lng: number }, d = 0.0009) {
   const { lat, lng } = c;
