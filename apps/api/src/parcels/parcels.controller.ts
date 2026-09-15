@@ -11,10 +11,9 @@ import {
   type Jurisdiction,
   type MutationStatus,
   type ParcelRestriction,
-  type RegistryStatus,
 } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
-import { currentUserId } from "../auth/dev-current-user";
+import { currentUserId, type AuthenticatedRequest } from "../auth/dev-current-user";
 import { NotFoundError } from "../common/domain-exceptions";
 import { pageParams, paginated } from "../common/pagination";
 import { type GeoPoint, distance, openDisputeCounts, toParcel } from "./parcel-view";
@@ -31,29 +30,16 @@ export class ParcelsController {
     const khatian = query.khatian?.toLowerCase();
     const q = query.q?.trim().toLowerCase();
     const bbox = query.bbox?.split(",").map(Number);
-    const officeJurisdictionIds = req.header("x-plotguard-role") === "land-office"
+    const requestRole = (req as AuthenticatedRequest).user?.role ?? req.header("x-plotguard-role");
+    const officeJurisdictionIds = requestRole === "land-office"
       ? await this.landOfficeJurisdictionIds(req)
       : undefined;
     const activeMutationFilter = {
       status: { in: [...ACTIVE_MUTATION_STATUSES] },
     };
-    const registryStatusFilter = officeJurisdictionIds
-      ? query.status === "under-mutation"
-        ? { mutations: { some: activeMutationFilter } }
-        : query.status
-          ? {
-              registryStatus: query.status,
-              mutations: { none: activeMutationFilter },
-            }
-          : {}
-      : query.status
-        ? { registryStatus: query.status }
-        : {};
-
     const where = {
       ...(officeJurisdictionIds ? { jurisdictionId: { in: officeJurisdictionIds } } : {}),
       ...(owner ? { ownerId: owner } : {}),
-      ...registryStatusFilter,
       ...(dag ? { dagNo: { contains: dag, mode: "insensitive" as const } } : {}),
       ...(khatian ? { khatianNo: { contains: khatian, mode: "insensitive" as const } } : {}),
       // Exact, not `contains`: a ULPIN is an identifier being cited, so a
@@ -74,19 +60,21 @@ export class ParcelsController {
         : {}),
     };
 
-    const [rows, total] = await Promise.all([
-      this.prisma.parcel.findMany({
-        where,
-        include: {
-          owner: { select: { name: true } },
-          mutations: {
-            where: activeMutationFilter,
-            select: { status: true, disputeId: true },
-          },
+    const rows = await this.prisma.parcel.findMany({
+      where,
+      include: {
+        owner: { select: { name: true } },
+        mutations: {
+          where: activeMutationFilter,
+          select: { status: true, disputeId: true },
         },
-      }),
-      this.prisma.parcel.count({ where }),
-    ]);
+        documents: {
+          where: { verificationStatus: "flagged" },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
 
     // bbox has no direct Prisma equivalent for a Json centroid column — filter
     // in JS. Fine at this dataset size; move into `where` with a PostGIS
@@ -100,22 +88,25 @@ export class ParcelsController {
       : rows;
 
     const counts = await openDisputeCounts(this.prisma, filtered.map((p) => p.id));
-    const items = filtered.map(({ mutations, ...parcel }) => {
+    const items = filtered.map(({ mutations = [], documents = [], ...parcel }) => {
       const view = toParcel(parcel, counts.get(parcel.id) ?? 0);
-      return officeJurisdictionIds
-        ? {
-            ...view,
-            registryStatus: recordRegistryStatus(
-              parcel.registryStatus as RegistryStatus,
-              mutations as { status: MutationStatus; disputeId: string | null }[],
-            ),
-          }
-        : view;
+      return {
+        ...view,
+        registryStatus: recordRegistryStatus(
+          mutations as { status: MutationStatus; disputeId?: string | null }[],
+          view.openDisputeCount,
+          documents.length > 0,
+        ),
+      };
     });
 
+    const statusFiltered = query.status
+      ? items.filter((item) => item.registryStatus === query.status)
+      : items;
+
     const params = pageParams(query);
-    const page = items.slice(params.skip, params.skip + params.take);
-    return paginated(page, bbox ? filtered.length : total, params);
+    const page = statusFiltered.slice(params.skip, params.skip + params.take);
+    return paginated(page, statusFiltered.length, params);
   }
 
   /** Office-only aggregate; the Citizen Portal continues to use GET /parcels/:id. */
@@ -238,8 +229,10 @@ export class ParcelsController {
         ...toParcel(parcel, disputes.filter((dispute) =>
           !["resolved", "rejected", "withdrawn"].includes(dispute.status)).length),
         registryStatus: recordRegistryStatus(
-          parcel.registryStatus as RegistryStatus,
-          mutationRows as { status: MutationStatus }[],
+          mutationRows as { status: MutationStatus; disputeId?: string | null }[],
+          disputes.filter((dispute) =>
+            !["resolved", "rejected", "withdrawn"].includes(dispute.status)).length,
+          documents.some((document) => document.verificationStatus === "flagged"),
         ),
       },
       owner: {
@@ -273,7 +266,18 @@ export class ParcelsController {
   async publicView(@Param("ulpin") ulpin: string) {
     const parcel = await this.prisma.parcel.findUnique({
       where: { ulpin: normaliseUlpin(ulpin) },
-      include: { owner: { select: { name: true } } },
+      include: {
+        owner: { select: { name: true } },
+        mutations: {
+          where: { status: { in: [...ACTIVE_MUTATION_STATUSES] } },
+          select: { status: true, disputeId: true },
+        },
+        documents: {
+          where: { verificationStatus: "flagged" },
+          select: { id: true },
+          take: 1,
+        },
+      },
     });
     if (!parcel) throw new NotFoundError("Parcel not found");
 
@@ -284,8 +288,19 @@ export class ParcelsController {
 
     // Narrowed by the rule, not by picking fields here — one tested decision
     // about what is public, rather than one per endpoint.
+    const counts = await openDisputeCounts(this.prisma, [parcel.id]);
+    const { mutations, documents, ...row } = parcel;
+    const openDisputeCount = counts.get(parcel.id) ?? 0;
     return toPublicParcel(
-      { ...parcel, ownerName: parcel.owner.name },
+      {
+        ...row,
+        ownerName: row.owner.name,
+        registryStatus: recordRegistryStatus(
+          mutations as { status: MutationStatus; disputeId?: string | null }[],
+          openDisputeCount,
+          documents.length > 0,
+        ),
+      },
       restrictions as unknown as ParcelRestriction[],
     );
   }
@@ -298,10 +313,14 @@ export class ParcelsController {
     });
     if (!parcel) throw new NotFoundError("Parcel not found");
 
-    const [ownership, documents, disputes, restrictions] = await Promise.all([
+    const [ownership, documents, disputes, mutations, restrictions] = await Promise.all([
       this.prisma.ownershipRecord.findMany({ where: { parcelId: id } }),
       this.prisma.landDocument.findMany({ where: { parcelId: id } }),
       this.prisma.dispute.findMany({ where: { parcelId: id } }),
+      this.prisma.mutation.findMany({
+        where: { parcelId: id, status: { in: [...ACTIVE_MUTATION_STATUSES] } },
+        select: { status: true, disputeId: true },
+      }),
       this.prisma.parcelRestriction.findMany({
         where: { parcelId: id },
         orderBy: { fromDate: "desc" },
@@ -309,8 +328,16 @@ export class ParcelsController {
     ]);
     const counts = await openDisputeCounts(this.prisma, [id]);
 
+    const openDisputeCount = counts.get(id) ?? 0;
     return {
-      parcel: toParcel(parcel, counts.get(id) ?? 0),
+      parcel: {
+        ...toParcel(parcel, openDisputeCount),
+        registryStatus: recordRegistryStatus(
+          mutations as { status: MutationStatus; disputeId?: string | null }[],
+          openDisputeCount,
+          documents.some((document) => document.verificationStatus === "flagged"),
+        ),
+      },
       ownership,
       documents,
       disputes,
@@ -336,7 +363,18 @@ export class ParcelsController {
 
     const others = await this.prisma.parcel.findMany({
       where: { id: { not: id } },
-      include: { owner: { select: { name: true } } },
+      include: {
+        owner: { select: { name: true } },
+        mutations: {
+          where: { status: { in: [...ACTIVE_MUTATION_STATUSES] } },
+          select: { status: true, disputeId: true },
+        },
+        documents: {
+          where: { verificationStatus: "flagged" },
+          select: { id: true },
+          take: 1,
+        },
+      },
     });
     const origin = target.centroid as GeoPoint;
     const counts = await openDisputeCounts(this.prisma, others.map((p) => p.id));
@@ -344,7 +382,17 @@ export class ParcelsController {
     return others
       .sort((a, b) => distance(a.centroid as GeoPoint, origin) - distance(b.centroid as GeoPoint, origin))
       .slice(0, 4)
-      .map((p) => toParcel(p, counts.get(p.id) ?? 0));
+      .map(({ mutations, documents, ...parcel }) => {
+        const openDisputeCount = counts.get(parcel.id) ?? 0;
+        return {
+          ...toParcel(parcel, openDisputeCount),
+          registryStatus: recordRegistryStatus(
+            mutations as { status: MutationStatus; disputeId?: string | null }[],
+            openDisputeCount,
+            documents.length > 0,
+          ),
+        };
+      });
   }
 
   private async landOfficeJurisdictionIds(req: Request): Promise<string[]> {

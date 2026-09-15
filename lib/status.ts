@@ -28,7 +28,6 @@ export interface StatusMeta {
 
 export const registryStatusTone: Record<RegistryStatus, StatusTone> = {
   verified: "verified",
-  pending: "pending",
   disputed: "disputed",
   flagged: "flagged",
   "under-mutation": "review",

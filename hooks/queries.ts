@@ -29,6 +29,8 @@ import type {
   MutationDetail,
   ServiceApplicationDetail,
   LandTaxHolding,
+  LandTaxCollection,
+  LandOfficerDashboard,
   FieldReportDetail,
   HearingDetail,
   InheritanceInput,
@@ -177,11 +179,20 @@ export interface FileDisputeInput {
   respondentName?: string;
 }
 
+function invalidateRecordViews(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ["land-record"] });
+  qc.invalidateQueries({ queryKey: ["parcel"] });
+  qc.invalidateQueries({ queryKey: ["parcels"] });
+}
+
 export function useFileDispute() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: FileDisputeInput) => api.post<Dispute>("/disputes", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["disputes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -192,6 +203,7 @@ export function useUpdateDisputeStatus(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dispute", id] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+      invalidateRecordViews(qc);
     },
   });
 }
@@ -205,7 +217,7 @@ export function useExecuteRuling(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dispute", id] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
-      qc.invalidateQueries({ queryKey: ["parcel"] });
+      invalidateRecordViews(qc);
     },
   });
 }
@@ -243,9 +255,7 @@ function invalidateMutationWorkflow(qc: QueryClient, id: string) {
   // Record detail embeds mutation state and its audit trail, so every workflow
   // action refreshes that aggregate and the Records list projection. Approval
   // also changes the parcel's owner through the existing backend transaction.
-  qc.invalidateQueries({ queryKey: ["land-record"] });
-  qc.invalidateQueries({ queryKey: ["parcel"] });
-  qc.invalidateQueries({ queryKey: ["parcels"] });
+  invalidateRecordViews(qc);
 }
 
 export type CompleteMutationVerificationInput = MutationVerificationChecklist & {
@@ -593,7 +603,10 @@ export function useUploadDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<LandDocument>) => api.post<LandDocument>("/documents", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -608,7 +621,10 @@ export function useDocumentDecision() {
       id: string;
       decision: "verify" | "reject" | "flag";
     }) => api.patch<LandDocument>(`/documents/${id}/decision`, { decision }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -618,7 +634,10 @@ export function useSaveExtractedFields() {
   return useMutation({
     mutationFn: ({ id, fields }: { id: string; fields: Record<string, string> }) =>
       api.patch<LandDocument>(`/documents/${id}/fields`, { fields }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -626,7 +645,10 @@ export function useReprocessDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post<LandDocument>(`/documents/${id}/reprocess`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -649,7 +671,7 @@ export function useFieldReports(params: ListParams = {}) {
   });
 }
 
-/** The land office booking a survey: creates the visit and moves the dispute. */
+/** The land office booking a field visit for a dispute or primary-verification mutation. */
 export function useAssignFieldSurvey() {
   const qc = useQueryClient();
   return useMutation({
@@ -668,6 +690,7 @@ export function useAssignFieldSurvey() {
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
       qc.invalidateQueries({ queryKey: ["mutations"] });
+      invalidateRecordViews(qc);
       if (variables.mutationId) qc.invalidateQueries({ queryKey: ["mutation", variables.mutationId] });
     },
   });
@@ -720,6 +743,7 @@ export function useCompleteFieldSurvey(id: string) {
       qc.invalidateQueries({ queryKey: ["field-reports"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
       qc.invalidateQueries({ queryKey: ["mutations"] });
+      invalidateRecordViews(qc);
     },
   });
 }
@@ -754,6 +778,36 @@ export function useUpdateFieldReport(id: string) {
   });
 }
 
+export function useLandTaxCollection() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["land-tax-collection", role],
+    queryFn: () => api.get<LandTaxCollection>("/land-tax/collection"),
+  });
+}
+
+export function useLandOfficerDashboard() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["land-office-dashboard", role],
+    queryFn: () => api.get<LandOfficerDashboard>("/land-office/dashboard"),
+    enabled: role === "land-office",
+  });
+}
+
+export function useCollectLandTax() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { parcelId: string; paymentMethod: string }) =>
+      api.post<ServiceApplication>("/land-tax/collect", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["land-tax-collection"] });
+      qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
+      qc.invalidateQueries({ queryKey: ["service-applications"] });
+    },
+  });
+}
+
 export function useFlagFieldReportDispute(id: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -763,7 +817,7 @@ export function useFlagFieldReportDispute(id: string) {
       qc.invalidateQueries({ queryKey: ["field-report", id] });
       qc.invalidateQueries({ queryKey: ["mutations"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
-      qc.invalidateQueries({ queryKey: ["parcels"] });
+      invalidateRecordViews(qc);
     },
   });
 }

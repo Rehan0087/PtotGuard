@@ -211,8 +211,8 @@ export class FieldReportsController {
     if (mutation && mutation.parcelId !== parcel.id) {
       throw new ValidationError({ code: "mutation-parcel-mismatch" }, "mutationId");
     }
-    if (mutation && mutation.status !== "field-investigation") {
-      throw new ValidationError({ code: "wrong-status", expected: ["field-investigation"] }, "mutationId");
+    if (mutation && mutation.status !== "under-primary-verification") {
+      throw new ValidationError({ code: "wrong-status", expected: ["under-primary-verification"] }, "mutationId");
     }
 
     const [candidate] = rankCandidates(
@@ -226,6 +226,13 @@ export class FieldReportsController {
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
+      if (mutation) {
+        const existing = await tx.fieldReport.findFirst({
+          where: { mutationId: mutation.id, status: { not: "cancelled" } },
+          select: { id: true },
+        });
+        if (existing) throw new ConflictError("This mutation already has a field visit.");
+      }
       const created = await tx.fieldReport.create({
         data: {
           id: `fr-${randomUUID()}`,

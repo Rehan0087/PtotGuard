@@ -1,13 +1,24 @@
 /**
  * Browser-session persistence for the mutation preview workflow.
  *
- * Keep this deliberately narrow: mutations may change parcel ownership, but
- * they must not turn sessionStorage into a second copy of the entire mock DB.
+ * Persist mutation workflow evidence and tax/service payments. These records
+ * drive derived statuses and paid-through years, so refresh restores them with
+ * the audit link that recorded each change.
  */
-import type { AuditEvent, Mutation, MutationStatus, OwnershipRecord } from "@/lib/types";
+import type {
+  AuditEvent,
+  Dispute,
+  FieldReport,
+  LandDocument,
+  Mutation,
+  MutationStatus,
+  OwnershipRecord,
+  ServiceApplication,
+  ServiceApplicationEvent,
+} from "@/lib/types";
 import * as db from "./data";
 
-const STORAGE_KEY = "plotguard.mutation-workflow.v1";
+const STORAGE_KEY = "plotguard.mutation-workflow.v6";
 
 interface StoredParcelOwnership {
   id: string;
@@ -20,6 +31,11 @@ interface StoredMutationState {
   mutations: Mutation[];
   parcels: StoredParcelOwnership[];
   ownershipRecords: OwnershipRecord[];
+  fieldReports: FieldReport[];
+  disputes: Dispute[];
+  documents: LandDocument[];
+  serviceApplications: ServiceApplication[];
+  serviceApplicationEvents: ServiceApplicationEvent[];
   auditChain: AuditEvent[];
 }
 
@@ -41,6 +57,11 @@ function isStoredState(value: unknown): value is StoredMutationState {
   return Array.isArray(candidate.mutations)
     && Array.isArray(candidate.parcels)
     && Array.isArray(candidate.ownershipRecords)
+    && Array.isArray(candidate.fieldReports)
+    && Array.isArray(candidate.disputes)
+    && Array.isArray(candidate.documents)
+    && Array.isArray(candidate.serviceApplications)
+    && Array.isArray(candidate.serviceApplicationEvents)
     && Array.isArray(candidate.auditChain);
 }
 
@@ -87,6 +108,11 @@ export function hydrateMutationState(): AuditEvent[] | null {
     }));
     db.mutations.splice(0, db.mutations.length, ...mutations);
     db.ownershipRecords.splice(0, db.ownershipRecords.length, ...state.ownershipRecords);
+    db.fieldReports.splice(0, db.fieldReports.length, ...state.fieldReports);
+    db.disputes.splice(0, db.disputes.length, ...state.disputes);
+    db.documents.splice(0, db.documents.length, ...state.documents);
+    db.serviceApplications.splice(0, db.serviceApplications.length, ...state.serviceApplications);
+    db.serviceApplicationEvents.splice(0, db.serviceApplicationEvents.length, ...state.serviceApplicationEvents);
     for (const stored of state.parcels) {
       const parcel = db.parcels.find((item) => item.id === stored.id);
       if (!parcel || typeof stored.ownerId !== "string" || typeof stored.ownerName !== "string") continue;
@@ -103,7 +129,7 @@ export function hydrateMutationState(): AuditEvent[] | null {
   return hydratedAuditChain;
 }
 
-/** Persist only workflow-owned state and the parcel fields an approval changes. */
+/** Persist workflow-owned state and the parcel fields an approval changes. */
 export function persistMutationState(auditChain: AuditEvent[]): void {
   const storage = browserStorage();
   if (!storage) return;
@@ -120,6 +146,11 @@ export function persistMutationState(auditChain: AuditEvent[]): void {
         ...(lastMutationAt ? { lastMutationAt } : {}),
       })),
     ownershipRecords: db.ownershipRecords,
+    fieldReports: db.fieldReports,
+    disputes: db.disputes,
+    documents: db.documents,
+    serviceApplications: db.serviceApplications,
+    serviceApplicationEvents: db.serviceApplicationEvents,
     auditChain,
   };
 

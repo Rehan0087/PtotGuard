@@ -63,9 +63,9 @@ export const NAV: Record<Role, PortalNav> = {
   },
   "land-office": {
     portalKey: "landOffice",
-    home: "/records",
+    home: "/dashboard",
     items: [
-      { labelKey: "dashboard", href: "/records", icon: LayoutDashboard },
+      { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
       { labelKey: "profile", href: "/profile", icon: UserCog },
       {
         labelKey: "landOfficerResponsibilities",

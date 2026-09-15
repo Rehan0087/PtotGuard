@@ -159,7 +159,7 @@ export const parcels: Parcel[] = [
   {
     id: "p-142", ulpin: "ILR-CUM-DEB-000001", dagNo: "CS-142/3", khatianNo: "512", title: "Paddy field, Rajamehar", jurisdictionId: "j-rajamehar",
     landUse: "agricultural", area: { value: 82, unit: "decimal" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
-    ownershipType: "sole", registryStatus: "disputed", centroid: { lat: 23.549, lng: 90.989 },
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.549, lng: 90.989 },
     boundary: square({ lat: 23.549, lng: 90.989 }), marketValue: { amount: 4800000, currency: "BDT" },
     registeredAt: "2015-07-20T00:00:00Z", lastMutationAt: "2015-07-20T00:00:00Z", openDisputeCount: 1,
   },
@@ -173,14 +173,14 @@ export const parcels: Parcel[] = [
   {
     id: "p-092", ulpin: "ILR-CUM-DEB-000003", dagNo: "RS-92/4", khatianNo: "640", title: "Roadside plot, Rajamehar", jurisdictionId: "j-rajamehar",
     landUse: "residential", area: { value: 5, unit: "katha" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
-    ownershipType: "sole", registryStatus: "pending", centroid: { lat: 23.5475, lng: 90.9905 },
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.5475, lng: 90.9905 },
     boundary: square({ lat: 23.5475, lng: 90.9905 }, 0.0006), marketValue: { amount: 2600000, currency: "BDT" },
     registeredAt: "2026-07-10T00:00:00Z", openDisputeCount: 0,
   },
   {
     id: "p-205", ulpin: "ILR-CUM-BAR-000001", dagNo: "BS-205", khatianNo: "1104", title: "Betel-nut orchard, Payalgacha", jurisdictionId: "j-payalgacha",
     landUse: "agricultural", area: { value: 120, unit: "decimal" }, ownerId: "usr-shanti", ownerName: "Shanti Rani Das",
-    ownershipType: "sole", registryStatus: "disputed", centroid: { lat: 23.3625, lng: 91.033 },
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.3625, lng: 91.033 },
     boundary: square({ lat: 23.3625, lng: 91.033 }, 0.0015), marketValue: { amount: 6900000, currency: "BDT" },
     registeredAt: "2018-01-16T00:00:00Z", lastMutationAt: "2018-01-16T00:00:00Z", openDisputeCount: 2,
   },
@@ -194,9 +194,39 @@ export const parcels: Parcel[] = [
   {
     id: "p-176", ulpin: "ILR-CUM-BAR-000002", dagNo: "CS-176", khatianNo: "489", title: "Hillfoot plot, Payalgacha", jurisdictionId: "j-payalgacha",
     landUse: "vacant", area: { value: 60, unit: "decimal" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
-    ownershipType: "joint", registryStatus: "flagged", centroid: { lat: 23.359, lng: 91.0365 },
+    ownershipType: "joint", registryStatus: "verified", centroid: { lat: 23.359, lng: 91.0365 },
     boundary: square({ lat: 23.359, lng: 91.0365 }, 0.0012), marketValue: { amount: 3700000, currency: "BDT" },
     registeredAt: "2012-05-22T00:00:00Z", openDisputeCount: 1,
+  },
+  {
+    id: "p-401", ulpin: "ILR-CUM-DEB-000005", dagNo: "RS-401", khatianNo: "701", title: "North paddy plot, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "agricultural", area: { value: 46, unit: "decimal" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.552, lng: 90.991 }, boundary: square({ lat: 23.552, lng: 90.991 }, 0.0007),
+    marketValue: { amount: 2850000, currency: "BDT" }, registeredAt: "2020-03-12T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-402", ulpin: "ILR-CUM-DEB-000006", dagNo: "RS-402", khatianNo: "702", title: "Canal-side homestead, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "residential", area: { value: 6, unit: "katha" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.553, lng: 90.992 }, boundary: square({ lat: 23.553, lng: 90.992 }, 0.0005),
+    marketValue: { amount: 4100000, currency: "BDT" }, registeredAt: "2017-09-18T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-403", ulpin: "ILR-CUM-DEB-000007", dagNo: "RS-403", khatianNo: "703", title: "South boundary plot, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "vacant", area: { value: 31, unit: "decimal" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.554, lng: 90.993 }, boundary: square({ lat: 23.554, lng: 90.993 }, 0.0006),
+    marketValue: { amount: 2300000, currency: "BDT" }, registeredAt: "2016-11-05T00:00:00Z", openDisputeCount: 1,
+  },
+  {
+    id: "p-404", ulpin: "ILR-CUM-DEB-000008", dagNo: "RS-404", khatianNo: "704", title: "Market approach plot, Debidwar", jurisdictionId: "j-debidwar",
+    landUse: "commercial", area: { value: 4, unit: "katha" }, ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise",
+    ownershipType: "corporate", registryStatus: "verified", centroid: { lat: 23.555, lng: 90.994 }, boundary: square({ lat: 23.555, lng: 90.994 }, 0.0004),
+    marketValue: { amount: 7800000, currency: "BDT" }, registeredAt: "2022-02-14T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-405", ulpin: "ILR-CUM-DEB-000009", dagNo: "RS-405", khatianNo: "705", title: "West garden plot, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "mixed", area: { value: 38, unit: "decimal" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.556, lng: 90.995 }, boundary: square({ lat: 23.556, lng: 90.995 }, 0.0007),
+    marketValue: { amount: 3350000, currency: "BDT" }, registeredAt: "2014-06-21T00:00:00Z", lastMutationAt: "2026-08-28T10:00:00Z", openDisputeCount: 0,
   },
 ];
 
@@ -216,6 +246,12 @@ export const ownershipRecords: OwnershipRecord[] = [
   { id: "own-4", parcelId: "p-088", ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque", acquisitionType: "inheritance", fromDate: "1990-04-02T00:00:00Z", toDate: null },
   { id: "own-5", parcelId: "p-311", ownerId: "usr-karim", ownerName: "Md. Karim Uddin", acquisitionType: "purchase", fromDate: "2019-10-08T00:00:00Z", toDate: "2026-06-30T10:00:00Z" },
   { id: "own-6", parcelId: "p-311", ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise", acquisitionType: "purchase", fromDate: "2026-06-30T10:00:00Z", toDate: null, documentId: "d-7", mutationId: "m-1180" },
+  { id: "own-7", parcelId: "p-401", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "purchase", fromDate: "2020-03-12T00:00:00Z", toDate: null, documentId: "d-14" },
+  { id: "own-8", parcelId: "p-402", ownerId: "usr-karim", ownerName: "Md. Karim Uddin", acquisitionType: "purchase", fromDate: "2017-09-18T00:00:00Z", toDate: null, documentId: "d-15" },
+  { id: "own-9", parcelId: "p-403", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "inheritance", fromDate: "2016-11-05T00:00:00Z", toDate: null, documentId: "d-16" },
+  { id: "own-10", parcelId: "p-404", ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise", acquisitionType: "purchase", fromDate: "2022-02-14T00:00:00Z", toDate: null, documentId: "d-17" },
+  { id: "own-11", parcelId: "p-405", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "purchase", fromDate: "2014-06-21T00:00:00Z", toDate: "2026-08-28T10:00:00Z" },
+  { id: "own-12", parcelId: "p-405", ownerId: "usr-karim", ownerName: "Md. Karim Uddin", acquisitionType: "gift", fromDate: "2026-08-28T10:00:00Z", toDate: null, documentId: "d-18", mutationId: "m-1231" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -238,6 +274,11 @@ export const documents: LandDocument[] = [
   { id: "d-12", parcelId: "p-311", ownerId: "usr-karim", type: "survey-report", fileName: "survey-311-amin.pdf", mimeType: "application/pdf", sizeBytes: 733410, pageCount: 4, uploadedAt: "2026-07-23T08:45:00Z", uploadedById: "usr-officer2", ocrStatus: "extracted", verificationStatus: "unverified", extractedFields: { "Dag No": "RS-311/7", Khatian: "355", Area: "3 katha" } },
   // A phone photo of a bound register page — the reader gave up on it.
   { id: "d-13", parcelId: "p-176", ownerId: "usr-karim", type: "title-deed", fileName: "khatian-176-photo.jpg", mimeType: "image/jpeg", sizeBytes: 3204118, uploadedAt: "2026-07-24T17:05:00Z", uploadedById: "usr-karim", ocrStatus: "failed", verificationStatus: "unverified" },
+  { id: "d-14", parcelId: "p-401", ownerId: "usr-ayesha", type: "title-deed", fileName: "khatian-401-701.pdf", mimeType: "application/pdf", sizeBytes: 388120, pageCount: 3, uploadedAt: "2026-08-10T09:00:00Z", uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.01, extractedFields: { "Dag No": "RS-401", Khatian: "701", Owner: "Ayesha Siddika" } },
+  { id: "d-15", parcelId: "p-402", ownerId: "usr-karim", type: "sale-deed", fileName: "sale-deed-402.pdf", mimeType: "application/pdf", sizeBytes: 612480, pageCount: 6, uploadedAt: "2026-09-05T08:30:00Z", uploadedById: "usr-karim", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.03, extractedFields: { "Dag No": "RS-402", Khatian: "702", Owner: "Md. Karim Uddin" } },
+  { id: "d-16", parcelId: "p-403", ownerId: "usr-ayesha", type: "survey-report", fileName: "boundary-survey-403.pdf", mimeType: "application/pdf", sizeBytes: 544210, pageCount: 5, uploadedAt: "2026-09-07T07:00:00Z", uploadedById: "usr-agent", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02 },
+  { id: "d-17", parcelId: "p-404", ownerId: "usr-iqbal", type: "title-deed", fileName: "deed-404-scan.pdf", mimeType: "application/pdf", sizeBytes: 721330, pageCount: 7, uploadedAt: "2026-09-08T10:15:00Z", uploadedById: "usr-iqbal", ocrStatus: "extracted", verificationStatus: "flagged", fraudScore: 0.86, extractedFields: { "Dag No": "RS-440", Khatian: "704", Owner: "Iqbal Enterprise" } },
+  { id: "d-18", parcelId: "p-405", ownerId: "usr-karim", type: "mutation-order", fileName: "mutation-order-405.pdf", mimeType: "application/pdf", sizeBytes: 264900, pageCount: 2, uploadedAt: "2026-08-28T10:05:00Z", uploadedById: "usr-officer", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.01 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -275,11 +316,11 @@ export const disputes: Dispute[] = [
   // the mediator's "to convene" board.
   {
     id: "ds-381", caseNumber: "DSP-2026-00381", parcelId: "p-092", parcelDagNo: "RS-92/4",
-    type: "easement", status: "in-mediation", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
+    type: "easement", status: "resolved", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
     filedAt: "2026-06-18T07:20:00Z", updatedAt: "2026-07-16T10:05:00Z",
     description: "Right of way across the northern strip of dag RS-92/4 blocked after the neighbouring owner raised a boundary wall. Referred for mediation.",
     parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Sohel Rana", role: "respondent" }],
-    assignedMediatorId: "usr-mediator", evidenceDocumentIds: [],
+    assignedMediatorId: "usr-mediator", evidenceDocumentIds: [], resolution: "The recorded access path was confirmed and reopened by agreement.",
   },
   {
     id: "ds-370", caseNumber: "DSP-2026-00370", parcelId: "p-311", parcelDagNo: "RS-311/2",
@@ -305,6 +346,14 @@ export const disputes: Dispute[] = [
     parties: [{ name: "Shanti Rani Das", role: "claimant", userId: "usr-shanti" }, { name: "Upazila Land Office", role: "respondent" }],
     assignedMediatorId: "usr-mediator", hearingDate: "2026-07-30T05:30:00Z", evidenceDocumentIds: ["d-5"],
   },
+  {
+    id: "ds-430", caseNumber: "DSP-2026-00430", parcelId: "p-403", parcelDagNo: "RS-403",
+    type: "boundary", status: "field-visit-scheduled", priority: "high", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
+    filedAt: "2026-09-06T09:00:00Z", updatedAt: "2026-09-07T08:30:00Z",
+    description: "The field agent found a boundary occupation on the southern edge during measurement.",
+    parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Adjacent occupier", role: "respondent" }],
+    assignedOfficerId: "usr-officer", assignedAgentId: "usr-agent", evidenceDocumentIds: ["d-16"],
+  },
 ];
 
 export const disputeEvents: DisputeEvent[] = [
@@ -325,19 +374,40 @@ export const mutations: Mutation[] = [
   { id: "m-1180", mutationNumber: "MUT-2026-01180", parcelId: "p-311", parcelDagNo: "RS-311/2", type: "sale", status: "complete", mutationKhatianNumber: "MK-2026-00001180", dcrPaidAt: "2026-06-30T10:00:00Z", fromOwnerName: "Md. Karim Uddin", fromOwnerId: "usr-karim", toOwnerId: "usr-iqbal", toOwnerName: "Iqbal Enterprise", requestedById: "usr-karim", requestedAt: "2026-06-10T10:00:00Z", assignedOfficerId: "usr-officer", verificationStartedAt: "2026-06-11T09:00:00Z", verificationStartedById: "usr-officer", verifiedAt: "2026-06-14T10:00:00Z", verifiedById: "usr-officer", verificationNotes: "Legacy deed record verified before the statutory notice.", verificationChecklist: { applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: true, dagKhatianVerified: true, deedVerified: true, landRecordMatched: true, documentsPresent: true, khajnaReceiptVerified: true }, objectionStartDate: "2026-06-15T00:00:00Z", objectionWindowEndsAt: "2026-06-29T00:00:00Z", documentIds: ["d-7"], objections: [], fee: { amount: 42000, currency: "BDT" }, approvedAt: "2026-06-30T10:00:00Z", approvedById: "usr-officer", approvalNote: "No objections were received during the notice period.", decidedAt: "2026-06-30T10:00:00Z", createdAt: "2026-06-10T10:00:00Z", updatedAt: "2026-06-30T10:00:00Z" },
   { id: "m-1200", mutationNumber: "MUT-2026-01200", parcelId: "p-142", parcelDagNo: "CS-142/3", type: "gift", status: "field-verification-complete", disputeId: "ds-417", fromOwnerName: "Ayesha Siddika", fromOwnerId: "usr-ayesha", toOwnerId: "usr-karim", toOwnerName: "Md. Karim Uddin", requestedById: "usr-ayesha", requestedAt: "2026-07-09T10:00:00Z", assignedOfficerId: "usr-officer", verificationStartedAt: "2026-07-10T09:00:00Z", verificationStartedById: "usr-officer", verifiedAt: "2026-07-12T11:00:00Z", verifiedById: "usr-officer", verificationNotes: "Deed, khatian, and parties verified.", verificationChecklist: { applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: true, dagKhatianVerified: true, deedVerified: true, landRecordMatched: true, documentsPresent: true, khajnaReceiptVerified: true }, objectionStartDate: "2026-07-13T00:00:00Z", objectionWindowEndsAt: "2026-07-27T00:00:00Z", documentIds: ["d-1", "d-2"], objections: [], createdAt: "2026-07-09T10:00:00Z", updatedAt: "2026-07-27T00:00:00Z" },
   { id: "m-1205", mutationNumber: "MUT-2026-01205", parcelId: "p-176", parcelDagNo: "CS-176", type: "sale", status: "field-investigation", fromOwnerName: "Md. Karim Uddin", fromOwnerId: "usr-karim", toOwnerId: "usr-ayesha", toOwnerName: "Ayesha Siddika", requestedById: "usr-karim", requestedAt: "2026-07-16T10:00:00Z", assignedOfficerId: "usr-officer2", verificationStartedAt: "2026-07-17T09:00:00Z", verificationStartedById: "usr-officer2", verifiedAt: "2026-07-18T10:00:00Z", verifiedById: "usr-officer2", verificationNotes: "Documents cleared for public notice pending the fraud objection.", verificationChecklist: { applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: true, dagKhatianVerified: true, deedVerified: true, landRecordMatched: true, documentsPresent: true, khajnaReceiptVerified: true }, objectionStartDate: "2026-07-18T12:00:00Z", documentIds: ["d-6"], objections: [{ id: "obj-1", by: "Md. Karim Uddin", at: "2026-07-19T09:00:00Z", reason: "Deed signature disputed — see fraud case DSP-2026-00388.", status: "open" }], objectionWindowEndsAt: "2026-07-31T00:00:00Z", createdAt: "2026-07-16T10:00:00Z", updatedAt: "2026-07-31T00:00:00Z" },
-  { id: "m-1220", mutationNumber: "MUT-2026-01220", parcelId: "p-311", parcelDagNo: "RS-311/2", type: "sale", status: "field-investigation", fromOwnerName: "Iqbal Enterprise", fromOwnerId: "usr-iqbal", toOwnerId: "usr-ayesha", toOwnerName: "Ayesha Siddika", requestedById: "usr-karim", requestedAt: "2026-09-01T10:00:00Z", assignedOfficerId: "usr-officer", verificationStartedAt: "2026-09-02T09:00:00Z", verificationStartedById: "usr-officer", verifiedAt: "2026-09-03T10:00:00Z", verifiedById: "usr-officer", verificationNotes: "Current deed, khatian, and recipient identity verified for notice.", verificationChecklist: { applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: true, dagKhatianVerified: true, deedVerified: true, landRecordMatched: true, documentsPresent: true, khajnaReceiptVerified: true }, objectionStartDate: "2026-09-03T12:00:00Z", objectionWindowEndsAt: "2026-09-17T12:00:00Z", documentIds: ["d-7"], objections: [], createdAt: "2026-09-01T10:00:00Z", updatedAt: "2026-09-03T12:00:00Z" },
+  { id: "m-1220", mutationNumber: "MUT-2026-01220", parcelId: "p-311", parcelDagNo: "RS-311/2", type: "sale", status: "rejected", fromOwnerName: "Iqbal Enterprise", fromOwnerId: "usr-iqbal", toOwnerId: "usr-ayesha", toOwnerName: "Ayesha Siddika", requestedById: "usr-karim", requestedAt: "2026-09-01T10:00:00Z", assignedOfficerId: "usr-officer", verificationStartedAt: "2026-09-02T09:00:00Z", verificationStartedById: "usr-officer", verifiedAt: "2026-09-03T10:00:00Z", verifiedById: "usr-officer", verificationNotes: "Current deed, khatian, and recipient identity verified for notice.", verificationChecklist: { applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: true, dagKhatianVerified: true, deedVerified: true, landRecordMatched: true, documentsPresent: true, khajnaReceiptVerified: true }, objectionStartDate: "2026-09-03T12:00:00Z", objectionWindowEndsAt: "2026-09-17T12:00:00Z", documentIds: ["d-7"], objections: [], rejectedAt: "2026-09-04T10:00:00Z", rejectedById: "usr-officer", rejectionReason: "Applicant is not the recorded owner or an authorised representative.", decidedAt: "2026-09-04T10:00:00Z", createdAt: "2026-09-01T10:00:00Z", updatedAt: "2026-09-04T10:00:00Z" },
   { id: "m-1210", mutationNumber: "MUT-2026-01210", parcelId: "p-092", parcelDagNo: "RS-92/4", type: "correction", status: "submitted", fromOwnerName: "Ayesha Siddika", fromOwnerId: "usr-ayesha", toOwnerId: "usr-ayesha", toOwnerName: "Ayesha Siddika", requestedById: "usr-ayesha", requestedAt: "2026-07-22T11:00:00Z", documentIds: ["d-8"], objections: [], createdAt: "2026-07-22T11:00:00Z", updatedAt: "2026-07-22T11:00:00Z" },
   { id: "m-1150", mutationNumber: "MUT-2026-01150", parcelId: "p-205", parcelDagNo: "BS-205", type: "partition", status: "rejected", fromOwnerName: "Shanti Rani Das", fromOwnerId: "usr-shanti", toOwnerName: "Shanti Rani Das + heirs", requestedById: "usr-shanti", requestedAt: "2026-05-02T10:00:00Z", assignedOfficerId: "usr-officer2", verificationStartedAt: "2026-05-05T09:00:00Z", verificationStartedById: "usr-officer2", verificationNotes: "Supporting partition schedule was incomplete.", verificationChecklist: { applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: false, dagKhatianVerified: true, deedVerified: false, landRecordMatched: false, documentsPresent: false, khajnaReceiptVerified: false }, documentIds: [], objections: [], rejectedAt: "2026-05-20T10:00:00Z", rejectedById: "usr-officer2", rejectionReason: "Required heir consent and partition schedule were not supplied.", decidedAt: "2026-05-20T10:00:00Z", createdAt: "2026-05-02T10:00:00Z", updatedAt: "2026-05-20T10:00:00Z" },
+  { id: "m-1230", mutationNumber: "MUT-2026-01230", parcelId: "p-402", parcelDagNo: "RS-402", type: "sale", status: "under-primary-verification", fromOwnerName: "Md. Karim Uddin", fromOwnerId: "usr-karim", toOwnerId: "usr-ayesha", toOwnerName: "Ayesha Siddika", requestedById: "usr-karim", requestedAt: "2026-09-05T09:00:00Z", assignedOfficerId: "usr-officer", verificationStartedAt: "2026-09-06T09:00:00Z", verificationStartedById: "usr-officer", verificationNotes: "Identity, deed, and khatian are being checked.", verificationChecklist: { applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: true, dagKhatianVerified: true, deedVerified: false, landRecordMatched: true, documentsPresent: true, khajnaReceiptVerified: false }, documentIds: ["d-15"], objections: [], fee: { amount: 9600, currency: "BDT" }, createdAt: "2026-09-05T09:00:00Z", updatedAt: "2026-09-06T09:00:00Z" },
+  { id: "m-1231", mutationNumber: "MUT-2026-01231", parcelId: "p-405", parcelDagNo: "RS-405", type: "gift", status: "complete", mutationKhatianNumber: "MK-2026-00001231", dcrPaidAt: "2026-08-28T10:00:00Z", fromOwnerName: "Ayesha Siddika", fromOwnerId: "usr-ayesha", toOwnerId: "usr-karim", toOwnerName: "Md. Karim Uddin", requestedById: "usr-ayesha", requestedAt: "2026-08-01T09:00:00Z", assignedOfficerId: "usr-officer", verificationStartedAt: "2026-08-02T09:00:00Z", verificationStartedById: "usr-officer", verifiedAt: "2026-08-05T10:00:00Z", verifiedById: "usr-officer", verificationNotes: "Gift deed and both parties verified.", verificationChecklist: { applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: true, dagKhatianVerified: true, deedVerified: true, landRecordMatched: true, documentsPresent: true, khajnaReceiptVerified: true }, documentIds: ["d-18"], objections: [], fee: { amount: 7200, currency: "BDT" }, approvedAt: "2026-08-27T10:00:00Z", approvedById: "usr-officer", approvalNote: "Verification complete and no objections received.", decidedAt: "2026-08-27T10:00:00Z", createdAt: "2026-08-01T09:00:00Z", updatedAt: "2026-08-28T10:00:00Z" },
 ];
 
 // ---------------------------------------------------------------------------
-// Service applications (Land Tax, Acquisition, Lease, Land Admin, Revenue
-// Cases, Info Bank) — the shared model behind the six not-yet-built services.
-// No seed rows: no screen reads these yet, so a demo has nothing to show —
-// they will arrive with each service's own screen (ILRDMS steps 5-9).
+// Service applications — paid land-tax rows are both receipts and the source
+// used to derive each holding's paid-through year. This avoids maintaining a
+// second tax status that could disagree with the collection register.
 // ---------------------------------------------------------------------------
-export const serviceApplications: ServiceApplication[] = [];
-export const serviceApplicationEvents: ServiceApplicationEvent[] = [];
+export const serviceApplications: ServiceApplication[] = [
+  {
+    id: "sa-tax-1", applicationNo: "LDT-2026-001000", serviceType: "land-tax", status: "approved",
+    parcelId: "p-092", applicantId: "usr-ayesha", assignedOfficerId: "usr-officer",
+    details: { assessmentYear: 2026, decimals: 8.25, arrears: 0, currentYearDue: 83, years: [{ year: 2026, assessed: 83, surcharge: 0, due: 83, isArrear: false }] },
+    documentIds: [], feeAmount: 83, paymentMethod: "bkash", transactionId: "TXN-LDT092A",
+    paidAt: "2026-09-10T06:30:00Z", submittedAt: "2026-09-10T06:30:00Z", decidedAt: "2026-09-10T06:30:00Z",
+    createdAt: "2026-09-10T06:30:00Z", updatedAt: "2026-09-10T06:30:00Z",
+  },
+  {
+    id: "sa-tax-2", applicationNo: "LDT-2026-001001", serviceType: "land-tax", status: "approved",
+    parcelId: "p-311", applicantId: "usr-iqbal", assignedOfficerId: "usr-officer",
+    details: { assessmentYear: 2026, decimals: 4.95, arrears: 446, currentYearDue: 124, years: [{ year: 2023, assessed: 124, surcharge: 37, due: 161, isArrear: true }, { year: 2024, assessed: 124, surcharge: 25, due: 149, isArrear: true }, { year: 2025, assessed: 124, surcharge: 12, due: 136, isArrear: true }, { year: 2026, assessed: 124, surcharge: 0, due: 124, isArrear: false }] },
+    documentIds: [], feeAmount: 570, paymentMethod: "nagad", transactionId: "TXN-LDT311B",
+    paidAt: "2026-09-12T08:15:00Z", submittedAt: "2026-09-12T08:15:00Z", decidedAt: "2026-09-12T08:15:00Z",
+    createdAt: "2026-09-12T08:15:00Z", updatedAt: "2026-09-12T08:15:00Z",
+  },
+];
+export const serviceApplicationEvents: ServiceApplicationEvent[] = [
+  { id: "sae-tax-1", applicationId: "sa-tax-1", at: "2026-09-10T06:30:00Z", type: "payment-recorded", title: "Land development tax paid", actorId: "usr-officer", actorName: "Nasrin Akter" },
+  { id: "sae-tax-2", applicationId: "sa-tax-2", at: "2026-09-12T08:15:00Z", type: "payment-recorded", title: "Land development tax paid", actorId: "usr-officer", actorName: "Nasrin Akter" },
+];
 
 // ---------------------------------------------------------------------------
 // Field reports
@@ -354,7 +424,8 @@ export const fieldReports: FieldReport[] = [
     notes: "NE corner pillar intact. Cultivation observed ~2.8m inside the recorded line on the eastern edge. Recommend re-demarcation.",
   },
   { id: "fr-3", parcelId: "p-176", parcelDagNo: "CS-176", purpose: "possession-verify", status: "in-progress", assignedAgentId: "usr-agent2", assignedAt: "2026-07-21T10:00:00Z", acceptedAt: "2026-07-21T10:15:00Z", scheduledFor: "2026-07-23T05:00:00Z", addressHint: "Hillfoot plot, Payalgacha", gpsCaptures: [], photos: [] },
-  { id: "fr-4", parcelId: "p-088", parcelDagNo: "RS-88", mutationId: "m-1192", purpose: "measurement", status: "assigned", assignedAgentId: "usr-agent", assignedAt: "2026-07-23T08:30:00Z", scheduledFor: "2026-07-25T04:30:00Z", addressHint: "Homestead plot, Rajamehar", gpsCaptures: [], photos: [] },
+  { id: "fr-4", parcelId: "p-088", parcelDagNo: "RS-88", mutationId: "m-1192", purpose: "measurement", status: "cancelled", assignedAgentId: "usr-agent", assignedAt: "2026-07-23T08:30:00Z", scheduledFor: "2026-07-25T04:30:00Z", addressHint: "Homestead plot, Rajamehar", gpsCaptures: [], photos: [], notes: "Cancelled fixture: keeps MUT-2026-01192 in the reassignment queue." },
+  { id: "fr-5", parcelId: "p-403", parcelDagNo: "RS-403", disputeId: "ds-430", purpose: "boundary-survey", status: "completed", assignedAgentId: "usr-agent", assignedAt: "2026-09-06T10:00:00Z", acceptedAt: "2026-09-06T10:15:00Z", scheduledFor: "2026-09-07T05:00:00Z", submittedAt: "2026-09-07T08:30:00Z", addressHint: "Southern boundary, Rajamehar", gpsCaptures: [{ id: "g-403-1", point: { lat: 23.5537, lng: 90.9932 }, accuracyMeters: 3.6, capturedAt: "2026-09-07T06:10:00Z", label: "Occupied boundary corner" }], photos: [{ id: "ph-403-1", url: "", caption: "Boundary occupation found during field inspection", capturedAt: "2026-09-07T06:15:00Z" }], notes: "Recorded southern boundary is occupied by the adjacent holder; dispute opened for officer review." },
 ];
 
 export const fieldSurveySessions: FieldSurveySession[] = [
@@ -467,6 +538,7 @@ export const auditSeed: Omit<AuditEvent, "prevHash" | "hash">[] = [
   { id: "au-27", entityType: "mutation", entityId: "m-1220", action: "start-verification", actorId: "usr-officer", actorName: "Nasrin Akter", payload: { from: "submitted", to: "under-primary-verification" }, createdAt: "2026-09-02T09:00:00Z" },
   { id: "au-28", entityType: "mutation", entityId: "m-1220", action: "verify", actorId: "usr-officer", actorName: "Nasrin Akter", payload: { checklistComplete: true }, createdAt: "2026-09-03T10:00:00Z" },
   { id: "au-29", entityType: "mutation", entityId: "m-1220", action: "start-objection-period", actorId: "usr-officer", actorName: "Nasrin Akter", payload: { from: "under-primary-verification", to: "field-investigation", endsAt: "2026-09-17T12:00:00Z" }, createdAt: "2026-09-03T12:00:00Z" },
+  { id: "au-30", entityType: "mutation", entityId: "m-1220", action: "reject", actorId: "usr-officer", actorName: "Nasrin Akter", payload: { previousStatus: "field-investigation", newStatus: "rejected", reason: "Applicant is not the recorded owner or an authorised representative." }, createdAt: "2026-09-04T10:00:00Z" },
 ];
 
 
