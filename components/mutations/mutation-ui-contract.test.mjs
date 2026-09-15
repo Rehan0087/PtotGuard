@@ -60,7 +60,7 @@ test("mutations page integrates the complete URL-backed officer workflow", () =>
   assert.match(pageSource, /const SCOPE_FILTERS = \["all", "assigned"\] as const;/);
   assert.match(
     pageSource,
-    /const STATUS_FILTERS = \[\s*"all",\s*"submitted",\s*"verification",\s*"objection-period",\s*"approved",\s*"rejected",?\s*\] as const;/,
+    /const STATUS_FILTERS = \[\s*"all",\s*"submitted",\s*"under-primary-verification",\s*"field-investigation",\s*"field-verification-complete",\s*"approved",\s*"rejected",\s*"awaiting-dcr-payment",\s*"complete",?\s*\] as const;/,
   );
   assert.match(pageSource, /useSearchParams\(\)/);
   assert.match(pageSource, /router\.replace\(/);

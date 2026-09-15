@@ -1,10 +1,13 @@
-import type { Mutation, MutationStatus, RegistryStatus } from "./types";
+import type { MutationStatus, RegistryStatus } from "./types";
 
 /** Mutation rows that make a parcel actively unavailable for another transfer. */
 export const ACTIVE_MUTATION_STATUSES = [
   "submitted",
-  "verification",
-  "objection-period",
+  "under-primary-verification",
+  "field-investigation",
+  "field-verification-complete",
+  "approved",
+  "awaiting-dcr-payment",
 ] as const satisfies readonly MutationStatus[];
 
 /**
@@ -14,8 +17,9 @@ export const ACTIVE_MUTATION_STATUSES = [
  */
 export function recordRegistryStatus(
   baseStatus: RegistryStatus,
-  mutations: readonly Pick<Mutation, "status">[],
+  mutations: readonly { status: MutationStatus; disputeId?: string | null }[],
 ): RegistryStatus {
+  if (mutations.some(({ disputeId }) => Boolean(disputeId))) return "disputed";
   return mutations.some(({ status }) =>
     ACTIVE_MUTATION_STATUSES.includes(status as (typeof ACTIVE_MUTATION_STATUSES)[number]))
     ? "under-mutation"

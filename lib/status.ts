@@ -53,10 +53,13 @@ export const priorityTone: Record<Priority, StatusTone> = {
 
 export const mutationStatusTone: Record<MutationStatus, StatusTone> = {
   submitted: "pending",
-  verification: "review",
-  "objection-period": "disputed",
+  "under-primary-verification": "review",
+  "field-investigation": "review",
+  "field-verification-complete": "verified",
   approved: "verified",
   rejected: "flagged",
+  "awaiting-dcr-payment": "pending",
+  complete: "verified",
 };
 
 export const ocrStatusTone: Record<OcrStatus, StatusTone> = {

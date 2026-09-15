@@ -81,7 +81,7 @@ export class ParcelsController {
           owner: { select: { name: true } },
           mutations: {
             where: activeMutationFilter,
-            select: { status: true },
+            select: { status: true, disputeId: true },
           },
         },
       }),
@@ -107,7 +107,7 @@ export class ParcelsController {
             ...view,
             registryStatus: recordRegistryStatus(
               parcel.registryStatus as RegistryStatus,
-              mutations as { status: MutationStatus }[],
+              mutations as { status: MutationStatus; disputeId: string | null }[],
             ),
           }
         : view;

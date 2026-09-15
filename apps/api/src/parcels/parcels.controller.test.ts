@@ -74,7 +74,7 @@ describe("Land Office parcel records", () => {
         jurisdictionId: { in: ["j-debidwar", "j-rajamehar"] },
         registryStatus: "verified",
         mutations: {
-          none: { status: { in: ["submitted", "verification", "objection-period"] } },
+          none: { status: { in: ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "awaiting-dcr-payment"] } },
         },
         OR: [
           { dagNo: { contains: "ayesha", mode: "insensitive" } },
@@ -87,8 +87,8 @@ describe("Land Office parcel records", () => {
       include: {
         owner: { select: { name: true } },
         mutations: {
-          where: { status: { in: ["submitted", "verification", "objection-period"] } },
-          select: { status: true },
+          where: { status: { in: ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "awaiting-dcr-payment"] } },
+          select: { status: true, disputeId: true },
         },
       },
     });
@@ -98,7 +98,7 @@ describe("Land Office parcel records", () => {
     const activeParcel = {
       ...parcel,
       registryStatus: "verified",
-      mutations: [{ status: "verification" }],
+      mutations: [{ status: "under-primary-verification", disputeId: null }],
     };
     const findMany = vi.fn().mockResolvedValue([activeParcel]);
     const prisma = {
@@ -117,7 +117,7 @@ describe("Land Office parcel records", () => {
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         mutations: {
-          some: { status: { in: ["submitted", "verification", "objection-period"] } },
+          some: { status: { in: ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "awaiting-dcr-payment"] } },
         },
       }),
     }));
@@ -208,7 +208,7 @@ describe("Land Office parcel records", () => {
     const mutationFindMany = vi.fn()
       .mockResolvedValueOnce([{
         id: "m-active", parcelId: "p-1", mutationNumber: "MUT-2026-00002",
-        status: "objection-period", requestedAt: new Date("2026-09-01T00:00:00Z"),
+        status: "field-investigation", disputeId: null, requestedAt: new Date("2026-09-01T00:00:00Z"),
         requestedBy: { name: "Ayesha Siddika" }, assignedOfficer: { name: "Nasrin Akter" },
         approvedBy: null, rejectedBy: null,
       }])
@@ -235,7 +235,7 @@ describe("Land Office parcel records", () => {
     const terminal = await controller.record("p-1", requestFor("land-office"));
 
     expect(active.parcel.registryStatus).toBe("under-mutation");
-    expect(active.mutations[0].mutation.status).toBe("objection-period");
+    expect(active.mutations[0].mutation.status).toBe("field-investigation");
     expect(terminal.parcel.registryStatus).toBe("verified");
     expect(terminal.mutations[0].mutation.status).toBe("rejected");
   });

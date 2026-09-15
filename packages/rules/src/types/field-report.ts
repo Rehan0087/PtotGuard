@@ -49,6 +49,8 @@ export interface FieldReport {
   addressHint?: string;
   gpsCaptures: GpsCapture[];
   photos: FieldPhoto[];
+  sketchMapUrl?: string;
+  sketchMapFileName?: string;
   notes?: string;
   submittedAt?: ISODateString;
 }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MSW request handlers — a mock of the frozen PlotGuard Core API. Response shapes
  * match the planned NestJS backend exactly, so swapping MSW for the live API is a
  * config change (see lib/api-client.ts), not a rewrite. Paths after the /api base
@@ -156,8 +156,8 @@ function transitionError(
   if (gate[action]) return null;
 
   const transitionAlreadyApplied =
-    (action === "canStartVerification" && ["verification", "objection-period"].includes(mutation.status))
-    || (action === "canCompleteVerification" && mutation.status === "objection-period");
+    (action === "canStartVerification" && ["under-primary-verification", "field-investigation"].includes(mutation.status))
+    || (action === "canCompleteVerification" && mutation.status === "field-investigation");
   if (transitionAlreadyApplied) {
     return conflict("This mutation has already moved past that workflow transition.");
   }
@@ -178,6 +178,7 @@ const VERIFICATION_FIELDS = [
   "deedVerified",
   "landRecordMatched",
   "documentsPresent",
+  "khajnaReceiptVerified",
 ] as const;
 
 type CreateMutationBody = {
@@ -252,7 +253,7 @@ function validateVerificationBody(value: unknown) {
 function validateDecisionBody(value: unknown) {
   const body = recordBody(value);
   if (!body) return { ok: false as const, response: badRequest("Request body must be an object.") };
-  const extra = unexpectedProperty(body, ["decision", "rejectionReason", "approvalNote"]);
+  const extra = unexpectedProperty(body, ["decision", "rejectionReason", "approvalNote", "orderSheet", "digitalSignature"]);
   if (extra) return { ok: false as const, response: badRequest(`property ${extra} should not exist`) };
   if (body.decision !== "approve" && body.decision !== "reject") {
     return { ok: false as const, response: badRequest("decision must be one of the following values: approve, reject") };
@@ -268,10 +269,18 @@ function validateDecisionBody(value: unknown) {
   if (body.decision === "approve" && body.approvalNote !== undefined && body.approvalNote !== null && typeof body.approvalNote !== "string") {
     return { ok: false as const, response: badRequest("approvalNote must be a string") };
   }
+  if (body.decision === "approve" && (typeof body.orderSheet !== "string" || !/\S/.test(body.orderSheet))) {
+    return { ok: false as const, response: badRequest("orderSheet is required") };
+  }
+  if (body.decision === "approve" && (typeof body.digitalSignature !== "string" || !/\S/.test(body.digitalSignature))) {
+    return { ok: false as const, response: badRequest("digitalSignature is required") };
+  }
   return { ok: true as const, value: {
     decision: body.decision,
     rejectionReason: typeof body.rejectionReason === "string" ? body.rejectionReason : undefined,
     approvalNote: typeof body.approvalNote === "string" ? body.approvalNote : undefined,
+    orderSheet: typeof body.orderSheet === "string" ? body.orderSheet : undefined,
+    digitalSignature: typeof body.digitalSignature === "string" ? body.digitalSignature : undefined,
   } };
 }
 
@@ -299,7 +308,7 @@ function forbidden(message = "This portal is restricted to the assigned role") {
  * structured code so the client can word the refusal in the reader's language;
  * `message` stays as an English fallback for logs and unknown codes.
  */
-function unprocessable(errors: Record<string, { code: string } | undefined>) {
+function unprocessable(errors: Record<string, ({ code: string } & Record<string, unknown>) | undefined>) {
   const [field, reason] = Object.entries(errors).find(([, r]) => r) ?? [];
   return HttpResponse.json(
     {
@@ -1090,7 +1099,7 @@ export const handlers = [
     const previousStatus = mutation.status;
     const at = now.toISOString();
     Object.assign(mutation, {
-      status: "verification" as const,
+      status: "under-primary-verification" as const,
       assignedOfficerId: actor.id,
       verificationStartedAt: at,
       verificationStartedById: actor.id,
@@ -1121,7 +1130,7 @@ export const handlers = [
     if (accessError) return accessError;
 
     const now = new Date();
-    const gateError = transitionError(mutation, actor, now, "canCompleteVerification", ["verification"]);
+    const gateError = transitionError(mutation, actor, now, "canCompleteVerification", ["under-primary-verification"]);
     if (gateError) return gateError;
     const verification = verificationGate(checklist, notes);
     if (!verification.ok) return unprocessable({ verification: verification.reason });
@@ -1142,7 +1151,7 @@ export const handlers = [
     const previousStatus = mutation.status;
     const at = now.toISOString();
     Object.assign(mutation, {
-      status: "objection-period" as const,
+      status: "field-investigation" as const,
       assignedOfficerId: actor.id,
       verifiedAt: at,
       verifiedById: actor.id,
@@ -1182,7 +1191,7 @@ export const handlers = [
       actor,
       now,
       approving ? "canApprove" : "canReject",
-      approving ? ["objection-period"] : ["submitted", "verification", "objection-period"],
+      approving ? ["field-verification-complete"] : ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete"],
     );
     if (gateError) return gateError;
     const reason = body.rejectionReason?.trim() ?? "";
@@ -1190,9 +1199,6 @@ export const handlers = [
 
     const parcel = mutationParcel(mutation)!;
     if (approving) {
-      if (!mutation.objectionWindowEndsAt) {
-        return unprocessable({ decision: { code: "objection-window-missing" } });
-      }
       if (!mutation.fromOwnerId || parcel.ownerId !== mutation.fromOwnerId) {
         return conflict("The parcel owner has changed since this mutation was filed.");
       }
@@ -1208,10 +1214,13 @@ export const handlers = [
     mutation.decidedAt = at;
     mutation.updatedAt = at;
     if (approving) {
-      mutation.status = "approved";
+      mutation.status = "awaiting-dcr-payment";
       mutation.approvedAt = at;
       mutation.approvedById = actor.id;
       mutation.approvalNote = note;
+      mutation.orderSheet = body.orderSheet;
+      mutation.digitalSignature = body.digitalSignature;
+      mutation.mutationKhatianNumber = `MK-${now.getUTCFullYear()}-${mutation.mutationNumber.replace(/\D/g, "").slice(-8).padStart(8, "0")}`;
       const toOwnerId = mutation.toOwnerId!;
       parcel.ownerId = toOwnerId;
       parcel.ownerName = mutation.toOwnerName;
@@ -1257,6 +1266,64 @@ export const handlers = [
     return HttpResponse.json(mutation);
   }),
 
+  http.patch(`${API}/mutations/:id/dcr-payment`, async ({ params, request }) => {
+    await latency();
+    const actor = authenticatedUser(request);
+    if (!actor) return unauthorized();
+    const mutation = db.mutations.find((item) => item.id === params.id);
+    if (!mutation) return notFound("Mutation not found");
+    if (actor.role === "citizen" && mutation.requestedById !== actor.id) return forbidden();
+    if (mutation.status !== "awaiting-dcr-payment") {
+      return unprocessable({ status: { code: "wrong-status", expected: ["awaiting-dcr-payment"] } });
+    }
+    const now = new Date().toISOString();
+    mutation.status = "complete";
+    mutation.dcrPaidAt = now;
+    mutation.decidedAt = now;
+    mutation.updatedAt = now;
+    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dcr-paid", actorId: actor.id, actorName: actor.name, payload: { previousStatus: "awaiting-dcr-payment", newStatus: "complete" }, createdAt: now });
+    return HttpResponse.json(mutation);
+  }),
+
+  http.patch(`${API}/mutations/:id/flag-dispute`, async ({ params, request }) => {
+    await latency();
+    const actor = authenticatedUser(request);
+    if (!actor) return unauthorized();
+    if (!isActiveLandOffice(actor)) return forbidden();
+    const mutation = db.mutations.find((item) => item.id === params.id);
+    if (!mutation) return notFound("Mutation not found");
+    const accessError = mutationActionAccess(mutation, actor);
+    if (accessError) return accessError;
+    const body = (await request.json()) as { description?: string };
+    if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
+    if (mutation.disputeId) return conflict("A dispute is already linked to this mutation.");
+    const now = new Date().toISOString();
+    const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
+    const dispute = {
+      id: `ds-${Date.now()}`,
+      caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
+      parcelId: mutation.parcelId,
+      parcelDagNo: mutation.parcelDagNo,
+      type: "ownership" as const,
+      status: "in-mediation" as const,
+      priority: "high" as const,
+      filedById: actor.id,
+      filedByName: actor.name,
+      filedAt: now,
+      updatedAt: now,
+      description: body.description.trim(),
+      parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
+      assignedOfficerId: actor.id,
+      assignedMediatorId: mediator?.id,
+      evidenceDocumentIds: mutation.documentIds,
+    };
+    db.disputes.unshift(dispute);
+    mutation.disputeId = dispute.id;
+    mutation.updatedAt = now;
+    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: actor.id, actorName: actor.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
+    return HttpResponse.json(mutation);
+  }),
+
   http.get(`${API}/mutations/:id`, async ({ params, request }) => {
     await latency();
     hydrateMutationState();
@@ -1278,12 +1345,13 @@ export const handlers = [
       const user = id ? db.users.find((item) => item.id === id) : undefined;
       return user ? { id: user.id, name: user.name, ...(user.title ? { title: user.title } : {}) } : null;
     };
-    const statuses: MutationStatus[] = ["submitted", "verification", "objection-period", "approved", "rejected"];
+    const statuses: MutationStatus[] = ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "rejected", "awaiting-dcr-payment", "complete"];
     const asStatus = (value: unknown): MutationStatus | undefined =>
       typeof value === "string" && statuses.includes(value as MutationStatus) ? value as MutationStatus : undefined;
     const asString = (value: unknown): string | undefined => typeof value === "string" ? value : undefined;
     return HttpResponse.json({
-      mutation,
+      mutation: { ...mutation, fieldReportId: db.fieldReports.find((report) => report.mutationId === mutation.id)?.id },
+      fieldReport: db.fieldReports.find((report) => report.mutationId === mutation.id) ?? null,
       parcel: mutationParcel(mutation) ?? null,
       documents: db.documents.filter((document) => mutation.documentIds.includes(document.id)),
       applicant: summary(mutation.requestedById),
@@ -2599,6 +2667,7 @@ export const handlers = [
     const body = (await request.json()) as {
       photo?: { url: string; caption?: string };
       gps?: { lat: number; lng: number; accuracyMeters: number; label?: string };
+      sketchMap?: { url: string; fileName: string };
     };
     const now = new Date().toISOString();
     if (body.photo)
@@ -2611,6 +2680,10 @@ export const handlers = [
         label: body.gps.label,
         capturedAt: now,
       });
+    if (body.sketchMap) {
+      report.sketchMapUrl = body.sketchMap.url;
+      report.sketchMapFileName = body.sketchMap.fileName;
+    }
     return HttpResponse.json(report);
   }),
 
@@ -2626,7 +2699,7 @@ export const handlers = [
     const survey = db.fieldSurveySessions.find(
       (candidate) => candidate.fieldReportId === report.id && candidate.assignedAgentId === me.id,
     );
-    const body = (await request.json()) as { notes?: string; expectedVersion?: number };
+    const body = (await request.json()) as { notes?: string; expectedVersion?: number; disputeFound?: boolean; disputeDescription?: string };
     const notes = body.notes ?? "";
     const key = request.headers.get("idempotency-key");
     try {
@@ -2681,6 +2754,38 @@ export const handlers = [
       });
         }
 
+        const mutation = report.mutationId
+          ? db.mutations.find((candidate) => candidate.id === report.mutationId)
+          : undefined;
+        if (mutation && mutation.status === "field-investigation") {
+          mutation.status = "field-verification-complete";
+          mutation.updatedAt = now;
+          if (body.disputeFound && !mutation.disputeId) {
+            const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
+            const linkedDispute = {
+              id: `ds-${Date.now()}`,
+              caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
+              parcelId: mutation.parcelId,
+              parcelDagNo: mutation.parcelDagNo,
+              type: "boundary" as const,
+              status: "in-mediation" as const,
+              priority: "high" as const,
+              filedById: me.id,
+              filedByName: me.name,
+              filedAt: now,
+              updatedAt: now,
+              description: body.disputeDescription?.trim() || notes,
+              parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
+              assignedAgentId: me.id,
+              assignedMediatorId: mediator?.id,
+              evidenceDocumentIds: mutation.documentIds,
+            };
+            db.disputes.unshift(linkedDispute);
+            mutation.disputeId = linkedDispute.id;
+          }
+          await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "field-verification-complete", actorId: me.id, actorName: me.name, payload: { previousStatus: "field-investigation", newStatus: "field-verification-complete", fieldReportId: report.id, note: notes }, createdAt: now });
+        }
+
         await appendAudit({
       entityType: "field-survey",
       entityId: survey.id,
@@ -2714,6 +2819,36 @@ export const handlers = [
       }
       throw error;
     }
+  }),
+
+  http.patch(`${API}/field-reports/:id/flag-dispute`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find((item) => item.id === params.id && item.assignedAgentId === me.id);
+    if (!report?.mutationId) return notFound("Mutation field report not found");
+    const mutation = db.mutations.find((item) => item.id === report.mutationId);
+    if (!mutation) return notFound("Mutation not found");
+    if (mutation.disputeId) return HttpResponse.json(report);
+    const body = (await request.json()) as { description?: string };
+    if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
+    const now = new Date().toISOString();
+    const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
+    const dispute = {
+      id: `ds-${Date.now()}`, caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
+      parcelId: mutation.parcelId, parcelDagNo: mutation.parcelDagNo,
+      type: "boundary" as const, status: "in-mediation" as const, priority: "high" as const,
+      filedById: me.id, filedByName: me.name, filedAt: now, updatedAt: now,
+      description: body.description.trim(),
+      parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
+      assignedAgentId: me.id, assignedMediatorId: mediator?.id, evidenceDocumentIds: mutation.documentIds,
+    };
+    db.disputes.unshift(dispute);
+    mutation.disputeId = dispute.id;
+    mutation.updatedAt = now;
+    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: me.id, actorName: me.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
+    return HttpResponse.json(report);
   }),
 
   // Notes and the optional travel marker. Survey start/completion use the
@@ -2803,6 +2938,7 @@ export const handlers = [
     const body = (await request.json()) as Partial<{
       parcelId: string;
       disputeId: string;
+      mutationId: string;
       purpose: string;
       assignedAgentId: string;
       scheduledFor: string;
@@ -2816,6 +2952,11 @@ export const handlers = [
     if (!agent || agent.role !== "field-agent") return notFound("Field agent not found");
     const dispute = body.disputeId ? db.disputes.find((d) => d.id === body.disputeId) : undefined;
     if (body.disputeId && !dispute) return notFound("Dispute not found");
+    const mutation = body.mutationId ? db.mutations.find((item) => item.id === body.mutationId) : undefined;
+    if (body.mutationId && !mutation) return notFound("Mutation not found");
+    if (mutation && (mutation.parcelId !== parcel.id || mutation.status !== "field-investigation")) {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["field-investigation"] } });
+    }
 
     const agentReports = db.fieldReports.filter((v) => v.assignedAgentId === agent.id);
     const [candidate] = rankCandidates(
@@ -2834,6 +2975,7 @@ export const handlers = [
       parcelId: parcel.id,
       parcelDagNo: parcel.dagNo,
       disputeId: body.disputeId || undefined,
+      mutationId: body.mutationId || undefined,
       purpose: purpose as never,
       status: "assigned" as const,
       assignedAgentId: agent.id,

@@ -33,12 +33,16 @@ import {
 } from "./mutation-access";
 
 function asMutationStatus(value: unknown): MutationStatus | undefined {
-  return typeof value === "string" && ["submitted", "verification", "objection-period", "approved", "rejected"].includes(value)
+  return typeof value === "string" && ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "rejected", "awaiting-dcr-payment", "complete"].includes(value)
     ? value as MutationStatus : undefined;
 }
 
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function updatedKhatianSequence(mutationNumber: string): string {
+  return mutationNumber.replace(/\D/g, "").slice(-8).padStart(8, "0");
 }
 
 type ActionContext = Awaited<ReturnType<MutationsController["actionContext"]>>;
@@ -90,7 +94,7 @@ export class MutationsController {
           select: { id: true, name: true, title: true },
         })
       : null;
-    const [parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy, jurisdiction, events] = await Promise.all([
+    const [parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy, jurisdiction, events, fieldReport] = await Promise.all([
       findParcelView(this.prisma, mutation.parcelId),
       this.prisma.landDocument.findMany({ where: { id: { in: mutation.documentIds } } }),
       summary(mutation.requestedById),
@@ -107,9 +111,11 @@ export class MutationsController {
         where: { entityType: "mutation", entityId: id },
         orderBy: { createdAt: "asc" },
       }),
+      this.prisma.fieldReport.findFirst({ where: { mutationId: id }, orderBy: { assignedAt: "desc" } }),
     ]);
     return {
-      mutation, parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy,
+      mutation: { ...mutation, fieldReportId: fieldReport?.id }, parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy,
+      fieldReport,
       jurisdiction,
       objectionSummary: mutationObjectionSummary(mutation as unknown as Mutation),
       timeline: events.map((event) => {
@@ -247,7 +253,7 @@ export class MutationsController {
           updatedAt: mutation.updatedAt,
         },
         data: {
-          status: "verification", assignedOfficerId: actor.id,
+          status: "under-primary-verification", assignedOfficerId: actor.id,
           verificationStartedAt: now, verificationStartedById: actor.id,
         },
       });
@@ -266,11 +272,12 @@ export class MutationsController {
     @Req() req: Request,
   ) {
     return this.runAction(id, req, async (tx, { mutation, actor }, now) => {
-      this.assertTransition(mutation, actor, now, "canCompleteVerification", ["verification"]);
+      this.assertTransition(mutation, actor, now, "canCompleteVerification", ["under-primary-verification"]);
       const checklist = {
         applicantVerified: body.applicantVerified, previousOwnerVerified: body.previousOwnerVerified,
         proposedOwnerVerified: body.proposedOwnerVerified, dagKhatianVerified: body.dagKhatianVerified,
         deedVerified: body.deedVerified, landRecordMatched: body.landRecordMatched, documentsPresent: body.documentsPresent,
+        khajnaReceiptVerified: body.khajnaReceiptVerified,
       };
       const notes = typeof body.notes === "string" ? body.notes.trim() : "";
       const verification = verificationGate(checklist, notes);
@@ -297,12 +304,12 @@ export class MutationsController {
       const updated = await tx.mutation.update({
         where: {
           id,
-          status: "verification",
+          status: "under-primary-verification",
           assignedOfficerId: mutation.assignedOfficerId,
           updatedAt: mutation.updatedAt,
         },
         data: {
-          status: "objection-period", assignedOfficerId: actor.id,
+          status: "field-investigation", assignedOfficerId: actor.id,
           verifiedAt: now, verifiedById: actor.id, verificationNotes: notes, verificationChecklist: checklist,
           objectionStartDate: now, objectionWindowEndsAt: new Date(now.getTime() + policy.objectionWindowDays * 86_400_000),
         },
@@ -327,15 +334,15 @@ export class MutationsController {
       }
       const approving = body.decision === "approve";
       this.assertTransition(mutation, actor, now, approving ? "canApprove" : "canReject",
-        approving ? ["objection-period"] : ["submitted", "verification", "objection-period"]);
+        approving ? ["field-verification-complete"] : ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete"]);
       const reason = typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
       const note = typeof body.approvalNote === "string" ? body.approvalNote.trim() : undefined;
+      const orderSheet = typeof body.orderSheet === "string" ? body.orderSheet.trim() : "";
+      const digitalSignature = typeof body.digitalSignature === "string" ? body.digitalSignature.trim() : "";
       if (!approving && !reason) throw new ValidationError({ code: "rejection-reason-required" }, "rejectionReason");
       if (approving) {
-        // Legacy rows without a deadline cannot prove the objection window closed.
-        if (!mutation.objectionWindowEndsAt) {
-          throw new ValidationError({ code: "objection-window-missing" }, "decision");
-        }
+        if (!orderSheet) throw new ValidationError({ code: "order-sheet-required" }, "orderSheet");
+        if (!digitalSignature) throw new ValidationError({ code: "digital-signature-required" }, "digitalSignature");
         if (!mutation.fromOwnerId || parcel.ownerId !== mutation.fromOwnerId) {
           throw new ConflictError("The parcel owner has changed since this mutation was filed.");
         }
@@ -354,7 +361,11 @@ export class MutationsController {
         data: {
           assignedOfficerId: actor.id, decidedAt: now,
           ...(approving
-            ? { status: "approved", approvedAt: now, approvedById: actor.id, approvalNote: note }
+            ? {
+                status: "awaiting-dcr-payment", approvedAt: now, approvedById: actor.id,
+                approvalNote: note, orderSheet, digitalSignature,
+                mutationKhatianNumber: `MK-${now.getUTCFullYear()}-${updatedKhatianSequence(mutation.mutationNumber)}`,
+              }
             : { status: "rejected", rejectedAt: now, rejectedById: actor.id, rejectionReason: reason }),
         },
       });
@@ -417,6 +428,74 @@ export class MutationsController {
     });
   }
 
+  @Patch(":id/dcr-payment")
+  async recordDcrPayment(@Param("id") id: string, @Req() req: Request) {
+    const actor = await loadMutationReadActor(this.prisma, req);
+    const mutation = await this.prisma.mutation.findUnique({ where: { id } });
+    if (!mutation) throw new NotFoundError("Mutation not found");
+    if (actor.role === "citizen" && mutation.requestedById !== actor.id) {
+      throw new ForbiddenException("You can only pay DCR for your own mutation.");
+    }
+    if (mutation.status !== "awaiting-dcr-payment") {
+      throw new ValidationError({ code: "wrong-status", expected: ["awaiting-dcr-payment"] }, "status");
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.mutation.update({
+        where: { id, status: "awaiting-dcr-payment" },
+        data: { status: "complete", dcrPaidAt: now, decidedAt: now },
+      });
+      await this.audit.append(tx, {
+        entityType: "mutation", entityId: id, action: "dcr-paid", actorId: actor.id,
+        payload: { previousStatus: "awaiting-dcr-payment", newStatus: "complete" },
+      });
+      return updated;
+    });
+  }
+
+  @Patch(":id/flag-dispute")
+  async flagDispute(
+    @Param("id") id: string,
+    @Body() body: { description?: string },
+    @Req() req: Request,
+  ) {
+    return this.runAction(id, req, async (tx, { mutation, actor }, now) => {
+      const description = body.description?.trim();
+      if (!description) throw new ValidationError({ code: "dispute-description-required" }, "description");
+      if (mutation.disputeId) throw new ConflictError("A dispute is already linked to this mutation.");
+      const [count, mediator, actorUser] = await Promise.all([
+        tx.dispute.count(),
+        tx.user.findFirst({ where: { role: "mediator", status: "active" } }),
+        tx.user.findUnique({ where: { id: actor.id } }),
+      ]);
+      const dispute = await tx.dispute.create({
+        data: {
+          id: `ds-${randomUUID()}`,
+          caseNumber: `DSP-${now.getUTCFullYear()}-${String(500 + count).padStart(5, "0")}`,
+          parcelId: mutation.parcelId,
+          parcelDagNo: mutation.parcelDagNo,
+          type: "ownership",
+          status: "in-mediation",
+          priority: "high",
+          filedById: actor.id,
+          filedByName: actorUser?.name ?? actor.id,
+          filedAt: now,
+          description,
+          parties: [{ name: mutation.fromOwnerName, role: "claimant" }, { name: mutation.toOwnerName, role: "respondent" }],
+          assignedOfficerId: actor.id,
+          assignedMediatorId: mediator?.id,
+          evidenceDocumentIds: mutation.documentIds,
+        },
+      });
+      const updated = await tx.mutation.update({ where: { id }, data: { disputeId: dispute.id } });
+      await this.audit.append(tx, {
+        entityType: "mutation", entityId: id, action: "dispute-filed", actorId: actor.id,
+        payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: description },
+      });
+      return updated;
+    });
+  }
+
   private assertTransition(
     mutation: ActionContext["mutation"], actor: MutationActor, now: Date,
     action: "canStartVerification" | "canCompleteVerification" | "canApprove" | "canReject",
@@ -426,8 +505,8 @@ export class MutationsController {
     if (gate.hold?.code === "already-decided") throw new ConflictError("This mutation has already been decided.");
     if (!gate[action]) {
       const transitionAlreadyApplied =
-        (action === "canStartVerification" && ["verification", "objection-period"].includes(mutation.status)) ||
-        (action === "canCompleteVerification" && mutation.status === "objection-period");
+        (action === "canStartVerification" && mutation.status !== "submitted") ||
+        (action === "canCompleteVerification" && mutation.status !== "under-primary-verification");
       if (transitionAlreadyApplied) {
         throw new ConflictError("This mutation has already moved past that workflow transition.");
       }

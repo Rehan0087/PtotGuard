@@ -28,6 +28,14 @@ class GpsDto {
   label?: string;
 }
 
+class SketchMapDto {
+  @IsString()
+  url!: string;
+
+  @IsString()
+  fileName!: string;
+}
+
 export class AddFieldReportMediaDto {
   @IsOptional()
   @ValidateNested()
@@ -38,4 +46,9 @@ export class AddFieldReportMediaDto {
   @ValidateNested()
   @Type(() => GpsDto)
   gps?: GpsDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SketchMapDto)
+  sketchMap?: SketchMapDto;
 }

@@ -179,6 +179,7 @@ export interface MutationTimelineEvent {
 
 export interface MutationDetail {
   mutation: Mutation;
+  fieldReport: FieldReport | null;
   parcel: Parcel | null;
   documents: LandDocument[];
   applicant: MutationActorSummary | null;
