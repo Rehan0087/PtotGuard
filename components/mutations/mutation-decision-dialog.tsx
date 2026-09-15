@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -38,10 +39,11 @@ export function MutationDecisionDialog({
   const decide = useMutationDecision(mutation.id);
   const [note, setNote] = useState("");
   const [reasonError, setReasonError] = useState(false);
+  const [signed, setSigned] = useState(false);
   const rejecting = decision === "reject";
 
   const trimmedNote = note.trim();
-  const canSubmit = !decide.isPending && (!rejecting || Boolean(trimmedNote));
+  const canSubmit = !decide.isPending && Boolean(trimmedNote) && (rejecting || signed);
 
   function submit() {
     if (!canSubmit) {
@@ -52,7 +54,12 @@ export function MutationDecisionDialog({
     decide.mutate(
       rejecting
         ? { decision: "reject", rejectionReason: trimmedNote }
-        : { decision: "approve", ...(trimmedNote ? { approvalNote: trimmedNote } : {}) },
+        : {
+            decision: "approve",
+            approvalNote: trimmedNote,
+            orderSheet: trimmedNote,
+            digitalSignature: "officer-confirmed",
+          },
       {
         onSuccess: () => {
           toast.success(
@@ -106,7 +113,7 @@ export function MutationDecisionDialog({
 
         <div className="space-y-2">
           <label htmlFor={`mutation-decision-${mutation.id}`} className="font-medium text-foreground">
-            {rejecting ? t.pages.mutations.rejectionReason : t.pages.mutations.approvalNote}
+            {rejecting ? t.pages.mutations.rejectionReason : t.pages.mutations.orderSheet}
           </label>
           <Textarea
             id={`mutation-decision-${mutation.id}`}
@@ -124,9 +131,16 @@ export function MutationDecisionDialog({
               ? t.pages.mutations.rejectionReasonRequired
               : rejecting
                 ? t.pages.mutations.rejectionReasonHint
-                : t.pages.mutations.approvalNoteHint}
+                : t.pages.mutations.orderSheetHint}
           </p>
         </div>
+
+        {!rejecting ? (
+          <label className="flex items-start gap-2 rounded-lg border border-border p-3 text-sm">
+            <Checkbox checked={signed} onCheckedChange={(value) => setSigned(value === true)} />
+            <span>{t.pages.mutations.digitalSignatureConsent}</span>
+          </label>
+        ) : null}
 
         <DialogFooter>
           <Button type="button" variant="outline" disabled={decide.isPending} onClick={() => onOpenChange(false)}>

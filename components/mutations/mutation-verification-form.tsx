@@ -18,6 +18,7 @@ const CHECKLIST_KEYS: (keyof MutationVerificationChecklist)[] = [
   "deedVerified",
   "landRecordMatched",
   "documentsPresent",
+  "khajnaReceiptVerified",
 ];
 
 const EMPTY_CHECKLIST: MutationVerificationChecklist = {
@@ -28,6 +29,7 @@ const EMPTY_CHECKLIST: MutationVerificationChecklist = {
   deedVerified: false,
   landRecordMatched: false,
   documentsPresent: false,
+  khajnaReceiptVerified: false,
 };
 
 export function MutationVerificationForm({
