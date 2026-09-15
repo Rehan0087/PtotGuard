@@ -11,19 +11,31 @@ export const ACTIVE_MUTATION_STATUSES = [
 ] as const satisfies readonly MutationStatus[];
 
 /**
- * Project the status shown by Land Office Records from the parcel's persisted
- * non-workflow status and its related mutation rows. Mutation is the workflow
- * source of truth; `under-mutation` is never maintained by the Records UI.
+ * Project the status shown by Land Office Records exclusively from related
+ * workflow rows. A stored parcel label is deliberately not an input: it can
+ * become stale and produce contradictions such as "Verified" beside an open
+ * dispute. Pending is not a record outcome.
+ *
+ * Precedence is workflow-aware: a flagged OCR document comes first. A dispute
+ * linked to the active mutation means that workflow is disputed. Otherwise an
+ * active mutation remains under mutation even if the plot has a separate open
+ * dispute. With no active mutation, an open dispute is disputed; otherwise the
+ * is verified—including after a mutation or dispute process is complete.
  */
 export function recordRegistryStatus(
-  baseStatus: RegistryStatus,
   mutations: readonly { status: MutationStatus; disputeId?: string | null }[],
+  openDisputeCount = 0,
+  hasFlaggedDocument = false,
 ): RegistryStatus {
-  if (mutations.some(({ disputeId }) => Boolean(disputeId))) return "disputed";
-  return mutations.some(({ status }) =>
-    ACTIVE_MUTATION_STATUSES.includes(status as (typeof ACTIVE_MUTATION_STATUSES)[number]))
-    ? "under-mutation"
-    : baseStatus;
+  if (hasFlaggedDocument) return "flagged";
+  const activeMutations = mutations.filter(({ status }) =>
+    ACTIVE_MUTATION_STATUSES.includes(status as (typeof ACTIVE_MUTATION_STATUSES)[number]));
+  if (openDisputeCount > 0 && activeMutations.some(({ disputeId }) => Boolean(disputeId))) {
+    return "disputed";
+  }
+  if (activeMutations.length > 0) return "under-mutation";
+  if (openDisputeCount > 0) return "disputed";
+  return "verified";
 }
 
 /**

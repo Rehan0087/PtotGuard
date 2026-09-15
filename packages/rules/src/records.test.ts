@@ -5,27 +5,43 @@ describe("recordRegistryStatus", () => {
   it.each(["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "awaiting-dcr-payment"] as const)(
     "marks a parcel under mutation while a related mutation is %s",
     (status) => {
-      expect(recordRegistryStatus("verified", [{ status }])).toBe("under-mutation");
+      expect(recordRegistryStatus([{ status }])).toBe("under-mutation");
     },
   );
 
   it.each(["complete", "rejected"] as const)(
     "does not mark a parcel under mutation when its related mutation is %s",
     (status) => {
-      expect(recordRegistryStatus("verified", [{ status }])).toBe("verified");
+      expect(recordRegistryStatus([{ status }])).toBe("verified");
     },
   );
 
-  it("shows disputed ahead of the mutation lifecycle without stopping it", () => {
-    expect(recordRegistryStatus("verified", [{ status: "field-investigation", disputeId: "ds-1" }])).toBe("disputed");
+  it("keeps an active mutation under mutation when a separate plot dispute is open", () => {
+    expect(recordRegistryStatus([{ status: "under-primary-verification" }], 1)).toBe("under-mutation");
+  });
+
+  it("shows disputed when the active mutation is linked to the dispute", () => {
+    expect(recordRegistryStatus([{ status: "field-investigation", disputeId: "ds-1" }], 1)).toBe("disputed");
+  });
+
+  it("returns to under mutation after the linked dispute is closed", () => {
+    expect(recordRegistryStatus([{ status: "field-investigation", disputeId: "ds-1" }], 0)).toBe("under-mutation");
   });
 
   it("uses any active mutation when a parcel has both active and terminal history", () => {
-    expect(recordRegistryStatus("disputed", [
+    expect(recordRegistryStatus([
       { status: "approved" },
       { status: "under-primary-verification" },
       { status: "rejected" },
     ])).toBe("under-mutation");
+  });
+
+  it("shows flagged OCR evidence ahead of linked disputes and mutations", () => {
+    expect(recordRegistryStatus([{ status: "submitted" }], 2, true)).toBe("flagged");
+  });
+
+  it("never carries a stale pending parcel label into the derived result", () => {
+    expect(recordRegistryStatus([])).toBe("verified");
   });
 });
 describe("maskNationalId", () => {

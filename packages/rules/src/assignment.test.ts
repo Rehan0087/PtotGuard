@@ -3,9 +3,11 @@ import {
   COMFORTABLE_LOAD,
   OPEN_VISIT_STATUSES,
   PURPOSE_FOR_DISPUTE,
+  PURPOSE_FOR_MUTATION,
   covers,
   disputesNeedingSurvey,
   isOpenVisit,
+  mutationsNeedingAgent,
   rankCandidates,
   routeDisputeToOfficer,
 } from "./assignment";
@@ -15,6 +17,9 @@ import type {
   FieldReport,
   FieldReportStatus,
   Jurisdiction,
+  Mutation,
+  MutationStatus,
+  MutationType,
   Parcel,
   User,
   UserStatus,
@@ -47,19 +52,39 @@ function agent(
 function visit(
   id: string,
   assignedAgentId: string,
-  over: { parcelId?: string; status?: FieldReportStatus; disputeId?: string } = {},
+  over: { parcelId?: string; status?: FieldReportStatus; disputeId?: string; mutationId?: string } = {},
 ): FieldReport {
   return {
     id,
     parcelId: over.parcelId ?? "p-other",
     parcelDagNo: "CS-1",
     disputeId: over.disputeId,
+    mutationId: over.mutationId,
     purpose: "boundary-survey",
     status: over.status ?? "assigned",
     assignedAgentId,
     scheduledFor: "2026-07-20T04:00:00Z",
     gpsCaptures: [],
     photos: [],
+  };
+}
+
+function mutation(id: string, status: MutationStatus = "under-primary-verification"): Mutation {
+  return {
+    id,
+    mutationNumber: `MUT-${id}`,
+    parcelId: "p-1",
+    parcelDagNo: "CS-1",
+    type: "inheritance",
+    status,
+    fromOwnerName: "Previous owner",
+    toOwnerName: "New owner",
+    requestedById: "usr-1",
+    requestedAt: "2026-06-01T00:00:00Z",
+    documentIds: [],
+    objections: [],
+    createdAt: "2026-06-01T00:00:00Z",
+    updatedAt: "2026-06-01T00:00:00Z",
   };
 }
 
@@ -167,6 +192,32 @@ describe("open visits", () => {
 
   it("keeps an accepted assignment in the active workload", () => {
     expect(isOpenVisit(visit("fr-1", "a-1", { status: "accepted" as never }))).toBe(true);
+  });
+});
+
+describe("mutationsNeedingAgent", () => {
+  it("shows a mutation during primary verification", () => {
+    expect(mutationsNeedingAgent([mutation("m-1")], [])).toHaveLength(1);
+  });
+
+  it.each(["submitted", "field-investigation", "field-verification-complete", "approved"] as const)(
+    "does not show a mutation in %s",
+    (status) => expect(mutationsNeedingAgent([mutation("m-1", status)], [])).toEqual([]),
+  );
+
+  it("removes a mutation after a visit is assigned", () => {
+    const assigned = visit("fr-1", "a-1", { mutationId: "m-1" });
+    expect(mutationsNeedingAgent([mutation("m-1")], [assigned])).toEqual([]);
+  });
+
+  it("puts a mutation back after its visit is cancelled", () => {
+    const cancelled = visit("fr-1", "a-1", { mutationId: "m-1", status: "cancelled" });
+    expect(mutationsNeedingAgent([mutation("m-1")], [cancelled])).toHaveLength(1);
+  });
+
+  it("does not confuse a dispute visit on the same parcel with mutation work", () => {
+    const disputeVisit = visit("fr-1", "a-1", { disputeId: "ds-1", parcelId: "p-1" });
+    expect(mutationsNeedingAgent([mutation("m-1")], [disputeVisit])).toHaveLength(1);
   });
 });
 
@@ -377,6 +428,17 @@ describe("PURPOSE_FOR_DISPUTE", () => {
     ];
 
     for (const t of types) expect(PURPOSE_FOR_DISPUTE[t]).toBeDefined();
+  });
+});
+
+describe("PURPOSE_FOR_MUTATION", () => {
+  it("covers every mutation type", () => {
+    const types: MutationType[] = ["sale", "inheritance", "gift", "partition", "correction"];
+    for (const type of types) expect(PURPOSE_FOR_MUTATION[type]).toBeDefined();
+  });
+
+  it("uses measurement for inheritance verification", () => {
+    expect(PURPOSE_FOR_MUTATION.inheritance).toBe("measurement");
   });
 });
 
