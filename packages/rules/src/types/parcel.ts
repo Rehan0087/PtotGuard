@@ -24,7 +24,6 @@ export type OwnershipType =
 
 export type RegistryStatus =
   | "verified"
-  | "pending"
   | "disputed"
   | "flagged"
   | "under-mutation";

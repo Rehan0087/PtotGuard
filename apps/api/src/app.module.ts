@@ -24,6 +24,7 @@ import { HearingsModule } from "./hearings/hearings.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
+import { LandOfficeDashboardModule } from "./land-office-dashboard/land-office-dashboard.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
@@ -53,6 +54,7 @@ import { AuthModule } from "./auth/auth.module";
     NotificationsModule,
     AuditModule,
     AuthModule,
+    LandOfficeDashboardModule,
   ],
   controllers: [HealthController],
   providers: [
