@@ -2,6 +2,7 @@ import { Controller, Get, Query } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { pageParams, paginated } from "../common/pagination";
 import { openDisputeCounts, toParcel } from "../parcels/parcel-view";
+import { ACTIVE_MUTATION_STATUSES, recordRegistryStatus, type MutationStatus } from "@plotguard/rules";
 
 /**
  * A read-only register of land the government holds a public-purpose
@@ -35,7 +36,18 @@ export class LandInfoBankController {
     const [rows, counts] = await Promise.all([
       this.prisma.parcel.findMany({
         where: { id: { in: parcelIds } },
-        include: { owner: { select: { name: true } } },
+        include: {
+          owner: { select: { name: true } },
+          mutations: {
+            where: { status: { in: [...ACTIVE_MUTATION_STATUSES] } },
+            select: { status: true, disputeId: true },
+          },
+          documents: {
+            where: { verificationStatus: "flagged" },
+            select: { id: true },
+            take: 1,
+          },
+        },
       }),
       openDisputeCounts(this.prisma, parcelIds),
     ]);
@@ -61,10 +73,21 @@ export class LandInfoBankController {
           purpose.toLowerCase().includes(q)
         );
       })
-      .map((e) => ({
-        application: e.application,
-        parcel: toParcel(e.row, counts.get(e.row.id) ?? 0),
-      }));
+      .map((e) => {
+        const { mutations, documents, ...parcel } = e.row;
+        const openDisputeCount = counts.get(parcel.id) ?? 0;
+        return {
+          application: e.application,
+          parcel: {
+            ...toParcel(parcel, openDisputeCount),
+            registryStatus: recordRegistryStatus(
+              mutations as { status: MutationStatus; disputeId?: string | null }[],
+              openDisputeCount,
+              documents.length > 0,
+            ),
+          },
+        };
+      });
 
     const params = pageParams(query);
     return paginated(entries.slice(params.skip, params.skip + params.take), entries.length, params);

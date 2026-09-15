@@ -58,6 +58,7 @@ import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 import { DEMO_PASSWORD, findDemoAccount } from "../demo-accounts";
 import { hydrateMutationState } from "./mutation-store";
+import { hydrateProfileState, persistProfileState } from "./profile-store";
 import { applyMockProfileUpdate, MockProfileUpdateError } from "../field-profile";
 import { filterMutationReads } from "./mutation-contract.mjs";
 import { filterLandOfficeRecords, recordAuditEvents } from "./records-contract.mjs";
@@ -71,6 +72,7 @@ import {
 // Restore mutation-owned preview state before any handler (including parcel
 // reads) can observe the in-memory seed after a hard refresh.
 hydrateMutationState();
+hydrateProfileState(db.users);
 
 // --- helpers ---------------------------------------------------------------
 
@@ -79,6 +81,11 @@ async function latency() {
 }
 
 function getRole(request: Request): Role {
+  // Normal signed-in requests identify the actor through the bearer token.
+  // The role header exists only for legacy/demo calls and is not sent by the
+  // frontend after login.
+  const authenticated = authenticatedUser(request);
+  if (authenticated) return authenticated.role;
   const header = request.headers.get("x-plotguard-role");
   return (ROLES as string[]).includes(header ?? "") ? (header as Role) : "citizen";
 }
@@ -458,7 +465,9 @@ export const handlers = [
     await latency();
     const body = (await request.json()) as { email?: string; password?: string };
     const account = body.email ? findDemoAccount(body.email) : undefined;
-    const user = account ? db.users.find((candidate) => candidate.email === account.email) : undefined;
+    const normalizedEmail = body.email?.trim().toLowerCase();
+    const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail)
+      ?? (account ? db.users.find((candidate) => candidate.id === db.CURRENT_USER_BY_ROLE[account.role]) : undefined);
     if (!user || user.status !== "active" || body.password !== DEMO_PASSWORD) {
       return unauthorized("Invalid email or password");
     }
@@ -502,7 +511,9 @@ export const handlers = [
 
     if (user.role === "field-agent") {
       try {
-        return HttpResponse.json(applyMockProfileUpdate(db.users, user.id, body));
+        const updated = applyMockProfileUpdate(db.users, user.id, body);
+        persistProfileState(db.users);
+        return HttpResponse.json(updated);
       } catch (error) {
         if (error instanceof MockProfileUpdateError) {
           if (error.status === 404) return notFound("User not found");
@@ -542,6 +553,8 @@ export const handlers = [
         ...(body.profileDetails as Record<string, string>),
       };
     }
+
+    persistProfileState(db.users);
 
     return HttpResponse.json(user);
   }),
@@ -665,7 +678,14 @@ export const handlers = [
     // decision about what is public that the real API uses.
     return HttpResponse.json(
       toPublicParcel(
-        parcel,
+        {
+          ...parcel,
+          registryStatus: recordRegistryStatus(
+            db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
+            db.disputes.filter((dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status)).length,
+            db.documents.some((document) => document.parcelId === parcel.id && document.verificationStatus === "flagged"),
+          ),
+        },
         db.parcelRestrictions.filter((r) => r.parcelId === parcel.id),
       ),
     );
@@ -745,8 +765,9 @@ export const handlers = [
       parcel: {
         ...parcel,
         registryStatus: recordRegistryStatus(
-          parcel.registryStatus,
           mutations.map(({ mutation }) => mutation),
+          disputes.filter((dispute) => !isClosed(dispute.status)).length,
+          documents.some((document) => document.verificationStatus === "flagged"),
         ),
       },
       owner: {
@@ -781,7 +802,14 @@ export const handlers = [
       .filter((p) => p.id !== parcel.id)
       .sort((a, b) => distance(a.centroid, parcel.centroid) - distance(b.centroid, parcel.centroid))
       .slice(0, 4);
-    return HttpResponse.json(neighbours);
+    return HttpResponse.json(neighbours.map((item) => ({
+      ...item,
+      registryStatus: recordRegistryStatus(
+        db.mutations.filter((mutation) => mutation.parcelId === item.id),
+        db.disputes.filter((dispute) => dispute.parcelId === item.id && !isClosed(dispute.status)).length,
+        db.documents.some((document) => document.parcelId === item.id && document.verificationStatus === "flagged"),
+      ),
+    })));
   }),
 
   http.get(`${API}/parcels/:id/history`, async ({ params }) => {
@@ -801,7 +829,14 @@ export const handlers = [
       .sort((a, b) => b.fromDate.localeCompare(a.fromDate));
 
     return HttpResponse.json({
-      parcel,
+      parcel: {
+        ...parcel,
+        registryStatus: recordRegistryStatus(
+          db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
+          db.disputes.filter((dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status)).length,
+          db.documents.some((document) => document.parcelId === parcel.id && document.verificationStatus === "flagged"),
+        ),
+      },
       ownership: db.ownershipRecords.filter((o) => o.parcelId === parcel.id),
       documents: db.documents.filter((d) => d.parcelId === parcel.id),
       disputes: db.disputes.filter((d) => d.parcelId === parcel.id),
@@ -833,6 +868,8 @@ export const handlers = [
           jurisdictions: db.jurisdictions,
           parcels: items,
           mutations: db.mutations,
+          disputes: db.disputes,
+          documents: db.documents,
           q,
           status,
         });
@@ -842,7 +879,6 @@ export const handlers = [
     }
     if (owner === "me") items = items.filter((p) => p.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((p) => p.ownerId === owner);
-    if (status && !isLandOffice) items = items.filter((p) => p.registryStatus === status);
     // Exact, not a substring: a ULPIN is an identifier being cited, so a
     // near-miss returns nothing rather than a plausible wrong plot.
     if (ulpin) items = items.filter((p) => p.ulpin === normaliseUlpin(ulpin));
@@ -869,6 +905,27 @@ export const handlers = [
           // on it, without knowing which field it belongs to.
           Boolean(p.ulpin?.toLowerCase().includes(q)),
       );
+    // Keep this projection relational, like the Prisma implementation: the
+    // count must reflect current dispute rows rather than a stale parcel seed.
+    items = items.map((parcel) => {
+      const openDisputeCount = db.disputes.filter(
+        (dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status),
+      ).length;
+      return {
+        ...parcel,
+        openDisputeCount,
+        registryStatus: recordRegistryStatus(
+          db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
+          openDisputeCount,
+          db.documents.some(
+            (document) => document.parcelId === parcel.id && document.verificationStatus === "flagged",
+          ),
+        ),
+      };
+    });
+    // Apply the status filter only after deriving the status from the same
+    // mutation/dispute/document rows used by record detail.
+    if (status) items = items.filter((parcel) => parcel.registryStatus === status);
     return HttpResponse.json(paginate(items, url));
   }),
 
@@ -1400,11 +1457,177 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
+  // Land-office operational dashboard --------------------------------------
+  http.get(`${API}/land-office/dashboard`, async ({ request }) => {
+    await latency();
+    const officer = currentUser(request);
+    if (!isActiveLandOffice(officer)) return forbidden("Land Office Staff access required.");
+    const covered = coveredJurisdictionIds(officer);
+    const jurisdiction = db.jurisdictions.find((item) => item.id === officer.jurisdictionId);
+    const parcels = db.parcels.filter((parcel) => covered.has(parcel.jurisdictionId));
+    const parcelIds = new Set(parcels.map((parcel) => parcel.id));
+    const mutations = db.mutations
+      .filter((item) => parcelIds.has(item.parcelId))
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
+    const disputes = db.disputes
+      .filter((item) => parcelIds.has(item.parcelId))
+      .sort((a, b) => b.filedAt.localeCompare(a.filedAt));
+    const documents = db.documents
+      .filter((item) => {
+        if (item.parcelId && parcelIds.has(item.parcelId)) return true;
+        const owner = item.ownerId ? db.users.find((user) => user.id === item.ownerId) : undefined;
+        return !item.parcelId && Boolean(owner && covered.has(owner.jurisdictionId));
+      })
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+    const fieldReports = db.fieldReports
+      .filter((item) => parcelIds.has(item.parcelId))
+      .sort((a, b) => (b.assignedAt ?? "").localeCompare(a.assignedAt ?? ""));
+    const services = db.serviceApplications
+      .filter((item) => {
+        if (item.assignedOfficerId === officer.id || Boolean(item.parcelId && parcelIds.has(item.parcelId))) return true;
+        const applicant = db.users.find((user) => user.id === item.applicantId);
+        return Boolean(applicant && covered.has(applicant.jurisdictionId));
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    const activeMutations = mutations.filter((item) => !["complete", "rejected"].includes(item.status));
+    const openDisputes = disputes.filter((item) => !isClosed(item.status));
+    const reviewDocuments = documents.filter(
+      (item) => item.ocrStatus === "extracted" && item.verificationStatus === "unverified",
+    );
+    const flaggedDocuments = documents.filter((item) => item.verificationStatus === "flagged");
+    const activeFieldReports = fieldReports.filter((item) => !["completed", "cancelled"].includes(item.status));
+    const liveMutationVisits = new Set(
+      activeFieldReports.flatMap((item) => item.mutationId ? [item.mutationId] : []),
+    );
+    const needsAgent = activeMutations.filter(
+      (item) => item.status === "under-primary-verification" && !liveMutationVisits.has(item.id),
+    );
+    const openServices = services.filter((item) => !["approved", "rejected", "withdrawn"].includes(item.status));
+    const serviceCounts = openServices.reduce<Record<string, number>>((counts, item) => {
+      counts[item.serviceType] = (counts[item.serviceType] ?? 0) + 1;
+      return counts;
+    }, {});
+    const activity = (await getAuditChain())
+      .filter((item) => item.actorId === officer.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 8);
+
+    return HttpResponse.json({
+      officer: {
+        id: officer.id,
+        name: officer.name,
+        ...(officer.title ? { title: officer.title } : {}),
+        jurisdictionId: officer.jurisdictionId,
+        jurisdictionName: jurisdiction?.name ?? officer.jurisdictionId,
+      },
+      summary: {
+        recordCount: parcels.length,
+        activeMutationCount: activeMutations.length,
+        primaryVerificationCount: activeMutations.filter((item) => item.status === "under-primary-verification").length,
+        openDisputeCount: openDisputes.length,
+        documentsToReviewCount: reviewDocuments.length,
+        fraudFlagCount: flaggedDocuments.length,
+        needsAgentCount: needsAgent.length,
+        activeFieldVisitCount: activeFieldReports.length,
+        openServiceCount: openServices.length,
+      },
+      queues: {
+        mutations: activeMutations.slice(0, 5),
+        disputes: openDisputes.slice(0, 5),
+        documents: [...flaggedDocuments, ...reviewDocuments]
+          .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
+          .slice(0, 5),
+        fieldReports: activeFieldReports.slice(0, 5),
+      },
+      serviceCounts,
+      recentActivity: activity,
+    });
+  }),
+
   // Land development tax (khajna) --------------------------------------------
   // Assessments are computed here, never taken from the request: what a
   // citizen owes is the registry's determination. Mirrors
   // land-tax.controller.ts, including recording the payment as a
   // ServiceApplication rather than in a table of its own.
+  http.get(`${API}/land-tax/collection`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    if (!isActiveLandOffice(me)) return forbidden("Land Office Staff access required.");
+    const covered = coveredJurisdictionIds(me);
+    const year = new Date().getUTCFullYear();
+    const rates = landTaxRates();
+    const parcels = db.parcels
+      .filter((parcel) => covered.has(parcel.jurisdictionId))
+      .sort((a, b) => a.dagNo.localeCompare(b.dagNo));
+    const parcelIds = new Set(parcels.map((parcel) => parcel.id));
+    const paid = db.serviceApplications
+      .filter((application) => application.serviceType === "land-tax" && application.paidAt && application.parcelId && parcelIds.has(application.parcelId))
+      .sort((a, b) => (b.paidAt ?? "").localeCompare(a.paidAt ?? ""));
+    const payments = paid.flatMap((application) => {
+      const parcel = db.parcels.find((candidate) => candidate.id === application.parcelId);
+      const owner = parcel ? db.users.find((candidate) => candidate.id === parcel.ownerId) : undefined;
+      if (!parcel || !owner || !application.paidAt || !application.feeAmount || !application.paymentMethod || !application.transactionId) return [];
+      return [{
+        id: application.id,
+        applicationNo: application.applicationNo,
+        parcelId: parcel.id,
+        dagNo: parcel.dagNo,
+        khatianNo: parcel.khatianNo,
+        ownerId: owner.id,
+        ownerName: owner.name,
+        assessmentYear: Number(application.details.assessmentYear),
+        amount: application.feeAmount,
+        paymentMethod: application.paymentMethod,
+        transactionId: application.transactionId,
+        paidAt: application.paidAt,
+      }];
+    });
+    const holdings = parcels.map((parcel) => {
+      const settled = paidThroughYear(paid, parcel.id);
+      const assessment = assessLandTax({
+        area: parcel.area,
+        landUse: parcel.landUse,
+        assessmentYear: year,
+        paidThroughYear: settled,
+        liableFromYear: new Date(parcel.registeredAt).getUTCFullYear(),
+      }, rates);
+      return {
+        parcelId: parcel.id,
+        ulpin: parcel.ulpin ?? null,
+        dagNo: parcel.dagNo,
+        khatianNo: parcel.khatianNo,
+        title: parcel.title,
+        landUse: parcel.landUse,
+        area: parcel.area,
+        ownerId: parcel.ownerId,
+        ownerName: parcel.ownerName,
+        assessmentYear: year,
+        paidThroughYear: settled,
+        assessment,
+        status: assessment.exemption ? "exempt" as const : settled !== null && settled >= year ? "paid" as const : "due" as const,
+        latestPayment: payments.find((payment) => payment.parcelId === parcel.id) ?? null,
+      };
+    });
+    const currentPayments = payments.filter((payment) => payment.assessmentYear === year);
+    const collected = currentPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const outstanding = holdings.reduce((sum, holding) => sum + holding.assessment.total, 0);
+    return HttpResponse.json({
+      assessmentYear: year,
+      summary: {
+        holdingCount: holdings.length,
+        paidCount: holdings.filter((holding) => holding.status === "paid").length,
+        dueCount: holdings.filter((holding) => holding.status === "due").length,
+        exemptCount: holdings.filter((holding) => holding.status === "exempt").length,
+        assessed: collected + outstanding,
+        collected,
+        outstanding,
+      },
+      holdings,
+      payments,
+    });
+  }),
+
   http.get(`${API}/land-tax/holdings`, async ({ request }) => {
     await latency();
     const me = currentUser(request);
@@ -1479,7 +1702,7 @@ export const handlers = [
     const count = db.serviceApplications.filter((a) => a.serviceType === "land-tax").length;
     const application = {
       id: `sa-${Date.now()}`,
-      applicationNo: `LDT-2026-${String(1000 + count).padStart(6, "0")}`,
+      applicationNo: `LDT-${year}-${String(1000 + count).padStart(6, "0")}`,
       serviceType: "land-tax" as const,
       // Paying khajna is a counter transaction, not an application anyone
       // adjudicates — settled the moment it is paid.
@@ -1504,6 +1727,14 @@ export const handlers = [
       updatedAt: now,
     };
     db.serviceApplications.unshift(application);
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "payment-recorded",
+      title: "Land development tax paid",
+      actorId: me.id,
+    });
 
     await appendAudit({
       entityType: "service-application",
@@ -1519,15 +1750,72 @@ export const handlers = [
         amount: application.feeAmount,
       },
     });
+    return HttpResponse.json(application, { status: 201 });
+  }),
+
+  http.post(`${API}/land-tax/collect`, async ({ request }) => {
+    await latency();
+    const officer = currentUser(request);
+    if (!isActiveLandOffice(officer)) return forbidden("Land Office Staff access required.");
+    const body = (await request.json()) as { parcelId: string; paymentMethod: string };
+    if (!["bkash", "nagad", "card"].includes(body.paymentMethod)) return badRequest("Invalid payment method");
+    const parcel = db.parcels.find((candidate) => candidate.id === body.parcelId);
+    if (!parcel || !coveredJurisdictionIds(officer).has(parcel.jurisdictionId)) return notFound("Parcel not found");
+
+    const year = new Date().getUTCFullYear();
+    const paid = db.serviceApplications.filter(
+      (application) => application.applicantId === parcel.ownerId && application.serviceType === "land-tax" && application.paidAt,
+    );
+    const settled = paidThroughYear(paid, parcel.id);
+    if (settled !== null && settled >= year) return conflict("This holding is already paid for the current year.");
+    const assessment = assessLandTax({
+      area: parcel.area,
+      landUse: parcel.landUse,
+      assessmentYear: year,
+      paidThroughYear: settled,
+      liableFromYear: new Date(parcel.registeredAt).getUTCFullYear(),
+    }, landTaxRates());
+    if (assessment.total <= 0) return conflict("Nothing is due on this holding.");
+
+    const now = new Date().toISOString();
+    const count = db.serviceApplications.filter((application) => application.serviceType === "land-tax").length;
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `LDT-${year}-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: "land-tax" as const,
+      status: "approved" as const,
+      parcelId: parcel.id,
+      applicantId: parcel.ownerId,
+      assignedOfficerId: officer.id,
+      details: { assessmentYear: year, decimals: assessment.decimals, arrears: assessment.arrears, currentYearDue: assessment.currentYearDue, years: assessment.years },
+      documentIds: [],
+      feeAmount: assessment.total,
+      paymentMethod: body.paymentMethod as never,
+      transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+      paidAt: now,
+      submittedAt: now,
+      decidedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
     db.serviceApplicationEvents.push({
       id: `sae-${Date.now()}`,
       applicationId: application.id,
       at: now,
       type: "payment-recorded",
-      title: "Land development tax paid",
-      actorId: me.id,
+      title: "Land development tax collected by land office",
+      actorId: officer.id,
+      actorName: officer.name,
     });
-
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "payment",
+      actorId: officer.id,
+      actorName: officer.name,
+      payload: { applicationNo: application.applicationNo, serviceType: "land-tax", parcelDagNo: parcel.dagNo, assessmentYear: year, amount: application.feeAmount },
+    });
     return HttpResponse.json(application, { status: 201 });
   }),
 
@@ -1921,7 +2209,18 @@ export const handlers = [
       .sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))
       .map((application) => ({
         application,
-        parcel: db.parcels.find((p) => p.id === application.parcelId),
+        parcel: (() => {
+          const parcel = db.parcels.find((p) => p.id === application.parcelId);
+          if (!parcel) return undefined;
+          return {
+            ...parcel,
+            registryStatus: recordRegistryStatus(
+              db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
+              db.disputes.filter((dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status)).length,
+              db.documents.some((document) => document.parcelId === parcel.id && document.verificationStatus === "flagged"),
+            ),
+          };
+        })(),
       }))
       .filter((e): e is { application: (typeof db.serviceApplications)[number]; parcel: NonNullable<typeof e.parcel> } =>
         Boolean(e.parcel),
@@ -2954,8 +3253,14 @@ export const handlers = [
     if (body.disputeId && !dispute) return notFound("Dispute not found");
     const mutation = body.mutationId ? db.mutations.find((item) => item.id === body.mutationId) : undefined;
     if (body.mutationId && !mutation) return notFound("Mutation not found");
-    if (mutation && (mutation.parcelId !== parcel.id || mutation.status !== "field-investigation")) {
-      return unprocessable({ mutationId: { code: "wrong-status", expected: ["field-investigation"] } });
+    if (mutation && mutation.parcelId !== parcel.id) {
+      return unprocessable({ mutationId: { code: "mutation-parcel-mismatch" } });
+    }
+    if (mutation && mutation.status !== "under-primary-verification") {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["under-primary-verification"] } });
+    }
+    if (mutation && db.fieldReports.some((report) => report.mutationId === mutation.id && report.status !== "cancelled")) {
+      return conflict("This mutation already has a field visit.");
     }
 
     const agentReports = db.fieldReports.filter((v) => v.assignedAgentId === agent.id);
@@ -2986,6 +3291,23 @@ export const handlers = [
       photos: [],
     };
     db.fieldReports.unshift(report);
+
+    if (mutation) {
+      await appendAudit({
+        entityType: "mutation",
+        entityId: mutation.id,
+        action: "assign-field-agent",
+        actorId: me.id,
+        actorName: me.name,
+        payload: {
+          previousStatus: mutation.status,
+          newStatus: mutation.status,
+          fieldReportId: report.id,
+          assignedAgentId: agent.id,
+        },
+        createdAt: now,
+      });
+    }
 
     // Booking a survey against an open dispute moves the case along and shows
     // up on its tracking timeline, same as the real workflow.

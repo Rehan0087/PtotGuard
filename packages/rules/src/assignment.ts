@@ -11,6 +11,8 @@ import type {
   FieldReportPurpose,
   FieldReportStatus,
   Jurisdiction,
+  Mutation,
+  MutationType,
   Parcel,
   User,
   UserStatus,
@@ -116,6 +118,15 @@ export const PURPOSE_FOR_DISPUTE: Record<DisputeType, FieldReportPurpose> = {
   easement: "boundary-survey",
 };
 
+/** The field work normally required by each mutation (namjari) type. */
+export const PURPOSE_FOR_MUTATION: Record<MutationType, FieldReportPurpose> = {
+  sale: "possession-verify",
+  inheritance: "measurement",
+  gift: "possession-verify",
+  partition: "boundary-survey",
+  correction: "measurement",
+};
+
 const CLOSED_DISPUTE_STATUSES = new Set(["resolved", "rejected", "withdrawn"]);
 
 /**
@@ -133,6 +144,26 @@ export function disputesNeedingSurvey(
   );
   return disputes.filter(
     (d) => !CLOSED_DISPUTE_STATUSES.has(d.status) && !covered.has(d.id),
+  );
+}
+
+/**
+ * Mutations enter the assignment board during primary verification. Any
+ * non-cancelled visit covers the file; cancelling it puts the file back in
+ * the queue so the officer can choose another agent.
+ */
+export function mutationsNeedingAgent(
+  mutations: Mutation[],
+  reports: FieldReport[],
+): Mutation[] {
+  const covered = new Set(
+    reports
+      .filter((report) => report.mutationId && report.status !== "cancelled")
+      .map((report) => report.mutationId),
+  );
+  return mutations.filter(
+    (mutation) =>
+      mutation.status === "under-primary-verification" && !covered.has(mutation.id),
   );
 }
 

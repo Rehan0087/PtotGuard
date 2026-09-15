@@ -94,7 +94,7 @@ transaction → resolve a dispute → timeline entry → notify → audit).
 ## Endpoint status
 
 Every endpoint below is implemented and verified against a real seeded
-database. Only real auth remains unbuilt.
+database, including signed-token authentication and self-service profile updates.
 
 | Resource | Reads | Writes |
 | --- | --- | --- |
@@ -106,7 +106,7 @@ database. Only real auth remains unbuilt.
 | `policies` | ✅ get | ✅ update |
 | `mutations` | ✅ list, detail | ✅ create (`transferReview`), decision (`approvalGate`) |
 | `service-applications` | ✅ list, detail | ✅ create, submit, pay, decision — shared foundation (see below) |
-| `land-tax` | ✅ holdings (+assessment) | ✅ pay (`assessLandTax`) |
+| `land-tax` | ✅ citizen holdings + jurisdiction collection register | ✅ citizen pay + officer counter collection (`assessLandTax`) |
 | `land-admin` | — | ✅ apply |
 | `revenue-cases` | — | ✅ file, schedule-hearing |
 | `lease-settlement` | — | ✅ apply |
@@ -118,7 +118,8 @@ database. Only real auth remains unbuilt.
 | `hearings` | ✅ list, detail | ✅ create, sessions, ruling (`rulingGate`) |
 | `notifications` | ✅ list (own inbox) | ✅ mark read, mark all read |
 | `audit` | ✅ list, per-entity, verify | — (append-only, written by other endpoints) |
-| `auth` | ✅ me (dev stand-in) | ⬜ login, refresh (real auth — see below) |
+| `auth` | ✅ authenticated profile (`GET /auth/me`) | ✅ login, refresh, persistent self-profile update (`PATCH /auth/me`) |
+| `land-office/dashboard` | ✅ jurisdiction workload, queues, service counts, and officer audit activity | — (derived read model) |
 
 `service-applications` is the shared model behind seven land services —
 apply → pay → track → decide is the same workflow for all of them, so the
@@ -136,8 +137,10 @@ ServiceApplication, so tracking and audit come for free. Two things about it
 are deliberate. **Rates are not in the code** — they live on the `Policy`
 singleton, because statutory rates change by finance act and vary by
 district, so the rule takes them as input. And **the amount is never
-accepted from the client**: `POST /land-tax/pay` carries only which holding
-and which method, and recomputes what is owed server-side.
+accepted from the client**: `POST /land-tax/pay` and the land-office-only
+`POST /land-tax/collect` carry only which holding and which method, and
+recompute what is owed server-side. `GET /land-tax/collection` scopes the
+assessment and receipt register to the signed-in officer's jurisdiction.
 
 ## Authentication and Field Agent access
 

@@ -1,4 +1,5 @@
 import type { PrismaService } from "../prisma/prisma.service";
+import { ACTIVE_MUTATION_STATUSES, recordRegistryStatus, type MutationStatus } from "@plotguard/rules";
 
 /** Mirrors CLOSED_DISPUTE_STATUSES in @plotguard/rules' assignment.ts (unexported). */
 export const CLOSED_DISPUTE_STATUSES = ["resolved", "rejected", "withdrawn"];
@@ -43,9 +44,29 @@ export function toParcel(
 export async function findParcelView(prisma: PrismaService, id: string) {
   const parcel = await prisma.parcel.findUnique({
     where: { id },
-    include: { owner: { select: { name: true } } },
+    include: {
+      owner: { select: { name: true } },
+      mutations: {
+        where: { status: { in: [...ACTIVE_MUTATION_STATUSES] } },
+        select: { status: true, disputeId: true },
+      },
+      documents: {
+        where: { verificationStatus: "flagged" },
+        select: { id: true },
+        take: 1,
+      },
+    },
   });
   if (!parcel) return null;
   const counts = await openDisputeCounts(prisma, [id]);
-  return toParcel(parcel, counts.get(id) ?? 0);
+  const { mutations = [], documents = [], ...row } = parcel;
+  const openDisputeCount = counts.get(id) ?? 0;
+  return {
+    ...toParcel(row, openDisputeCount),
+    registryStatus: recordRegistryStatus(
+      mutations as { status: MutationStatus; disputeId?: string | null }[],
+      openDisputeCount,
+      documents.length > 0,
+    ),
+  };
 }

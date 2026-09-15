@@ -19,6 +19,7 @@ import type {
   MutationStatus,
   ServiceApplication,
   ServiceApplicationEvent,
+  ServiceType,
   FieldReport,
   FieldSurveySession,
   Hearing,
@@ -207,6 +208,74 @@ export interface LandTaxHolding {
   assessmentYear: number;
   paidThroughYear: number | null;
   assessment: LandTaxAssessment;
+}
+
+export type LandTaxCollectionStatus = "due" | "paid" | "exempt";
+
+export interface LandTaxPaymentRecord {
+  id: ID;
+  applicationNo: string;
+  parcelId: ID;
+  dagNo: string;
+  khatianNo: string;
+  ownerId: ID;
+  ownerName: string;
+  assessmentYear: number;
+  amount: number;
+  paymentMethod: string;
+  transactionId: string;
+  paidAt: ISODateString;
+}
+
+export interface LandTaxCollectionHolding extends LandTaxHolding {
+  ownerId: ID;
+  ownerName: string;
+  status: LandTaxCollectionStatus;
+  latestPayment: LandTaxPaymentRecord | null;
+}
+
+export interface LandTaxCollection {
+  assessmentYear: number;
+  summary: {
+    holdingCount: number;
+    paidCount: number;
+    dueCount: number;
+    exemptCount: number;
+    assessed: number;
+    collected: number;
+    outstanding: number;
+  };
+  holdings: LandTaxCollectionHolding[];
+  payments: LandTaxPaymentRecord[];
+}
+
+export interface LandOfficerDashboard {
+  officer: {
+    id: ID;
+    name: string;
+    title?: string;
+    jurisdictionId: ID;
+    jurisdictionName: string;
+  };
+  summary: {
+    recordCount: number;
+    activeMutationCount: number;
+    primaryVerificationCount: number;
+    openDisputeCount: number;
+    documentsToReviewCount: number;
+    fraudFlagCount: number;
+    needsAgentCount: number;
+    activeFieldVisitCount: number;
+    openServiceCount: number;
+  };
+  queues: {
+    mutations: Mutation[];
+    disputes: Dispute[];
+    documents: LandDocument[];
+    fieldReports: FieldReport[];
+  };
+  serviceCounts: Partial<Record<ServiceType, number>>;
+  recentActivity: AuditEvent[];
 }
 
 export interface ServiceApplicationDetail {

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api-client";
 import type { Jurisdiction, User as UserType } from "@/lib/types";
 import { useT } from "@/lib/i18n/provider";
+import { useSessionStore } from "@/store/session";
 
 type ProfileData = { user: UserType; jurisdiction: Jurisdiction | null };
 type FormData = {
@@ -22,8 +23,9 @@ export default function ProfilePage() {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const t = useT().pages.profile;
+  const role = useSessionStore((state) => state.role);
   const { data, isLoading, isError, refetch } = useQuery<ProfileData>({
-    queryKey: ["auth-me"], queryFn: () => api.get<ProfileData>("/auth/me"),
+    queryKey: ["auth-me", role], queryFn: () => api.get<ProfileData>("/auth/me"),
   });
   const { register, handleSubmit, reset, control, formState: { errors } } = useForm<FormData>();
   const editedAvatarUrl = useWatch({ control, name: "avatarUrl" });
@@ -33,7 +35,6 @@ export default function ProfilePage() {
       name: values.name.trim(), email: values.email.trim(), phone: values.phone.trim(),
       avatarUrl: values.avatarUrl.trim(),
       profileDetails: {
-        ...(data?.user.profileDetails ?? {}),
         nameBn: values.nameBn.trim(), fatherName: values.fatherName.trim(),
         motherName: values.motherName.trim(), birthDate: values.birthDate,
         bloodGroup: values.bloodGroup, gender: values.gender,
@@ -42,7 +43,7 @@ export default function ProfilePage() {
       },
     }),
     onSuccess: (user) => {
-      queryClient.setQueryData<ProfileData>(["auth-me"], (current) => current ? { ...current, user } : current);
+      queryClient.setQueryData<ProfileData>(["auth-me", role], (current) => current ? { ...current, user } : current);
       setIsEditing(false);
       toast.success(t.updateSuccess);
     },

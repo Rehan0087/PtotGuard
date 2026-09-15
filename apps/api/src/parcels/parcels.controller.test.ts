@@ -46,6 +46,13 @@ function requestFor(role: string) {
   return { header: (name: string) => (name === "x-plotguard-role" ? role : undefined) } as never;
 }
 
+function authenticatedRequest(role: string) {
+  return {
+    user: { id: officer.id, role },
+    header: () => undefined,
+  } as never;
+}
+
 function listPrisma() {
   const findMany = vi.fn().mockResolvedValue([]);
   return {
@@ -66,16 +73,12 @@ describe("Land Office parcel records", () => {
 
     await controller.list(
       { q: "  Ayesha  ", status: "verified", pageSize: "100" },
-      requestFor("land-office"),
+      authenticatedRequest("land-office"),
     );
 
     expect(findMany).toHaveBeenCalledWith({
       where: {
         jurisdictionId: { in: ["j-debidwar", "j-rajamehar"] },
-        registryStatus: "verified",
-        mutations: {
-          none: { status: { in: ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "awaiting-dcr-payment"] } },
-        },
         OR: [
           { dagNo: { contains: "ayesha", mode: "insensitive" } },
           { khatianNo: { contains: "ayesha", mode: "insensitive" } },
@@ -90,11 +93,16 @@ describe("Land Office parcel records", () => {
           where: { status: { in: ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "awaiting-dcr-payment"] } },
           select: { status: true, disputeId: true },
         },
+        documents: {
+          where: { verificationStatus: "flagged" },
+          select: { id: true },
+          take: 1,
+        },
       },
     });
   });
 
-  it("filters and projects Under mutation from the related active mutation rows", async () => {
+  it("projects Under mutation from active rows even when a separate plot dispute is open", async () => {
     const activeParcel = {
       ...parcel,
       registryStatus: "verified",
@@ -105,7 +113,7 @@ describe("Land Office parcel records", () => {
       user: { findUnique: vi.fn().mockResolvedValue(officer) },
       jurisdiction: { findMany: vi.fn().mockResolvedValue(jurisdictions) },
       parcel: { findMany, count: vi.fn().mockResolvedValue(1) },
-      dispute: { groupBy: vi.fn().mockResolvedValue([]) },
+      dispute: { groupBy: vi.fn().mockResolvedValue([{ parcelId: "p-1", _count: 1 }]) },
     };
     const controller = new ParcelsController(prisma as never);
 
@@ -115,14 +123,10 @@ describe("Land Office parcel records", () => {
     );
 
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        mutations: {
-          some: { status: { in: ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "awaiting-dcr-payment"] } },
-        },
-      }),
+      where: expect.not.objectContaining({ registryStatus: expect.anything() }),
     }));
     expect(result.items).toEqual([
-      expect.objectContaining({ id: "p-1", registryStatus: "under-mutation" }),
+      expect.objectContaining({ id: "p-1", registryStatus: "under-mutation", openDisputeCount: 1 }),
     ]);
     expect(result.items[0]).not.toHaveProperty("mutations");
   });
@@ -202,6 +206,7 @@ describe("Land Office parcel records", () => {
     expect(detail).toEqual(expect.objectContaining({
       disputes, documents, restrictions: [], audit: [],
     }));
+    expect(detail.parcel.registryStatus).toBe("under-mutation");
   });
 
   it("projects record status from current mutation rows and keeps terminal history non-active", async () => {

@@ -124,8 +124,8 @@ model Parcel {
   owner          User         @relation("ParcelOwner", fields: [ownerId], references: [id])
   /// OwnershipType: "sole" | "joint" | "inherited" | "corporate" | "government"
   ownershipType  String
-  /// Persisted non-workflow RegistryStatus. Land Office Records derives
-  /// "under-mutation" from active rows in this parcel's mutations relation.
+  /// Legacy/default RegistryStatus. Read views derive the displayed status
+  /// from flagged documents, open disputes, and active mutations.
   registryStatus String
   /// { lat, lng }
   centroid       Json
