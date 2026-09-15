@@ -255,7 +255,9 @@ function MyAppointmentCard({ application }: { application: ServiceApplication })
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <IdChip>{application.applicationNo}</IdChip>
+            <Link href={`/applications/${application.id}`} className="hover:underline">
+                <IdChip>{application.applicationNo}</IdChip>
+              </Link>
             {office ? <span className="text-sm text-muted-foreground">{jName(office)}</span> : null}
           </div>
           {details.purpose ? <p className="text-pretty text-sm text-foreground">{details.purpose}</p> : null}
@@ -380,7 +382,9 @@ function QueueCard({ application }: { application: ServiceApplication }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <IdChip>{application.applicationNo}</IdChip>
+            <Link href={`/applications/${application.id}`} className="hover:underline">
+                <IdChip>{application.applicationNo}</IdChip>
+              </Link>
             {office ? <span className="text-sm font-medium text-foreground">{jName(office)}</span> : null}
           </div>
           {details.purpose ? <p className="text-pretty text-sm text-foreground">{details.purpose}</p> : null}
