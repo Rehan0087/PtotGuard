@@ -32,14 +32,22 @@ export default function ProfilePage() {
 
   const updateMutation = useMutation<UserType, Error, FormData>({
     mutationFn: (values) => api.patch<UserType>("/auth/me", {
-      name: values.name.trim(), email: values.email.trim(), phone: values.phone.trim(),
-      avatarUrl: values.avatarUrl.trim(),
+      name: (values.name ?? "").trim(), 
+      email: (values.email ?? "").trim(), 
+      phone: (values.phone ?? "").trim(),
+      avatarUrl: (values.avatarUrl ?? "").trim(),
       profileDetails: {
-        nameBn: values.nameBn.trim(), fatherName: values.fatherName.trim(),
-        motherName: values.motherName.trim(), birthDate: values.birthDate,
-        bloodGroup: values.bloodGroup, gender: values.gender,
-        occupation: values.occupation.trim(), currentAddress: values.currentAddress.trim(),
-        permanentAddress: values.permanentAddress.trim(), address: values.currentAddress.trim(),
+        ...(data?.user.profileDetails ?? {}),
+        nameBn: (values.nameBn ?? "").trim(), 
+        fatherName: (values.fatherName ?? "").trim(),
+        motherName: (values.motherName ?? "").trim(), 
+        birthDate: values.birthDate,
+        bloodGroup: values.bloodGroup, 
+        gender: values.gender,
+        occupation: (values.occupation ?? "").trim(), 
+        currentAddress: (values.currentAddress ?? "").trim(),
+        permanentAddress: (values.permanentAddress ?? "").trim(), 
+        address: (values.currentAddress ?? "").trim(),
       },
     }),
     onSuccess: (user) => {
