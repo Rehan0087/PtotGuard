@@ -21,6 +21,7 @@ import type {
   Hearing,
   AppNotification,
   User,
+  Role,
   Jurisdiction,
   AuthMe,
   ParcelDetail,
@@ -968,12 +969,36 @@ export function useUsers(params: ListParams = {}) {
   });
 }
 
+/** Creating an account. The temporary password comes back once and is never stored readable. */
+export function useInviteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      email: string;
+      role: Role;
+      jurisdictionId: string;
+      title?: string;
+    }) => api.post<{ user: User; temporaryPassword: string }>("/users", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
+/** A new temporary password for somebody locked out — shown once, same as an invitation. */
+export function useResetUserPassword(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ temporaryPassword: string }>(`/users/${id}/password-reset`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
 /** Suspend/reactivate, or reassign jurisdiction — the two account actions
  * that need no real auth system behind them. */
 export function useUpdateUser(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { status?: "active" | "suspended"; jurisdictionId?: string }) =>
+    mutationFn: (body: { status?: "active" | "suspended"; jurisdictionId?: string; role?: Role }) =>
       api.patch<User>(`/users/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });

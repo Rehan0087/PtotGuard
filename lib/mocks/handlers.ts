@@ -34,6 +34,8 @@ import {
   executionGate,
   hearingTransition,
   isHearingOpen,
+  passwordResetGate,
+  roleChangeGate,
   extractionReview,
   filingReview,
   analyzeGpsTrack,
@@ -500,9 +502,13 @@ export const handlers = [
     const normalizedEmail = body.email?.trim().toLowerCase();
     const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail)
       ?? (account ? db.users.find((candidate) => candidate.id === db.CURRENT_USER_BY_ROLE[account.role]) : undefined);
-    if (!user || user.status !== "active" || body.password !== DEMO_PASSWORD) {
+    // Mirrors auth.controller.ts: suspended refuses, an invitation is taken
+    // up by using it. The password itself stays the fixture one here — the
+    // mock has never checked a real hash.
+    if (!user || user.status === "suspended" || body.password !== DEMO_PASSWORD) {
       return unauthorized("Invalid email or password");
     }
+    if (user.status === "invited") user.status = "active";
     return HttpResponse.json({
       user,
       tokens: {
@@ -3876,6 +3882,79 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
+  /** Mirrors UsersController.invite(). */
+  http.post(`${API}/users`, async ({ request }) => {
+    await latency();
+    const body = (await request.json()) as Partial<{
+      name: string;
+      email: string;
+      role: User["role"];
+      jurisdictionId: string;
+      title: string;
+    }>;
+    const email = body.email?.trim().toLowerCase();
+    if (!body.name?.trim() || !email || !body.role || !body.jurisdictionId) {
+      return badRequest("Missing required fields");
+    }
+    if (db.users.some((u) => u.email.toLowerCase() === email)) {
+      return conflict("An account with that email already exists.");
+    }
+    if (!db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
+      return notFound("Jurisdiction not found");
+    }
+
+    const me = currentUser(request);
+    const user: User = {
+      id: `usr-${Math.random().toString(36).slice(2, 10)}`,
+      name: body.name.trim(),
+      email,
+      role: body.role,
+      jurisdictionId: body.jurisdictionId,
+      ...(body.title?.trim() ? { title: body.title.trim() } : {}),
+      status: "invited",
+      createdAt: new Date().toISOString(),
+    } as User;
+    db.users.push(user);
+
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: user.name, email: user.email, role: user.role },
+    });
+
+    // The fixture API authenticates on the demo password, so the issued one
+    // is cosmetic here — the shape matches, which is what parity means.
+    return HttpResponse.json(
+      { user, temporaryPassword: Math.random().toString(36).slice(2, 10) },
+      { status: 201 },
+    );
+  }),
+
+  /** Mirrors UsersController.resetPassword(). */
+  http.post(`${API}/users/:id/password-reset`, async ({ params, request }) => {
+    await latency();
+    const user = db.users.find((u) => u.id === params.id);
+    if (!user) return notFound("User not found");
+
+    const review = passwordResetGate({ status: user.status });
+    if (!review.canReset) return unprocessable({ status: review.blockers[0] });
+
+    const me = currentUser(request);
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: user.name, passwordReset: "true" },
+    });
+
+    return HttpResponse.json({ temporaryPassword: Math.random().toString(36).slice(2, 10) });
+  }),
+
   /** Mirrors UsersController.update() — see its own note on scope. */
   http.patch(`${API}/users/:id`, async ({ params, request }) => {
     await latency();
@@ -3885,11 +3964,16 @@ export const handlers = [
     const body = (await request.json()) as Partial<{
       status: "active" | "suspended";
       jurisdictionId: string;
+      role: User["role"];
     }>;
 
     const me = currentUser(request);
     if (body.status === "suspended" && user.id === me.id) {
       return conflict("You cannot suspend your own account.");
+    }
+    if (body.role) {
+      const review = roleChangeGate(me.id, { id: user.id, role: user.role }, body.role);
+      if (!review.canChange) return unprocessable({ role: review.blockers[0] });
     }
     if (body.jurisdictionId && !db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
       return notFound("Jurisdiction not found");
@@ -3897,6 +3981,7 @@ export const handlers = [
 
     if (body.status) user.status = body.status;
     if (body.jurisdictionId) user.jurisdictionId = body.jurisdictionId;
+    if (body.role) user.role = body.role;
 
     await appendAudit({
       entityType: "user",
@@ -3908,6 +3993,7 @@ export const handlers = [
         name: user.name,
         ...(body.status ? { status: user.status } : {}),
         ...(body.jurisdictionId ? { jurisdictionId: user.jurisdictionId } : {}),
+        ...(body.role ? { role: user.role } : {}),
       },
     });
 

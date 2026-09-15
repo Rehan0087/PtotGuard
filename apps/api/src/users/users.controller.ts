@@ -1,10 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Query, Req } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
+import {
+  passwordResetGate,
+  roleChangeGate,
+  type Role,
+  type UserStatus,
+} from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import { ConflictError, NotFoundError } from "../common/domain-exceptions";
+import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
 import { pageParams, paginate } from "../common/pagination";
-import { currentUserId } from "../auth/dev-current-user";
+import { currentUserId, hashPassword, temporaryPassword } from "../auth/dev-current-user";
+import { InviteUserDto } from "./invite-user.dto";
 import { UpdateUserDto } from "./update-user.dto";
 
 @Controller("users")
@@ -85,6 +93,14 @@ export class UsersController {
       throw new ConflictError("You cannot suspend your own account.");
     }
 
+    // Same reasoning as suspension, through a pure gate this time: an
+    // administrator who can demote themselves can lock the registry out of
+    // its own administration, and no remaining account could undo it.
+    if (body.role) {
+      const review = roleChangeGate(actorId, { id: user.id, role: user.role as Role }, body.role);
+      if (!review.canChange) throw new ValidationError(review.blockers[0], "role");
+    }
+
     if (body.jurisdictionId) {
       const jurisdiction = await this.prisma.jurisdiction.findUnique({
         where: { id: body.jurisdictionId },
@@ -98,6 +114,7 @@ export class UsersController {
         data: {
           ...(body.status ? { status: body.status } : {}),
           ...(body.jurisdictionId ? { jurisdictionId: body.jurisdictionId } : {}),
+          ...(body.role ? { role: body.role } : {}),
         },
       });
 
@@ -110,10 +127,113 @@ export class UsersController {
           name: updated.name,
           ...(body.status ? { status: updated.status } : {}),
           ...(body.jurisdictionId ? { jurisdictionId: updated.jurisdictionId } : {}),
+          ...(body.role ? { role: updated.role } : {}),
         },
       });
 
       return updated;
+    });
+  }
+
+  /**
+   * Creating an account — the gap this controller's own note used to
+   * explain away with "no real auth to issue an invite through yet". There
+   * is now: passwords are hashed, sign-in is real, and the API refuses to
+   * start without a token secret.
+   *
+   * The account starts `invited`, which until now was a status nothing could
+   * produce. It carries a generated password returned to the administrator
+   * exactly once, because there is no mail delivery here to send it through
+   * — the invitation is handed over, not emailed. Signing in with it is what
+   * turns the invitation into an account.
+   */
+  @Post()
+  @HttpCode(201)
+  async invite(@Body() body: InviteUserDto, @Req() req: Request) {
+    const email = body.email.trim().toLowerCase();
+    const [existing, jurisdiction] = await Promise.all([
+      this.prisma.user.findUnique({ where: { email } }),
+      this.prisma.jurisdiction.findUnique({ where: { id: body.jurisdictionId } }),
+    ]);
+    if (existing) throw new ConflictError("An account with that email already exists.");
+    if (!jurisdiction) throw new NotFoundError("Jurisdiction not found");
+
+    const actorId = currentUserId(req);
+    const password = temporaryPassword();
+
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          id: `usr-${randomUUID()}`,
+          name: body.name.trim(),
+          email,
+          role: body.role,
+          jurisdictionId: body.jurisdictionId,
+          ...(body.title?.trim() ? { title: body.title.trim() } : {}),
+          status: "invited",
+          passwordHash: hashPassword(password),
+        },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "user",
+        entityId: created.id,
+        action: "create",
+        actorId,
+        payload: { name: created.name, email: created.email, role: created.role },
+      });
+
+      const { passwordHash: _passwordHash, ...safeUser } = created;
+      void _passwordHash;
+      // Returned once, never stored anywhere readable. Reissue rather than
+      // recover it: there is nothing to recover from a hash.
+      return { user: safeUser, temporaryPassword: password };
+    });
+  }
+
+  /**
+   * A new temporary password for somebody locked out. Same stand-in as the
+   * invitation: handed over, not emailed, and shown once.
+   */
+  @Post(":id/password-reset")
+  @HttpCode(200)
+  async resetPassword(@Param("id") id: string, @Req() req: Request) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundError("User not found");
+
+    const review = passwordResetGate({ status: user.status as UserStatus });
+    if (!review.canReset) throw new ValidationError(review.blockers[0], "status");
+
+    const actorId = currentUserId(req);
+    const password = temporaryPassword();
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id }, data: { passwordHash: hashPassword(password) } });
+
+      await this.audit.append(tx, {
+        entityType: "user",
+        entityId: id,
+        action: "update",
+        actorId,
+        // The password itself never reaches the ledger; that it changed does.
+        payload: { name: user.name, passwordReset: "true" },
+      });
+
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: id,
+          at: new Date(),
+          severity: "warning",
+          title: "Your password was reset",
+          body: "An administrator issued you a new temporary password.",
+          content: { code: "password-reset" },
+          read: false,
+          href: "/profile",
+        },
+      });
+
+      return { temporaryPassword: password };
     });
   }
 }
