@@ -8,6 +8,7 @@ export class CompleteVerificationDto {
   @IsBoolean() deedVerified!: boolean;
   @IsBoolean() landRecordMatched!: boolean;
   @IsBoolean() documentsPresent!: boolean;
+  @IsBoolean() khajnaReceiptVerified!: boolean;
 
   @IsString()
   @MinLength(1)

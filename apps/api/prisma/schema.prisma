@@ -124,8 +124,8 @@ model Parcel {
   owner          User         @relation("ParcelOwner", fields: [ownerId], references: [id])
   /// OwnershipType: "sole" | "joint" | "inherited" | "corporate" | "government"
   ownershipType  String
-  /// Persisted non-workflow RegistryStatus. Land Office Records derives
-  /// "under-mutation" from active rows in this parcel's mutations relation.
+  /// Legacy/default RegistryStatus. Read views derive the displayed status
+  /// from flagged documents, open disputes, and active mutations.
   registryStatus String
   /// { lat, lng }
   centroid       Json
@@ -274,6 +274,7 @@ model Dispute {
   events       DisputeEvent[]
   hearings     Hearing[]
   fieldReports FieldReport[]
+  mutation     Mutation?
 
   @@index([parcelId])
   @@index([status])
@@ -315,7 +316,8 @@ model Mutation {
   parcelDagNo             String
   /// MutationType: "sale" | "inheritance" | "gift" | "partition" | "correction"
   type                    String
-  /// MutationStatus: "submitted" | "verification" | "objection-period" | "approved" | "rejected"
+  /// MutationStatus: submitted -> under-primary-verification -> field-investigation
+  /// -> field-verification-complete -> awaiting-dcr-payment -> complete (or rejected)
   status                  String    @default("submitted")
   fromOwnerName           String
   fromOwnerId             String?
@@ -332,6 +334,8 @@ model Mutation {
   requestedAt             DateTime  @default(now())
   assignedOfficerId       String?
   assignedOfficer         User?     @relation("MutationOfficer", fields: [assignedOfficerId], references: [id])
+  disputeId               String?   @unique
+  dispute                 Dispute?  @relation(fields: [disputeId], references: [id])
   verificationStartedAt   DateTime?
   verificationStartedById String?
   verificationStartedBy   User?     @relation("MutationVerificationStarter", fields: [verificationStartedById], references: [id])
@@ -364,6 +368,10 @@ model Mutation {
   rejectedById            String?
   rejectedBy              User?     @relation("MutationRejector", fields: [rejectedById], references: [id])
   rejectionReason         String?
+  orderSheet              String?
+  digitalSignature        String?
+  mutationKhatianNumber   String?   @unique
+  dcrPaidAt               DateTime?
   decidedAt               DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
@@ -477,6 +485,8 @@ model FieldReport {
   gpsCaptures     Json                     @default("[]")
   /// FieldPhoto[] — same reasoning as gpsCaptures.
   photos          Json                     @default("[]")
+  sketchMapUrl    String?
+  sketchMapFileName String?
   notes           String?
   submittedAt     DateTime?
   survey          FieldSurveySession?

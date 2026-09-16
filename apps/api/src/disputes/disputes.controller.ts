@@ -1,18 +1,34 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import {
   activeRestrictions,
+  disputeTransition,
   executionGate,
   registryStatusAfter,
   routeDisputeToOfficer,
   type Dispute,
   type DisputeParty,
+  type DisputeStatus,
   type Jurisdiction,
   type ParcelRestriction,
   type RulingOutcome,
   type User,
 } from "@plotguard/rules";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -22,6 +38,7 @@ import { findParcelView } from "../parcels/parcel-view";
 import { disputeAudience } from "./dispute-audience";
 import { CreateDisputeDto } from "./create-dispute.dto";
 import { ExecuteRulingDto } from "./execute-ruling.dto";
+import { UpdateDisputeStatusDto } from "./update-dispute-status.dto";
 
 function toOutcome(body: ExecuteRulingDto): RulingOutcome {
   switch (body.action) {
@@ -231,18 +248,32 @@ export class DisputesController {
     });
   }
 
+  /**
+   * A mediator or officer moving a case along. Two statuses are missing from
+   * what this will accept, on purpose: `hearing-scheduled` belongs to
+   * POST /hearings and `resolved` to PATCH /hearings/:id/ruling, each of
+   * which writes more than a status. `disputeTransition()` is the same gate
+   * the mediator's screen uses to decide what to offer.
+   */
+  // Both roles that handle a case: the mediator on their own screen, the
+  // officer on the dispute record. A party to the case cannot move it.
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("mediator", "land-office")
   @Patch(":id/status")
   async updateStatus(
     @Param("id") id: string,
-    @Body() body: { status: string },
+    @Body() body: UpdateDisputeStatusDto,
     @Req() req: Request,
   ) {
     const dispute = await this.prisma.dispute.findUnique({ where: { id } });
     if (!dispute) throw new NotFoundError("Dispute not found");
 
     const actorId = currentUserId(req);
-    const from = dispute.status;
-    const to = body.status as any;
+    const from = dispute.status as DisputeStatus;
+    const to = body.status;
+
+    const review = disputeTransition(from, to);
+    if (!review.canChange) throw new ValidationError(review.blockers[0], "status");
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
@@ -308,6 +339,8 @@ export class DisputesController {
    * ruling is executed: it unblocks the record for the real transfer
    * channel rather than reimplementing one here.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/execute")
   async execute(@Param("id") id: string, @Body() body: ExecuteRulingDto, @Req() req: Request) {
     const dispute = await this.prisma.dispute.findUnique({ where: { id } });

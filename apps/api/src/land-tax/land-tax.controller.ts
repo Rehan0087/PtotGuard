@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
 import type { Policy, ServiceApplication } from "@prisma/client";
 import {
@@ -12,6 +12,10 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError } from "../common/domain-exceptions";
 import { currentUserId } from "../auth/dev-current-user";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
+import { coveredJurisdictionIds, loadMutationActor } from "../mutations/mutation-access";
 import { PayLandTaxDto } from "./pay-land-tax.dto";
 
 /** The tax year being billed. One place, so holdings and payment agree. */
@@ -41,6 +45,10 @@ function paidThroughYear(paid: ServiceApplication[], parcelId: string): number |
   return years.length > 0 ? Math.max(...years) : null;
 }
 
+function paidAssessmentYear(payment: ServiceApplication): number {
+  return Number((payment.details as { assessmentYear?: number })?.assessmentYear);
+}
+
 /**
  * Land development tax (khajna) — the citizen's holdings and what each owes.
  *
@@ -56,6 +64,102 @@ export class LandTaxController {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
   ) {}
+
+  /** Jurisdiction-wide assessment, collection, arrears and receipt register. */
+  @Get("collection")
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
+  async collection(@Req() req: Request) {
+    const actor = await loadMutationActor(this.prisma, req);
+    const jurisdictions = await this.prisma.jurisdiction.findMany();
+    const covered = [...coveredJurisdictionIds(actor, jurisdictions)];
+    const [parcels, policy, paid] = await Promise.all([
+      this.prisma.parcel.findMany({
+        where: { jurisdictionId: { in: covered } },
+        include: { owner: { select: { name: true } } },
+        orderBy: { dagNo: "asc" },
+      }),
+      this.prisma.policy.findUnique({ where: { id: "singleton" } }),
+      this.prisma.serviceApplication.findMany({
+        where: {
+          serviceType: "land-tax",
+          paidAt: { not: null },
+          parcel: { jurisdictionId: { in: covered } },
+        },
+        orderBy: { paidAt: "desc" },
+      }),
+    ]);
+    if (!policy) throw new NotFoundError("Policies not configured");
+
+    const year = assessmentYear();
+    const rates = ratesFrom(policy);
+    const parcelById = new Map(parcels.map((parcel) => [parcel.id, parcel]));
+    const payments = paid.flatMap((payment) => {
+      const parcel = payment.parcelId ? parcelById.get(payment.parcelId) : undefined;
+      if (!parcel || !payment.paidAt || !payment.feeAmount || !payment.paymentMethod || !payment.transactionId) return [];
+      return [{
+        id: payment.id,
+        applicationNo: payment.applicationNo,
+        parcelId: parcel.id,
+        dagNo: parcel.dagNo,
+        khatianNo: parcel.khatianNo,
+        ownerId: parcel.ownerId,
+        ownerName: parcel.owner.name,
+        assessmentYear: paidAssessmentYear(payment),
+        amount: payment.feeAmount,
+        paymentMethod: payment.paymentMethod,
+        transactionId: payment.transactionId,
+        paidAt: payment.paidAt,
+      }];
+    });
+
+    const holdings = parcels.map((parcel) => {
+      const settled = paidThroughYear(paid, parcel.id);
+      const assessment = assessLandTax({
+        area: parcel.area as unknown as Area,
+        landUse: parcel.landUse as LandUse,
+        assessmentYear: year,
+        paidThroughYear: settled,
+        liableFromYear: parcel.registeredAt.getUTCFullYear(),
+      }, rates);
+      const latestPayment = payments.find((payment) => payment.parcelId === parcel.id) ?? null;
+      const status = assessment.exemption ? "exempt" : settled !== null && settled >= year ? "paid" : "due";
+      return {
+        parcelId: parcel.id,
+        ulpin: parcel.ulpin,
+        dagNo: parcel.dagNo,
+        khatianNo: parcel.khatianNo,
+        title: parcel.title,
+        landUse: parcel.landUse,
+        area: parcel.area,
+        ownerId: parcel.ownerId,
+        ownerName: parcel.owner.name,
+        assessmentYear: year,
+        paidThroughYear: settled,
+        assessment,
+        status,
+        latestPayment,
+      };
+    });
+    const currentPayments = payments.filter((payment) => payment.assessmentYear === year);
+    const collected = currentPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const outstanding = holdings.reduce((sum, holding) => sum + holding.assessment.total, 0);
+
+    return {
+      assessmentYear: year,
+      summary: {
+        holdingCount: holdings.length,
+        paidCount: holdings.filter((holding) => holding.status === "paid").length,
+        dueCount: holdings.filter((holding) => holding.status === "due").length,
+        exemptCount: holdings.filter((holding) => holding.status === "exempt").length,
+        assessed: collected + outstanding,
+        collected,
+        outstanding,
+      },
+      holdings,
+      payments,
+    };
+  }
 
   /** Every holding the signed-in citizen owns, each with its own assessment. */
   @Get("holdings")
@@ -108,11 +212,34 @@ export class LandTaxController {
   @HttpCode(201)
   async pay(@Body() body: PayLandTaxDto, @Req() req: Request) {
     const me = currentUserId(req);
+    return this.settle(body, me, me);
+  }
+
+  /** Record an assisted/counter collection for a landowner in this office. */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
+  @Post("collect")
+  @HttpCode(201)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
+  async collect(@Body() body: PayLandTaxDto, @Req() req: Request) {
+    const actor = await loadMutationActor(this.prisma, req);
+    const [parcel, jurisdictions] = await Promise.all([
+      this.prisma.parcel.findUnique({ where: { id: body.parcelId } }),
+      this.prisma.jurisdiction.findMany(),
+    ]);
+    if (!parcel || !coveredJurisdictionIds(actor, jurisdictions).has(parcel.jurisdictionId)) {
+      throw new NotFoundError("Parcel not found");
+    }
+    return this.settle(body, parcel.ownerId, actor.id);
+  }
+
+  private async settle(body: PayLandTaxDto, applicantId: string, actorId: string) {
     const [parcel, policy, paid] = await Promise.all([
       this.prisma.parcel.findUnique({ where: { id: body.parcelId } }),
       this.prisma.policy.findUnique({ where: { id: "singleton" } }),
       this.prisma.serviceApplication.findMany({
-        where: { applicantId: me, serviceType: "land-tax", paidAt: { not: null } },
+        where: { applicantId, serviceType: "land-tax", paidAt: { not: null } },
       }),
     ]);
     if (!parcel) throw new NotFoundError("Parcel not found");
@@ -120,7 +247,7 @@ export class LandTaxController {
     // Tax is the holder's liability — paying it is not an open action on
     // someone else's plot, and allowing it would let anyone write a payment
     // record against a stranger's holding.
-    if (parcel.ownerId !== me) throw new NotFoundError("Parcel not found");
+    if (parcel.ownerId !== applicantId) throw new NotFoundError("Parcel not found");
 
     const year = assessmentYear();
     const settled = paidThroughYear(paid, parcel.id);
@@ -144,7 +271,7 @@ export class LandTaxController {
 
     return this.prisma.$transaction(async (tx) => {
       const count = await tx.serviceApplication.count({ where: { serviceType: "land-tax" } });
-      const applicationNo = `LDT-2026-${String(1000 + count).padStart(6, "0")}`;
+      const applicationNo = `LDT-${year}-${String(1000 + count).padStart(6, "0")}`;
       const now = new Date();
 
       const created = await tx.serviceApplication.create({
@@ -156,7 +283,8 @@ export class LandTaxController {
           // adjudicates — it is settled the moment it is paid.
           status: "approved",
           parcelId: parcel.id,
-          applicantId: me,
+          applicantId,
+          assignedOfficerId: actorId === applicantId ? undefined : actorId,
           details: {
             assessmentYear: year,
             decimals: assessment.decimals,
@@ -178,7 +306,7 @@ export class LandTaxController {
         entityType: "service-application",
         entityId: created.id,
         action: "payment",
-        actorId: me,
+        actorId,
         payload: {
           applicationNo: created.applicationNo,
           serviceType: "land-tax",
@@ -195,7 +323,7 @@ export class LandTaxController {
           at: now,
           type: "payment-recorded",
           title: "Land development tax paid",
-          actorId: me,
+          actorId,
         },
       });
 

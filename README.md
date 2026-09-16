@@ -95,7 +95,7 @@ packages/
     src/
       types/           # The domain model — single source of truth
       inheritance.ts   # Pure Faraiz + Hindu succession calc
-      mutations.ts     # Pure namjari approval gate (objection window + objections)
+      mutations.ts     # Pure namjari workflow and officer action gates
       ocr.ts           # Pure extraction gate (required fields + register mismatch)
       field-capture.ts # Pure survey filing gate (evidence required per purpose)
       hearings.ts      # Pure ruling gate (a party never heard is never ruled against)
@@ -188,18 +188,29 @@ malformed, and the tests that reach them supply exactly that.
 
 Start the database, backend, and frontend together:
 
+```bash
+./demo.sh start
+```
 
 The frontend proxies `/api` to `http://localhost:3001/api`, where NestJS writes to Postgres.
 Set `NEXT_PUBLIC_API_MOCKING=enabled` before starting Next.js only when you want fixture data.
+In mock mode, profile edits are stored in browser local storage so all editable profile fields
+survive a refresh; persistent-stack profile edits are stored in Postgres.
+Mutation workflow changes and their linked disputes/documents are stored in browser session
+storage so the derived Records status also survives a mock-mode refresh. Land-tax collection
+receipts use that same persistent mock snapshot; in the real stack they are stored as paid
+`ServiceApplication` rows in Postgres.
 
 ### API surface
 
 `lib/mocks/handlers.ts` implements the frozen spec — this file *is* the contract
 `apps/api` builds against, endpoint for endpoint. Endpoint groups: `auth`
-(`/auth/login`, `/refresh`, `/me`), `parcels` (+`/neighbours`, `/history`, dag/khatian/bbox
+(`/auth/login`, `/refresh`, `GET/PATCH /me`), `parcels` (+`/neighbours`, `/history`, dag/khatian/bbox
 search), `documents` (+`/reprocess`, `PATCH /:id/decision`, `PATCH /:id/fields`), `mutations`
-(`PATCH /:id/decision`), `disputes` (`PATCH /:id/status`, `POST /:id/assign-agent`),
-`field-reports` (`/assigned`, `/:id`, `/:id/accept`, `/:id/media`, `POST /` to book a survey), `hearings`
+(`PATCH /:id/decision`, `/:id/dcr-payment`, `/:id/flag-dispute`), `disputes` (`PATCH /:id/status`, `POST /:id/assign-agent`),
+`field-reports` (`/assigned`, `/:id`, `/:id/accept`, `/:id/media`, `POST /` to book a survey),
+`land-office/dashboard` (jurisdiction workload and officer activity),
+`land-tax` (`/holdings`, `/collection`, `/pay`, `/collect`), `hearings`
 (`PATCH /:id/ruling`), `inheritance/calculate`, and `audit` (`/:entityType/:id`, `/verify`).
 
 Two are worth noting: `inheritance/calculate` runs the real (simplified) calculator in
@@ -395,24 +406,42 @@ axes, so relative position and size stay honest). Hovering a card highlights its
 vice versa. It's a locator, not the primary path — the card grid stays the accessible route
 to a parcel.
 
-### Mutations and the approval gate
+### Mutation workflow
 
-A namjari can't be approved just because an officer clicks approve. `mutations.ts`
-(`approvalGate`) is the pure rule: a **standing objection** blocks approval outright, and an
-**open statutory objection window** blocks it until the window closes. Rejection stays
-available in both cases — an officer can turn down a bad application without waiting out the
-clock. Decided mutations expose no actions at all.
+Namjari uses one status sequence in the citizen, Land Office, Field Agent, and record views:
+`submitted` -> `under-primary-verification` -> `field-investigation` ->
+`field-verification-complete` -> `awaiting-dcr-payment` -> `complete` (or `rejected`).
+Primary verification records deed, Khatian, Khajna-receipt, party, and document checks plus
+officer comments. While the file is in `under-primary-verification`, the officer assigns a field
+agent, whose report includes GPS/photo
+evidence and a sketch-map upload. Final approval requires an order sheet and digital-signature
+confirmation, generates a Mutation Khatian number, and opens DCR payment.
 
-The screen renders the *reason* for a hold, not just a disabled button, and the approve action
-takes an inline confirmation naming the incoming owner, since the transfer is what actually
-moves the record.
+Disputes run in parallel: either the officer or field agent can create a linked mediator case.
+The mutation and parcel record show `disputed`, while the assigned officer's workflow remains
+available. The API, mock handlers, and shared rules enforce the same transitions.
 
-Treat `approvalGate` the way you treat `inheritance.ts` — the backend must enforce the
-same rule server-side; this copy exists so the UI can explain itself.
+### Record status projection
 
-The gate returns a **code**, not a sentence (`{ code: "objections", count: 2 }`), and the screen
-words it per locale. Every pure rule module works this way — see
-[Rules explain themselves in both languages](#rules-explain-themselves-in-both-languages).
+The Records status is derived from current related rows; it is not copied from a seeded parcel
+label. The same projection is used by the list, record detail, parcel views, public lookup, and
+Land Information Bank:
+
+1. A document currently flagged by OCR/fraud verification makes the record `flagged`.
+2. Otherwise, an active mutation linked to a dispute makes it `disputed`.
+3. Otherwise, any non-terminal mutation makes it `under-mutation`, even when the plot has a
+   separate open dispute.
+4. With no active mutation, an open dispute makes the record `disputed`; resolved, rejected,
+   and withdrawn disputes do not count.
+5. With no active issue or workflow—including after completion—the record is `verified`.
+
+`pending` is not a registry status. The Records dispute column is independently calculated from
+the same open-dispute rows and displays `Yes (n)` or `No`, so a status and its count cannot
+contradict each other.
+
+Five linked demo plots exercise the projection in both mock data and the Prisma seed: RS-401
+(verified), RS-402 (under mutation), RS-403 (field-agent dispute), RS-404 (OCR flagged), and
+RS-405 (completed mutation, therefore verified).
 
 ### The OCR queue and the extraction gate
 
@@ -443,7 +472,8 @@ existing `/decision` verb.
 
 ### Assigning field surveys
 
-`/agents` is the booking board: open disputes with nobody going to look at the land, the roster
+`/agents` is the booking board: mutations in primary verification with nobody going to inspect
+the land, the roster
 and what each agent is carrying, and the visits already in flight. The roster tiles double as
 the filter for the visit list.
 
@@ -457,15 +487,14 @@ the filter for the visit list.
 - **A suspended account can't be given work**, full stop.
 - **`rankCandidates()` puts the cheapest trip first.** An agent with an open visit already booked
   on that parcel leads the list — one trip covers both jobs. After that it sorts by load.
-- **`disputesNeedingSurvey()`** is what fills the board: open disputes with no live field report.
-  A cancelled visit puts the job back on the board.
-- **`PURPOSE_FOR_DISPUTE`** pre-selects the survey the case actually calls for (a boundary
-  dispute wants a boundary survey, a fraud case wants possession verified). The officer can
-  change it.
+- **`mutationsNeedingAgent()`** fills the board from `under-primary-verification` mutations with
+  no non-cancelled field report. A cancelled visit puts the mutation back for reassignment.
+- **`PURPOSE_FOR_MUTATION`** pre-selects the survey the mutation type normally calls for. The
+  officer can change it.
 
-Booking posts to `POST /field-reports` with an agent and a date, which also moves the dispute to
-`field-visit-scheduled` and writes a `field-visit` entry on its tracking timeline — so the case
-detail screen reflects the booking without any extra call.
+Booking posts to `POST /field-reports` with the mutation, agent, and date. Both the live API and
+mock API accept mutation assignments only during primary verification and reject duplicate
+non-cancelled visits. The preview persists the resulting report and audit event across refreshes.
 
 ### Carrying out the survey
 

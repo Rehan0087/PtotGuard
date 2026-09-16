@@ -36,18 +36,27 @@ function pair<K extends string>(
 export function useStatusMeta() {
   const t = useT();
   return useMemo(
-    () => ({
-      registry: pair(registryStatusTone, t.status.registry),
-      dispute: pair(disputeStatusTone, t.status.dispute),
-      serviceApplication: pair(serviceApplicationStatusTone, t.status.serviceApplication),
-      priority: pair(priorityTone, t.status.priority),
-      mutation: pair(mutationStatusTone, t.status.mutation),
-      ocr: pair(ocrStatusTone, t.status.ocr),
-      verification: pair(verificationStatusTone, t.status.verification),
-      fieldReport: pair(fieldReportStatusTone, t.status.fieldReport),
-      hearing: pair(hearingStatusTone, t.status.hearing),
-      user: pair(userStatusTone, t.status.user),
-    }),
+    () => {
+      const mutation = pair(mutationStatusTone, t.status.mutation);
+      // Old MSW session snapshots can survive a branch switch. Keep rendering
+      // safe while mutation-store upgrades those values to the current names.
+      Object.assign(mutation, {
+        verification: mutation["under-primary-verification"],
+        "objection-period": mutation["field-investigation"],
+      });
+      return {
+        registry: pair(registryStatusTone, t.status.registry),
+        dispute: pair(disputeStatusTone, t.status.dispute),
+        serviceApplication: pair(serviceApplicationStatusTone, t.status.serviceApplication),
+        priority: pair(priorityTone, t.status.priority),
+        mutation,
+        ocr: pair(ocrStatusTone, t.status.ocr),
+        verification: pair(verificationStatusTone, t.status.verification),
+        fieldReport: pair(fieldReportStatusTone, t.status.fieldReport),
+        hearing: pair(hearingStatusTone, t.status.hearing),
+        user: pair(userStatusTone, t.status.user),
+      };
+    },
     [t],
   );
 }

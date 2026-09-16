@@ -5,7 +5,9 @@ export type HearingStatus =
   | "in-hearing"
   | "deliberation"
   | "ruled"
-  | "appealed";
+  | "appealed"
+  /** Ended without a ruling: settled, withdrawn, or taken elsewhere. */
+  | "closed";
 
 export interface HearingSession {
   id: ID;

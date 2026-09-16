@@ -28,7 +28,6 @@ export interface StatusMeta {
 
 export const registryStatusTone: Record<RegistryStatus, StatusTone> = {
   verified: "verified",
-  pending: "pending",
   disputed: "disputed",
   flagged: "flagged",
   "under-mutation": "review",
@@ -53,10 +52,13 @@ export const priorityTone: Record<Priority, StatusTone> = {
 
 export const mutationStatusTone: Record<MutationStatus, StatusTone> = {
   submitted: "pending",
-  verification: "review",
-  "objection-period": "disputed",
+  "under-primary-verification": "review",
+  "field-investigation": "review",
+  "field-verification-complete": "verified",
   approved: "verified",
   rejected: "flagged",
+  "awaiting-dcr-payment": "pending",
+  complete: "verified",
 };
 
 export const ocrStatusTone: Record<OcrStatus, StatusTone> = {
@@ -88,6 +90,7 @@ export const hearingStatusTone: Record<HearingStatus, StatusTone> = {
   deliberation: "review",
   ruled: "verified",
   appealed: "flagged",
+  closed: "neutral",
 };
 
 export const userStatusTone: Record<UserStatus, StatusTone> = {

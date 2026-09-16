@@ -4,12 +4,18 @@
   "private": true,
   "description": "PlotGuard Core API — the real backend behind the frozen spec the frontend already codes against.",
   "scripts": {
-    "dev": "nest start --watch",
-    "build": "nest build",
+    "dev": "prisma generate && nest start --watch",
+    "build": "prisma generate && nest build",
     "start": "node dist/main.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "prisma generate && tsc --noEmit",
+    "postinstall": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:demo-logins": "tsx prisma/ensure-demo-logins.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

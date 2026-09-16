@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import type { AppNotification, DisputeEvent } from "@/lib/types";
+import type { AppNotification, DisputeEvent, ServiceApplicationEvent } from "@/lib/types";
 import { useT } from "./provider";
 
 /**
@@ -75,6 +75,12 @@ export function useDisputeEventTitle() {
           return t.disputeEvents["status-change"](t.status.dispute[c.status]);
         case "hearing-held":
           return t.disputeEvents["hearing-held"](c.ordinal);
+        case "hearing-adjourned":
+          return t.disputeEvents["hearing-adjourned"];
+        case "hearing-closed":
+          return t.disputeEvents["hearing-closed"];
+        case "hearing-appealed":
+          return t.disputeEvents["hearing-appealed"];
         case "field-visit-scheduled":
           return t.disputeEvents["field-visit-scheduled"];
         case "field-visit-completed":
@@ -84,6 +90,30 @@ export function useDisputeEventTitle() {
         default:
           return event.title;
       }
+    },
+    [t],
+  );
+}
+
+/**
+ * The headline of a service application's timeline entry.
+ *
+ * One step coarser than useDisputeEventTitle, because the model is: a
+ * ServiceApplicationEvent carries no structured `content`, only a type and a
+ * server-written title. So the type is what can be said in the reader's
+ * language, and the stored title stays underneath as the specific thing that
+ * happened — "Acquisition notice issued" under a generic "Submitted".
+ */
+export function useServiceApplicationEventTitle() {
+  const t = useT();
+
+  return useCallback(
+    (event: ServiceApplicationEvent): string => {
+      // Indexed loosely on purpose: `type` is a union in the type system but
+      // just a string in the row, and an unknown one should read as its title
+      // rather than as "undefined".
+      const labels = t.serviceApplicationEvents as Record<string, string | undefined>;
+      return labels[event.type] ?? event.title;
     },
     [t],
   );

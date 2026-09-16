@@ -12,7 +12,6 @@ import { useSessionStore } from "@/store/session";
 import type {
   Paginated,
   Parcel,
-  OwnershipRecord,
   Dispute,
   Mutation as LandMutation,
   ServiceApplication,
@@ -22,6 +21,7 @@ import type {
   Hearing,
   AppNotification,
   User,
+  Role,
   Jurisdiction,
   AuthMe,
   ParcelDetail,
@@ -29,6 +29,9 @@ import type {
   MutationDetail,
   ServiceApplicationDetail,
   LandTaxHolding,
+  LandTaxCollection,
+  LandOfficerDashboard,
+  AdminDashboard,
   FieldReportDetail,
   HearingDetail,
   InheritanceInput,
@@ -143,14 +146,6 @@ export function useParcelNeighbours(id: string | undefined) {
   });
 }
 
-export function useParcelHistory(id: string | undefined) {
-  return useQuery({
-    queryKey: ["parcel-history", id],
-    queryFn: () => api.get<OwnershipRecord[]>(`/parcels/${id}/history`),
-    enabled: Boolean(id),
-  });
-}
-
 // --- Disputes --------------------------------------------------------------
 export function useDisputes(params: ListParams = {}) {
   const role = useRole();
@@ -177,11 +172,20 @@ export interface FileDisputeInput {
   respondentName?: string;
 }
 
+function invalidateRecordViews(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ["land-record"] });
+  qc.invalidateQueries({ queryKey: ["parcel"] });
+  qc.invalidateQueries({ queryKey: ["parcels"] });
+}
+
 export function useFileDispute() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: FileDisputeInput) => api.post<Dispute>("/disputes", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["disputes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -192,6 +196,7 @@ export function useUpdateDisputeStatus(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dispute", id] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+      invalidateRecordViews(qc);
     },
   });
 }
@@ -205,7 +210,7 @@ export function useExecuteRuling(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dispute", id] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
-      qc.invalidateQueries({ queryKey: ["parcel"] });
+      invalidateRecordViews(qc);
     },
   });
 }
@@ -243,9 +248,7 @@ function invalidateMutationWorkflow(qc: QueryClient, id: string) {
   // Record detail embeds mutation state and its audit trail, so every workflow
   // action refreshes that aggregate and the Records list projection. Approval
   // also changes the parcel's owner through the existing backend transaction.
-  qc.invalidateQueries({ queryKey: ["land-record"] });
-  qc.invalidateQueries({ queryKey: ["parcel"] });
-  qc.invalidateQueries({ queryKey: ["parcels"] });
+  invalidateRecordViews(qc);
 }
 
 export type CompleteMutationVerificationInput = MutationVerificationChecklist & {
@@ -283,26 +286,35 @@ export function useSearchCitizens(query: string) {
 }
 
 export type MutationDecisionBody =
-  | { decision: "approve"; approvalNote?: string }
+  | { decision: "approve"; approvalNote?: string; orderSheet: string; digitalSignature: string }
   | { decision: "reject"; rejectionReason: string };
-
-export type MutationDecisionInput = MutationDecisionBody | MutationDecisionBody["decision"];
-
-function normalizeMutationDecision(input: MutationDecisionInput): MutationDecisionBody {
-  if (typeof input === "string") {
-    return input === "approve"
-      ? { decision: "approve" }
-      : { decision: "reject", rejectionReason: "" };
-  }
-  return input;
-}
 
 export function useMutationDecision(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: MutationDecisionInput) =>
-      api.patch<LandMutation>(`/mutations/${id}/decision`, normalizeMutationDecision(input)),
+    mutationFn: (input: MutationDecisionBody) =>
+      api.patch<LandMutation>(`/mutations/${id}/decision`, input),
     onSuccess: () => invalidateMutationWorkflow(qc, id),
+  });
+}
+
+export function usePayMutationDcr(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.patch<LandMutation>(`/mutations/${id}/dcr-payment`),
+    onSuccess: () => invalidateMutationWorkflow(qc, id),
+  });
+}
+
+export function useFlagMutationDispute(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (description: string) =>
+      api.patch<LandMutation>(`/mutations/${id}/flag-dispute`, { description }),
+    onSuccess: () => {
+      invalidateMutationWorkflow(qc, id);
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
   });
 }
 
@@ -351,15 +363,6 @@ export function useServiceApplication(id: string | undefined) {
   });
 }
 
-export function useCreateServiceApplication() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Partial<ServiceApplication>) =>
-      api.post<ServiceApplication>("/service-applications", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
-  });
-}
-
 function useServiceApplicationWrite(id: string) {
   const qc = useQueryClient();
   return {
@@ -368,14 +371,6 @@ function useServiceApplicationWrite(id: string) {
       qc.invalidateQueries({ queryKey: ["service-applications"] });
     },
   };
-}
-
-export function useSubmitServiceApplication(id: string) {
-  const { invalidate } = useServiceApplicationWrite(id);
-  return useMutation({
-    mutationFn: () => api.patch<ServiceApplication>(`/service-applications/${id}/submit`),
-    onSuccess: invalidate,
-  });
 }
 
 export function usePayServiceApplication(id: string) {
@@ -572,19 +567,14 @@ export function useDocuments(params: ListParams = {}) {
   });
 }
 
-export function useDocument(id: string | undefined) {
-  return useQuery({
-    queryKey: ["document", id],
-    queryFn: () => api.get<LandDocument>(`/documents/${id}`),
-    enabled: Boolean(id),
-  });
-}
-
 export function useUploadDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<LandDocument>) => api.post<LandDocument>("/documents", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -599,7 +589,10 @@ export function useDocumentDecision() {
       id: string;
       decision: "verify" | "reject" | "flag";
     }) => api.patch<LandDocument>(`/documents/${id}/decision`, { decision }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -609,7 +602,10 @@ export function useSaveExtractedFields() {
   return useMutation({
     mutationFn: ({ id, fields }: { id: string; fields: Record<string, string> }) =>
       api.patch<LandDocument>(`/documents/${id}/fields`, { fields }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -617,7 +613,10 @@ export function useReprocessDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post<LandDocument>(`/documents/${id}/reprocess`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      invalidateRecordViews(qc);
+    },
   });
 }
 
@@ -640,23 +639,27 @@ export function useFieldReports(params: ListParams = {}) {
   });
 }
 
-/** The land office booking a survey: creates the visit and moves the dispute. */
+/** The land office booking a field visit for a dispute or primary-verification mutation. */
 export function useAssignFieldSurvey() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: {
       parcelId: string;
       disputeId?: string;
+      mutationId?: string;
       purpose: string;
       assignedAgentId: string;
       scheduledFor: string;
       addressHint?: string;
       allowOutsideJurisdiction?: boolean;
     }) => api.post<FieldReport>("/field-reports", body),
-    onSuccess: () => {
+    onSuccess: (_report, variables) => {
       qc.invalidateQueries({ queryKey: ["field-reports"] });
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      invalidateRecordViews(qc);
+      if (variables.mutationId) qc.invalidateQueries({ queryKey: ["mutation", variables.mutationId] });
     },
   });
 }
@@ -699,13 +702,16 @@ export function useStartFieldSurvey(id: string) {
 export function useCompleteFieldSurvey(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (notes: string) =>
-      api.post<FieldSurveyMutationResult>(`/field-reports/${id}/survey/complete`, { notes }),
+    mutationFn: (input: string | { notes: string; disputeFound?: boolean; disputeDescription?: string }) =>
+      api.post<FieldSurveyMutationResult>(`/field-reports/${id}/survey/complete`,
+        typeof input === "string" ? { notes: input } : input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["field-report", id] });
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
       qc.invalidateQueries({ queryKey: ["field-reports"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      invalidateRecordViews(qc);
     },
   });
 }
@@ -716,6 +722,7 @@ export function useAddFieldReportMedia(id: string) {
     mutationFn: (body: {
       photo?: { url: string; caption?: string };
       gps?: { lat: number; lng: number; accuracyMeters: number; label?: string };
+      sketchMap?: { url: string; fileName: string };
     }) => api.post<FieldReport>(`/field-reports/${id}/media`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["field-report", id] });
@@ -735,6 +742,60 @@ export function useUpdateFieldReport(id: string) {
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
       qc.invalidateQueries({ queryKey: ["field-reports"] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+export function useLandTaxCollection() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["land-tax-collection", role],
+    queryFn: () => api.get<LandTaxCollection>("/land-tax/collection"),
+  });
+}
+
+/** The administrator's landing view. Counts and the last few ledger entries. */
+export function useAdminDashboard() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["admin-dashboard", role],
+    queryFn: () => api.get<AdminDashboard>("/admin/dashboard"),
+    enabled: role === "admin",
+  });
+}
+
+export function useLandOfficerDashboard() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["land-office-dashboard", role],
+    queryFn: () => api.get<LandOfficerDashboard>("/land-office/dashboard"),
+    enabled: role === "land-office",
+  });
+}
+
+export function useCollectLandTax() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { parcelId: string; paymentMethod: string }) =>
+      api.post<ServiceApplication>("/land-tax/collect", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["land-tax-collection"] });
+      qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
+      qc.invalidateQueries({ queryKey: ["service-applications"] });
+    },
+  });
+}
+
+export function useFlagFieldReportDispute(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (description: string) =>
+      api.patch<FieldReport>(`/field-reports/${id}/flag-dispute`, { description }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+      invalidateRecordViews(qc);
     },
   });
 }
@@ -784,6 +845,48 @@ export function useCreateHearing() {
   });
 }
 
+/** Deliberation, reopening, closing without a ruling, and recording an appeal. */
+export function useUpdateHearingStatus(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { status: string; note?: string }) =>
+      api.patch<Hearing>(`/hearings/${id}/status`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearing", id] });
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+/** Adjourning to a new date. */
+export function useRescheduleHearing(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { hearingDate: string; reason?: string }) =>
+      api.patch<Hearing>(`/hearings/${id}/schedule`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearing", id] });
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
+/** Handing the case to another mediator — leave, recusal, or workload. */
+export function useReassignHearing(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { mediatorId: string }) =>
+      api.patch<Hearing>(`/hearings/${id}/mediator`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hearing", id] });
+      qc.invalidateQueries({ queryKey: ["hearings"] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+    },
+  });
+}
+
 /** Recording a sitting. The ruling gate reads these, so this is what unblocks a decision. */
 export function useRecordHearingSession(id: string) {
   const qc = useQueryClient();
@@ -806,18 +909,31 @@ export function useCalculateInheritance() {
 }
 
 // --- Audit -----------------------------------------------------------------
-export function useAuditLedger() {
+/** A type alias, not an interface: qs() takes a Record, and only aliases get an implicit index signature. */
+export type AuditLedgerParams = {
+  entityType?: string;
+  action?: string;
+  actorId?: string;
+  /** Date-only (YYYY-MM-DD); `to` covers the whole day named. */
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export function useAuditLedger(params: AuditLedgerParams = {}) {
   return useQuery({
-    queryKey: ["audit-ledger"],
-    queryFn: () => api.get<AuditEvent[]>("/audit"),
+    queryKey: ["audit-ledger", params],
+    queryFn: () => api.get<Paginated<AuditEvent>>(`/audit${qs(params)}`),
+    placeholderData: keepPreviousData,
   });
 }
 
-export function useAuditTrail(entityType: string | undefined, id: string | undefined) {
+/** Filter options drawn from what the ledger actually holds, not a guessed list. */
+export function useAuditEntityTypes() {
   return useQuery({
-    queryKey: ["audit", entityType, id],
-    queryFn: () => api.get<AuditEvent[]>(`/audit/${entityType}/${id}`),
-    enabled: Boolean(entityType && id),
+    queryKey: ["audit-entity-types"],
+    queryFn: () => api.get<string[]>("/audit/entity-types"),
   });
 }
 
@@ -864,12 +980,36 @@ export function useUsers(params: ListParams = {}) {
   });
 }
 
+/** Creating an account. The temporary password comes back once and is never stored readable. */
+export function useInviteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      email: string;
+      role: Role;
+      jurisdictionId: string;
+      title?: string;
+    }) => api.post<{ user: User; temporaryPassword: string }>("/users", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
+/** A new temporary password for somebody locked out — shown once, same as an invitation. */
+export function useResetUserPassword(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ temporaryPassword: string }>(`/users/${id}/password-reset`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
 /** Suspend/reactivate, or reassign jurisdiction — the two account actions
  * that need no real auth system behind them. */
 export function useUpdateUser(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { status?: "active" | "suspended"; jurisdictionId?: string }) =>
+    mutationFn: (body: { status?: "active" | "suspended"; jurisdictionId?: string; role?: Role }) =>
       api.patch<User>(`/users/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });

@@ -22,11 +22,10 @@ import { useParcels } from "@/hooks/queries";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
-import { registryStatusTone } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { RegistryStatus } from "@/lib/types";
 
-const STATUS_FILTERS = ["all", ...(Object.keys(registryStatusTone) as RegistryStatus[])] as const;
+const STATUS_FILTERS = ["all", "verified", "disputed", "flagged", "under-mutation"] as const;
 
 export default function RecordsPage() {
   const t = useT();
@@ -154,7 +153,9 @@ export default function RecordsPage() {
                       p.openDisputeCount > 0 ? "font-medium text-disputed" : "text-muted-foreground",
                     )}
                   >
-                    {p.openDisputeCount ? f.number(p.openDisputeCount) : t.common.notAvailable}
+                    {p.openDisputeCount > 0
+                      ? `${t.common.yes} (${f.number(p.openDisputeCount)})`
+                      : t.common.no}
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Min, MinLength } from "class-validator";
+import { IsBoolean, IsInt, IsOptional, IsString, Min, MinLength, ValidateIf } from "class-validator";
 
 export class CompleteFieldSurveyDto {
   @IsString()
@@ -9,4 +9,13 @@ export class CompleteFieldSurveyDto {
   @IsInt()
   @Min(1)
   expectedVersion?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  disputeFound?: boolean;
+
+  @ValidateIf((body: CompleteFieldSurveyDto) => body.disputeFound === true)
+  @IsString()
+  @MinLength(1)
+  disputeDescription?: string;
 }

@@ -3,7 +3,17 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Gavel, MapPin, Scale, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarClock,
+  FileText,
+  Gavel,
+  MapPin,
+  Scale,
+  Users,
+  UserCog,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -14,14 +24,26 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  useDispute,
   useHearing,
   useHearingRuling,
+  useReassignHearing,
   useRecordHearingSession,
+  useRescheduleHearing,
+  useUpdateHearingStatus,
+  useUsers,
 } from "@/hooks/queries";
-import { rulingGate, type RulingBlocker } from "@plotguard/rules";
+import {
+  hearingNextStatuses,
+  isHearingOpen,
+  rulingGate,
+  type HearingStatus,
+  type RulingBlocker,
+} from "@plotguard/rules";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
@@ -49,12 +71,21 @@ export default function CaseDetailPage() {
   const { id } = useParams<{ id: string }>();
 
   const { data, isLoading } = useHearing(id);
+  // The dispute carries the evidence; the hearing record does not.
+  const disputeQ = useDispute(data?.hearing?.disputeId);
+  const mediatorsQ = useUsers({ role: "mediator", pageSize: 100 });
   const recordSession = useRecordHearingSession(id);
   const issueRuling = useHearingRuling(id);
+  const changeStatus = useUpdateHearingStatus(id);
+  const adjourn = useRescheduleHearing(id);
+  const reassign = useReassignHearing(id);
 
   const [summary, setSummary] = useState("");
   const [present, setPresent] = useState<string[]>([]);
   const [ruling, setRuling] = useState<string | null>(null);
+  const [adjournTo, setAdjournTo] = useState("");
+  const [adjournReason, setAdjournReason] = useState("");
+  const [nextMediator, setNextMediator] = useState("");
 
   if (isLoading) {
     return (
@@ -79,7 +110,15 @@ export default function CaseDetailPage() {
   // Seed from the saved ruling once, then the field owns it.
   const draftRuling = ruling ?? hearing.ruling ?? "";
   const review = rulingGate(hearing, draftRuling);
-  const decided = hearing.status === "ruled" || hearing.status === "appealed";
+  // ruled, appealed, or closed — isHearingOpen() is the same answer the
+  // endpoints give, so the screen and the record cannot disagree.
+  const open = isHearingOpen(hearing.status as HearingStatus);
+  const decided = !open;
+
+  const otherMediators = (mediatorsQ.data?.items ?? []).filter(
+    (m) => m.id !== hearing.mediatorId && m.status === "active",
+  );
+  const evidence = disputeQ.data?.evidence ?? [];
 
   const togglePresent = (party: string, on: boolean) =>
     setPresent((prev) => (on ? [...prev, party] : prev.filter((p) => p !== party)));
@@ -273,6 +312,151 @@ export default function CaseDetailPage() {
             )}
           </Card>
         </div>
+
+        {/* What a mediator can still do with the case ------------------- */}
+        <Card className="h-fit gap-4 px-4">
+          <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+            <CalendarClock className="size-4 text-marker" />
+            {t.pages.hearing.actions}
+          </h2>
+
+          {open ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="adjourn-to" className="text-xs text-muted-foreground">
+                {t.pages.hearing.adjournTo}
+              </Label>
+              <Input
+                id="adjourn-to"
+                type="datetime-local"
+                className="h-8"
+                value={adjournTo}
+                onChange={(e) => setAdjournTo(e.target.value)}
+              />
+              <Input
+                aria-label={t.pages.hearing.adjournReason}
+                placeholder={t.pages.hearing.adjournReason}
+                className="h-8"
+                value={adjournReason}
+                onChange={(e) => setAdjournReason(e.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!adjournTo || adjourn.isPending}
+                onClick={() =>
+                  adjourn.mutate(
+                    {
+                      hearingDate: new Date(adjournTo).toISOString(),
+                      reason: adjournReason || undefined,
+                    },
+                    {
+                      onSuccess: () => {
+                        setAdjournTo("");
+                        setAdjournReason("");
+                        toast.success(t.pages.hearing.adjourned);
+                      },
+                      onError: () => toast.error(t.pages.hearing.actionFailed),
+                    },
+                  )
+                }
+              >
+                {t.pages.hearing.adjournAction}
+              </Button>
+            </div>
+          ) : null}
+
+          {/* Only the moves the gate accepts: a ruling has its own form, and
+              a sitting is what makes a case "in hearing". */}
+          {hearingNextStatuses(hearing.status as HearingStatus).length > 0 ? (
+            <div className="space-y-1.5">
+              <span className="block text-xs text-muted-foreground">
+                {t.pages.hearing.moveTo}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {hearingNextStatuses(hearing.status as HearingStatus).map((to) => (
+                  <Button
+                    key={to}
+                    size="sm"
+                    variant="outline"
+                    disabled={changeStatus.isPending}
+                    onClick={() =>
+                      changeStatus.mutate(
+                        { status: to },
+                        {
+                          onSuccess: () =>
+                            toast.success(t.pages.hearing.statusChanged(s.hearing[to].label)),
+                          onError: () => toast.error(t.pages.hearing.actionFailed),
+                        },
+                      )
+                    }
+                  >
+                    {s.hearing[to].label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {open ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="next-mediator" className="text-xs text-muted-foreground">
+                <UserCog className="mr-1 inline size-3.5" />
+                {t.pages.hearing.reassignTo}
+              </Label>
+              <select
+                id="next-mediator"
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                value={nextMediator}
+                onChange={(e) => setNextMediator(e.target.value)}
+              >
+                <option value="">{t.pages.hearing.pickMediator}</option>
+                {otherMediators.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!nextMediator || reassign.isPending}
+                onClick={() =>
+                  reassign.mutate(
+                    { mediatorId: nextMediator },
+                    {
+                      onSuccess: () => {
+                        setNextMediator("");
+                        toast.success(t.pages.hearing.reassigned);
+                      },
+                      onError: () => toast.error(t.pages.hearing.actionFailed),
+                    },
+                  )
+                }
+              >
+                {t.pages.hearing.reassignAction}
+              </Button>
+            </div>
+          ) : null}
+        </Card>
+
+        {/* The evidence being ruled on, on the screen where it is ruled on */}
+        {evidence.length > 0 ? (
+          <Card className="h-fit gap-3 px-4">
+            <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+              <FileText className="size-4 text-marker" />
+              {t.pages.hearing.evidence}
+            </h2>
+            <ul className="space-y-2">
+              {evidence.map((d) => (
+                <li key={d.id} className="flex items-center gap-2.5 text-sm">
+                  <FileText className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-foreground">{d.fileName}</span>
+                  <StatusMetaBadge meta={s.verification[d.verificationStatus]} dot={false} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ) : null}
 
         {/* Parties ------------------------------------------------------- */}
         <Card className="h-fit gap-3 px-4">

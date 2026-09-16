@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BookMarked,
-  Building2,
+  Banknote,
   CalendarClock,
   GitBranch,
   Landmark,
@@ -34,10 +34,10 @@ export const LAND_OFFICER_RESPONSIBILITIES: readonly LandOfficerResponsibility[]
     iconColor: "text-orange-500 border-orange-500",
   },
   {
-    navKey: "landAdmin",
-    icon: Building2,
-    href: "/land-admin",
-    iconColor: "text-slate-600 border-slate-600",
+    navKey: "taxCollection",
+    icon: Banknote,
+    href: "/land-tax",
+    iconColor: "text-emerald-600 border-emerald-600",
   },
   {
     navKey: "revenueCases",

@@ -1,4 +1,4 @@
-import { createHmac, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import type { AuthTokens, Role } from "@plotguard/rules";
 
@@ -90,6 +90,22 @@ export function verifyAuthToken(
   if (!parsed.sub || !parsed.role || !parsed.exp) throw new Error("Invalid token payload");
   if (parsed.exp <= Math.floor(now.getTime() / 1000)) throw new Error("Token expired");
   return parsed;
+}
+
+/**
+ * The write side of verifyPassword's format: scrypt$salt$hash, a fresh random
+ * salt each time. Kept beside it so the two can never drift — a hash written
+ * in one shape and read in another fails as "wrong password", which is the
+ * single most confusing way for this to break.
+ */
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  return `scrypt$${salt.toString("hex")}$${scryptSync(password, salt, 64).toString("hex")}`;
+}
+
+/** A password an administrator reads aloud once, not one anybody keeps. */
+export function temporaryPassword(): string {
+  return randomBytes(6).toString("base64url");
 }
 
 export function verifyPassword(

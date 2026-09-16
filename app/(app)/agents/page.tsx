@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  useDisputes,
+  useMutations,
   useFieldReports,
   useUsers,
   useParcels,
@@ -42,11 +42,11 @@ import {
   useAssignFieldSurvey,
 } from "@/hooks/queries";
 import {
-  disputesNeedingSurvey,
+  mutationsNeedingAgent,
   isOpenVisit,
   rankCandidates,
   COMFORTABLE_LOAD,
-  PURPOSE_FOR_DISPUTE,
+  PURPOSE_FOR_MUTATION,
 } from "@plotguard/rules";
 import type { CandidateBlocker, CandidateNote } from "@plotguard/rules";
 import { initials } from "@/lib/format";
@@ -57,7 +57,7 @@ import type { Dictionary } from "@/lib/i18n";
 import { useJurisdictionName } from "@/components/jurisdiction-name";
 import { cn } from "@/lib/utils";
 import type {
-  Dispute,
+  Mutation as LandMutation,
   FieldReport,
   FieldReportPurpose,
   Jurisdiction,
@@ -118,14 +118,14 @@ function defaultSlot(): string {
 // --- Assignment panel ------------------------------------------------------
 
 function AssignPanel({
-  dispute,
+  mutation,
   parcel,
   agents,
   reports,
   jurisdictions,
   onCancel,
 }: {
-  dispute: Dispute;
+  mutation: LandMutation;
   parcel?: Parcel;
   agents: User[];
   reports: FieldReport[];
@@ -138,7 +138,7 @@ function AssignPanel({
   const areaName = (id: string) =>
     resolveName(jurisdictions.find((j) => j.id === id)) || t.common.unknown;
   const [purpose, setPurpose] = useState<FieldReportPurpose>(
-    PURPOSE_FOR_DISPUTE[dispute.type],
+    PURPOSE_FOR_MUTATION[mutation.type],
   );
   const [scheduledFor, setScheduledFor] = useState(defaultSlot);
   const [allowOutside, setAllowOutside] = useState(false);
@@ -155,7 +155,7 @@ function AssignPanel({
     assign.mutate(
       {
         parcelId: parcel.id,
-        disputeId: dispute.id,
+        mutationId: mutation.id,
         purpose,
         assignedAgentId: chosen.agent.id,
         scheduledFor: new Date(scheduledFor).toISOString(),
@@ -167,9 +167,9 @@ function AssignPanel({
           toast.success(t.pages.agents.assignedTitle, {
             description: t.pages.agents.assignedBody(
               chosen.agent.name,
-              dispute.parcelDagNo,
+              mutation.parcelDagNo,
               f.dateTime(new Date(scheduledFor).toISOString()),
-              dispute.caseNumber,
+              mutation.mutationNumber,
             ),
           }),
         onError: () =>
@@ -204,13 +204,13 @@ function AssignPanel({
         </div>
         <div>
           <label
-            htmlFor={`when-${dispute.id}`}
+            htmlFor={`when-${mutation.id}`}
             className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground"
           >
             {t.pages.agents.scheduledFor}
           </label>
           <Input
-            id={`when-${dispute.id}`}
+            id={`when-${mutation.id}`}
             type="datetime-local"
             value={scheduledFor}
             onChange={(e) => setScheduledFor(e.target.value)}
@@ -221,7 +221,7 @@ function AssignPanel({
 
       <div
         role="radiogroup"
-        aria-label={t.pages.agents.agentGroupAria(dispute.caseNumber)}
+        aria-label={t.pages.agents.agentGroupAria(mutation.mutationNumber)}
         className="space-y-1.5"
       >
         <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -334,19 +334,20 @@ function AssignPanel({
 // --- Job card --------------------------------------------------------------
 
 function JobCard({
-  dispute,
+  mutation,
   parcel,
   agents,
   reports,
   jurisdictions,
 }: {
-  dispute: Dispute;
+  mutation: LandMutation;
   parcel?: Parcel;
   agents: User[];
   reports: FieldReport[];
   jurisdictions: Jurisdiction[];
 }) {
   const t = useT();
+  const f = useFmt();
   const s = useStatusMeta();
   const [open, setOpen] = useState(false);
 
@@ -355,24 +356,23 @@ function JobCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <IdChip>{dispute.caseNumber}</IdChip>
+            <IdChip>{mutation.mutationNumber}</IdChip>
             <span className="text-sm text-muted-foreground">
-              {t.pages.agents.disputeHeading(t.domain.disputeType[dispute.type])}
+              {t.pages.agents.mutationHeading(t.domain.mutationType[mutation.type])}
             </span>
           </div>
           <p className="max-w-2xl text-pretty text-sm text-foreground">
-            {dispute.description}
+            {t.pages.agents.ownerTransfer(mutation.fromOwnerName, mutation.toOwnerName)}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <IdChip icon={MapPin}>{dispute.parcelDagNo}</IdChip>
-          <StatusMetaBadge meta={s.priority[dispute.priority]} />
-          <StatusMetaBadge meta={s.dispute[dispute.status]} />
+          <IdChip icon={MapPin}>{mutation.parcelDagNo}</IdChip>
+          <StatusMetaBadge meta={s.mutation[mutation.status]} />
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        <span>{t.pages.agents.filedBy(dispute.filedByName)}</span>
+        <span>{t.pages.agents.requestedAt(f.date(mutation.requestedAt))}</span>
         {parcel ? (
           <>
             <span aria-hidden>·</span>
@@ -382,14 +382,14 @@ function JobCard({
         <span aria-hidden>·</span>
         <span>
           {t.pages.agents.callsFor(
-            t.domain.surveyPurpose[PURPOSE_FOR_DISPUTE[dispute.type]],
+            t.domain.surveyPurpose[PURPOSE_FOR_MUTATION[mutation.type]],
           )}
         </span>
       </div>
 
       {open ? (
         <AssignPanel
-          dispute={dispute}
+          mutation={mutation}
           parcel={parcel}
           agents={agents}
           reports={reports}
@@ -403,13 +403,13 @@ function JobCard({
             {t.pages.agents.assign}
           </Button>
           <Link
-            href={`/disputes/${dispute.id}`}
+            href="/mutations?status=under-primary-verification"
             className={cn(
               buttonVariants({ variant: "ghost", size: "sm" }),
               "ml-auto text-muted-foreground",
             )}
           >
-            {t.pages.agents.viewCase}
+            {t.pages.agents.viewMutation}
             <ArrowRight className="size-3.5" />
           </Link>
         </div>
@@ -425,14 +425,17 @@ export default function AgentsPage() {
   const f = useFmt();
   const s = useStatusMeta();
   const resolveJurisdictionName = useJurisdictionName();
-  const { data: disputesData, isLoading: disputesLoading } = useDisputes({ pageSize: 100 });
+  const { data: mutationsData, isLoading: mutationsLoading } = useMutations({
+    status: "under-primary-verification",
+    pageSize: 100,
+  });
   const { data: reportsData, isLoading: reportsLoading } = useFieldReports({ pageSize: 100 });
   const { data: agentsData } = useUsers({ role: "field-agent", pageSize: 50 });
   const { data: parcelsData } = useParcels({ pageSize: 100 });
   const { data: jurisdictionsData } = useJurisdictions();
   const [focusedAgent, setFocusedAgent] = useState<string | null>(null);
 
-  const disputes = disputesData?.items ?? [];
+  const mutations = mutationsData?.items ?? [];
   const reports = reportsData?.items ?? [];
   const agents = agentsData?.items ?? [];
   const jurisdictions = jurisdictionsData ?? [];
@@ -441,13 +444,13 @@ export default function AgentsPage() {
   const jurisdictionName = (id: string) =>
     resolveJurisdictionName(jurisdictions.find((j) => j.id === id)) || t.common.notAvailable;
 
-  const jobs = disputesNeedingSurvey(disputes, reports);
+  const jobs = mutationsNeedingAgent(mutations, reports);
   const openVisits = reports.filter(isOpenVisit);
   const shownVisits = focusedAgent
     ? openVisits.filter((v) => v.assignedAgentId === focusedAgent)
     : openVisits;
 
-  const loading = disputesLoading || reportsLoading;
+  const loading = mutationsLoading || reportsLoading;
 
   return (
     <div className="space-y-8">
@@ -547,11 +550,11 @@ export default function AgentsPage() {
           />
         ) : (
           <div className="space-y-3">
-            {jobs.map((d) => (
+            {jobs.map((mutation) => (
               <JobCard
-                key={d.id}
-                dispute={d}
-                parcel={parcelById.get(d.parcelId)}
+                key={mutation.id}
+                mutation={mutation}
+                parcel={parcelById.get(mutation.parcelId)}
                 agents={agents}
                 reports={reports}
                 jurisdictions={jurisdictions}
@@ -626,6 +629,18 @@ export default function AgentsPage() {
                     )}
                   >
                     {t.pages.agents.viewCase}
+                    <ArrowRight className="size-3.5" />
+                  </Link>
+                ) : null}
+                {v.mutationId ? (
+                  <Link
+                    href="/mutations?status=under-primary-verification"
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "sm" }),
+                      "w-fit text-muted-foreground",
+                    )}
+                  >
+                    {t.pages.agents.viewMutation}
                     <ArrowRight className="size-3.5" />
                   </Link>
                 ) : null}

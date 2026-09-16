@@ -49,6 +49,9 @@ export type DisputeEventContent =
   | { code: "evidence-added" }
   | { code: "status-change"; status: DisputeStatus }
   | { code: "hearing-held"; ordinal: number }
+  | { code: "hearing-adjourned" }
+  | { code: "hearing-closed" }
+  | { code: "hearing-appealed" }
   | { code: "field-visit-scheduled" }
   | { code: "field-visit-completed" }
   | { code: "ruled" }

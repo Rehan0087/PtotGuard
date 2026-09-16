@@ -1,4 +1,4 @@
-import "reflect-metadata";
+﻿import "reflect-metadata";
 import { BadRequestException, ForbiddenException, ValidationPipe } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConflictError, ValidationError } from "../common/domain-exceptions";
@@ -23,8 +23,14 @@ const jurisdictions = [
 ];
 const checks = {
   applicantVerified: true, previousOwnerVerified: true, proposedOwnerVerified: true,
-  dagKhatianVerified: true, deedVerified: true, landRecordMatched: true, documentsPresent: true,
+  dagKhatianVerified: true, deedVerified: true, landRecordMatched: true, documentsPresent: true, khajnaReceiptVerified: true,
   notes: "  Records verified  ",
+};
+const approveBody = {
+  decision: "approve" as const,
+  approvalNote: "Cleared",
+  orderSheet: "Mutation approved after final review.",
+  digitalSignature: "usr-officer:approved",
 };
 const request = (role = "land-office") => ({ header: (name: string) => name === "x-plotguard-role" ? role : undefined }) as never;
 
@@ -70,6 +76,7 @@ function fixture(status = "submitted") {
     landDocument: { findMany: vi.fn().mockResolvedValue([document]) },
     parcelRestriction: { findMany: vi.fn().mockResolvedValue([]) },
     dispute: { groupBy: vi.fn().mockResolvedValue([]) },
+    fieldReport: { findFirst: vi.fn().mockResolvedValue(null) },
     $transaction: vi.fn().mockImplementation(async (callback) => callback(tx)),
   };
   const audit = { append: vi.fn().mockResolvedValue(undefined) };
@@ -110,15 +117,14 @@ describe("create mutation DTO", () => {
     expect(error.getStatus()).toBe(400);
   });
 });
-
 describe("mutation decision DTO", () => {
   const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
   const validate = (value: object) => pipe.transform(value, { type: "body", metatype: MutationDecisionDto });
 
   it("accepts approval with an optional note", async () => {
-    await expect(validate({ decision: "approve", approvalNote: "Checked" })).resolves.toMatchObject({ approvalNote: "Checked" });
-    await expect(validate({ decision: "approve" })).resolves.toMatchObject({ decision: "approve" });
-    await expect(validate({ decision: "approve", approvalNote: null })).resolves.toMatchObject({ decision: "approve" });
+    await expect(validate({ ...approveBody, approvalNote: "Checked" })).resolves.toMatchObject({ approvalNote: "Checked" });
+    await expect(validate(approveBody)).resolves.toMatchObject({ decision: "approve" });
+    await expect(validate({ ...approveBody, approvalNote: null })).resolves.toMatchObject({ decision: "approve" });
   });
   it.each([undefined, "", "   ", 12])("requires a nonblank string rejection reason: %s", async (rejectionReason) => {
     await expect(validate({ decision: "reject", rejectionReason })).rejects.toThrow();
@@ -127,7 +133,7 @@ describe("mutation decision DTO", () => {
     await expect(validate({ decision: "reject", rejectionReason: "Mismatch" })).resolves.toMatchObject({ rejectionReason: "Mismatch" });
   });
   it.each([{ status: "approved" }, { actorId: "usr-other" }, { decision: "approved" }])("rejects caller-controlled workflow fields: %j", async (extra) => {
-    await expect(validate({ decision: "approve", ...extra })).rejects.toThrow();
+    await expect(validate({ ...approveBody, ...extra })).rejects.toThrow();
   });
 });
 
@@ -147,7 +153,7 @@ describe("complete verification DTO", () => {
     await expect(validate(body)).rejects.toThrow();
   });
 
-  it.each([{ status: "objection-period" }, { verifiedById: "usr-other" }])(
+  it.each([{ status: "field-investigation" }, { verifiedById: "usr-other" }])(
     "rejects caller-controlled workflow fields: %j",
     async (extra) => {
       await expect(validate({ ...checks, ...extra })).rejects.toThrow();
@@ -159,32 +165,32 @@ describe("mutation workflow writes", () => {
   it("claims and starts only a submitted mutation and audits the transition in its transaction", async () => {
     const f = fixture();
     const result = await f.controller.startVerification("m-1", request());
-    expect(result.status).toBe("verification");
+    expect(result.status).toBe("under-primary-verification");
     expect(f.tx.mutation.findUnique).toHaveBeenCalledWith({ where: { id: "m-1" } });
     expect(f.tx.mutation.update).toHaveBeenCalledWith({
       where: expect.objectContaining({ id: "m-1", status: "submitted", assignedOfficerId: null, updatedAt: f.mutation.updatedAt }),
-      data: expect.objectContaining({ status: "verification", assignedOfficerId: "usr-officer", verificationStartedById: "usr-officer", verificationStartedAt: now }),
+      data: expect.objectContaining({ status: "under-primary-verification", assignedOfficerId: "usr-officer", verificationStartedById: "usr-officer", verificationStartedAt: now }),
     });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({
       action: "status-change", actorId: "usr-officer", entityType: "mutation", entityId: "m-1",
-      payload: expect.objectContaining({ actorRole: "land-office", previousStatus: "submitted", newStatus: "verification" }),
+      payload: expect.objectContaining({ actorRole: "land-office", previousStatus: "submitted", newStatus: "under-primary-verification" }),
     }));
   });
 
   it("persists all verification evidence and opens the policy-defined objection window", async () => {
-    const f = fixture("verification");
+    const f = fixture("under-primary-verification");
     await f.controller.completeVerification("m-1", checks, request());
     expect(f.tx.policy.findUnique).toHaveBeenCalledWith({ where: { id: "singleton" } });
     const checklist = { ...checks };
     delete (checklist as { notes?: string }).notes;
     expect(f.tx.mutation.update).toHaveBeenCalledWith({
-      where: expect.objectContaining({ id: "m-1", status: "verification", updatedAt: f.mutation.updatedAt }),
-      data: expect.objectContaining({ status: "objection-period", assignedOfficerId: "usr-officer", verifiedById: "usr-officer", verifiedAt: now,
+      where: expect.objectContaining({ id: "m-1", status: "under-primary-verification", updatedAt: f.mutation.updatedAt }),
+      data: expect.objectContaining({ status: "field-investigation", assignedOfficerId: "usr-officer", verifiedById: "usr-officer", verifiedAt: now,
         verificationChecklist: checklist, verificationNotes: "Records verified", objectionStartDate: now,
         objectionWindowEndsAt: new Date("2026-09-27T10:00:00.000Z") }),
     });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ action: "status-change", actorId: "usr-officer",
-      payload: expect.objectContaining({ previousStatus: "verification", newStatus: "objection-period", note: "Records verified" }) }));
+      payload: expect.objectContaining({ previousStatus: "under-primary-verification", newStatus: "field-investigation", note: "Records verified" }) }));
   });
 
   it.each([
@@ -193,7 +199,7 @@ describe("mutation workflow writes", () => {
     ["partial document set", recipient, [document], "mutation-documents-missing"],
     ["foreign parcel document", recipient, [{ ...document, parcelId: "p-other" }], "mutation-documents-foreign"],
   ] as const)("refuses completion with %s", async (_case, linkedRecipient, documents, code) => {
-    const f = fixture("verification");
+    const f = fixture("under-primary-verification");
     if (_case === "partial document set") f.mutation.documentIds = ["doc-1", "doc-2"];
     f.tx.user.findUnique.mockImplementation(async ({ where }) =>
       where.id === "usr-new" ? linkedRecipient : officer);
@@ -211,17 +217,17 @@ describe("mutation workflow writes", () => {
     noWrites(f);
   });
 
-  it.each(["submitted", "objection-period", "approved", "rejected"])("refuses completion from %s without writes", async (status) => {
+  it.each(["submitted", "field-investigation", "approved", "rejected"])("refuses completion from %s without writes", async (status) => {
     const f = fixture(status);
     await expect(f.controller.completeVerification("m-1", checks, request())).rejects.toThrow();
     noWrites(f);
   });
-  it.each(["verification", "objection-period", "approved", "rejected"])("refuses verification start from %s without writes", async (status) => {
+  it.each(["under-primary-verification", "field-investigation", "approved", "rejected"])("refuses verification start from %s without writes", async (status) => {
     const f = fixture(status);
     await expect(f.controller.startVerification("m-1", request())).rejects.toThrow();
     noWrites(f);
   });
-  it.each(["verification", "objection-period"])("conflicts when verification start is stale at %s", async (status) => {
+  it.each(["under-primary-verification", "field-investigation"])("conflicts when verification start is stale at %s", async (status) => {
     const f = fixture(status);
     const error = await f.controller.startVerification("m-1", request()).catch((caught) => caught as ConflictError);
     expect(error).toBeInstanceOf(ConflictError);
@@ -229,81 +235,79 @@ describe("mutation workflow writes", () => {
     noWrites(f);
   });
   it("conflicts when verification has already completed", async () => {
-    const f = fixture("objection-period");
+    const f = fixture("field-investigation");
     const error = await f.controller.completeVerification("m-1", checks, request()).catch((caught) => caught as ConflictError);
     expect(error).toBeInstanceOf(ConflictError);
     expect((error as ConflictError).getStatus()).toBe(409);
     noWrites(f);
   });
   it.each([{ ...checks, deedVerified: false }, { ...checks, notes: "   " }])("refuses incomplete verification: %j", async (body) => {
-    const f = fixture("verification");
+    const f = fixture("under-primary-verification");
     await expect(f.controller.completeVerification("m-1", body, request())).rejects.toBeInstanceOf(ValidationError);
     noWrites(f);
   });
   it("refuses verification when the policy is missing", async () => {
-    const f = fixture("verification");
+    const f = fixture("under-primary-verification");
     f.tx.policy.findUnique.mockResolvedValue(null);
     await expect(f.controller.completeVerification("m-1", checks, request())).rejects.toThrow();
     noWrites(f);
   });
 
   it("approves atomically with parcel ownership, linked title history and audit", async () => {
-    const f = fixture("objection-period");
+    const f = fixture("field-verification-complete");
     f.mutation.objections = [{ id: "o-resolved", status: "resolved" }];
-    await f.controller.decide("m-1", { decision: "approve", approvalNote: "  Cleared  " }, request());
-    expect(f.tx.mutation.update).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "m-1", status: "objection-period", updatedAt: f.mutation.updatedAt }),
-      data: expect.objectContaining({ status: "approved", approvedAt: now, approvedById: "usr-officer", approvalNote: "Cleared", decidedAt: now }) });
+    await f.controller.decide("m-1", { ...approveBody, approvalNote: "  Cleared  " }, request());
+    expect(f.tx.mutation.update).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "m-1", status: "field-verification-complete", updatedAt: f.mutation.updatedAt }),
+      data: expect.objectContaining({ status: "awaiting-dcr-payment", approvedAt: now, approvedById: "usr-officer", approvalNote: "Cleared", orderSheet: approveBody.orderSheet, digitalSignature: approveBody.digitalSignature }) });
     expect(f.tx.parcel.update).toHaveBeenCalledWith({ where: { id: "p-1", ownerId: "usr-old" }, data: { ownerId: "usr-new", lastMutationAt: now } });
     expect(f.tx.ownershipRecord.updateMany).toHaveBeenCalledWith({ where: { parcelId: "p-1", toDate: null }, data: { toDate: now } });
     expect(f.tx.ownershipRecord.create).toHaveBeenCalledWith({ data: expect.objectContaining({ parcelId: "p-1", ownerId: "usr-new", ownerName: "New owner", acquisitionType: "purchase", fromDate: now, mutationId: "m-1", documentId: "doc-1" }) });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ action: "approve", actorId: "usr-officer",
-      payload: expect.objectContaining({ previousStatus: "objection-period", newStatus: "approved", note: "Cleared", actorRole: "land-office" }) }));
+      payload: expect.objectContaining({ previousStatus: "field-verification-complete", newStatus: "awaiting-dcr-payment", note: "Cleared", actorRole: "land-office" }) }));
   });
   it("uses read-committed isolation so the audit tail read gets a post-lock statement snapshot", async () => {
-    const f = fixture("objection-period");
-    await f.controller.decide("m-1", { decision: "approve" }, request());
+    const f = fixture("field-verification-complete");
+    await f.controller.decide("m-1", approveBody, request());
     expect(f.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "ReadCommitted" });
   });
-  it.each(["submitted", "verification"])("refuses approval from %s", async (status) => {
+  it.each(["submitted", "under-primary-verification"])("refuses approval from %s", async (status) => {
     const f = fixture(status);
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toBeInstanceOf(ValidationError);
+    await expect(f.controller.decide("m-1", approveBody, request())).rejects.toBeInstanceOf(ValidationError);
     noWrites(f);
   });
   it.each(["approved", "rejected"])("conflicts on a second decision after %s", async (status) => {
     const f = fixture(status);
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toBeInstanceOf(ConflictError);
+    await expect(f.controller.decide("m-1", approveBody, request())).rejects.toBeInstanceOf(ConflictError);
     noWrites(f);
   });
-  it.each(["open", undefined])("blocks unresolved and legacy objections: %s", async (status) => {
-    const f = fixture("objection-period");
+  it.each(["open", undefined])("keeps unresolved disputes parallel to approval: %s", async (status) => {
+    const f = fixture("field-verification-complete");
     f.mutation.objections = [{ id: "o-1", status }];
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toBeInstanceOf(ValidationError);
-    noWrites(f);
+    await expect(f.controller.decide("m-1", approveBody, request())).resolves.toMatchObject({ status: "awaiting-dcr-payment" });
   });
-  it.each([new Date("2026-09-12T10:00:00.001Z"), null])("blocks an open or missing objection deadline: %s", async (deadline) => {
-    const f = fixture("objection-period");
+  it.each([new Date("2026-09-12T10:00:00.001Z"), null])("does not block for an open or missing legacy objection deadline: %s", async (deadline) => {
+    const f = fixture("field-verification-complete");
     Object.assign(f.mutation, { objectionWindowEndsAt: deadline });
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toBeInstanceOf(ValidationError);
-    noWrites(f);
+    await expect(f.controller.decide("m-1", approveBody, request())).resolves.toMatchObject({ status: "awaiting-dcr-payment" });
   });
   it("permits approval exactly at the objection deadline", async () => {
-    const f = fixture("objection-period");
+    const f = fixture("field-verification-complete");
     f.mutation.objectionWindowEndsAt = now;
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).resolves.toMatchObject({ status: "approved" });
+    await expect(f.controller.decide("m-1", approveBody, request())).resolves.toMatchObject({ status: "awaiting-dcr-payment" });
   });
   it("conflicts if the parcel owner no longer matches the filing owner", async () => {
-    const f = fixture("objection-period");
+    const f = fixture("field-verification-complete");
     f.tx.parcel.findUnique.mockResolvedValue({ ...f.parcel, ownerId: "usr-changed" });
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toBeInstanceOf(ConflictError);
+    await expect(f.controller.decide("m-1", approveBody, request())).rejects.toBeInstanceOf(ConflictError);
     noWrites(f);
   });
   it.each([null, { ...recipient, role: "land-office" }, { ...recipient, status: "suspended" }])("rejects invalid proposed owners: %j", async (owner) => {
-    const f = fixture("objection-period");
+    const f = fixture("field-verification-complete");
     f.tx.user.findUnique.mockImplementation(async ({ where }) => where.id === "usr-new" ? owner : officer);
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toThrow();
+    await expect(f.controller.decide("m-1", approveBody, request())).rejects.toThrow();
     noWrites(f);
   });
-  it.each(["submitted", "verification", "objection-period"])("rejects %s with actor, timestamp, and trimmed reason", async (status) => {
+  it.each(["submitted", "under-primary-verification", "field-investigation"])("rejects %s with actor, timestamp, and trimmed reason", async (status) => {
     const f = fixture(status);
     await f.controller.decide("m-1", { decision: "reject", rejectionReason: "  Deed mismatch  " }, request());
     expect(f.tx.mutation.update).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "m-1", status }),
@@ -319,22 +323,22 @@ describe("mutation workflow writes", () => {
     noWrites(f);
   });
   it("uses transaction state if another decision occurred after the preflight read", async () => {
-    const f = fixture("objection-period");
+    const f = fixture("field-verification-complete");
     f.tx.mutation.findUnique.mockResolvedValue({ ...f.mutation, status: "approved" });
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toBeInstanceOf(ConflictError);
+    await expect(f.controller.decide("m-1", approveBody, request())).rejects.toBeInstanceOf(ConflictError);
     noWrites(f);
   });
   it.each(["P2025", "P2034"])("reports concurrent writes as conflicts: %s", async (code) => {
-    const f = fixture("objection-period");
+    const f = fixture("field-verification-complete");
     f.tx.mutation.update.mockRejectedValue({ code });
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toBeInstanceOf(ConflictError);
+    await expect(f.controller.decide("m-1", approveBody, request())).rejects.toBeInstanceOf(ConflictError);
     expect(f.audit.append).not.toHaveBeenCalled();
     expect(f.tx.parcel.update).not.toHaveBeenCalled();
   });
   it("propagates an audit failure out of the transaction so all writes roll back", async () => {
-    const f = fixture("objection-period");
+    const f = fixture("field-verification-complete");
     f.audit.append.mockRejectedValue(new Error("audit unavailable"));
-    await expect(f.controller.decide("m-1", { decision: "approve" }, request())).rejects.toThrow("audit unavailable");
+    await expect(f.controller.decide("m-1", approveBody, request())).rejects.toThrow("audit unavailable");
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.any(Object));
   });
 });
@@ -374,9 +378,9 @@ describe("workflow authorization", () => {
 describe("mutation read and filing compatibility", () => {
   it.each(["assigned", "jurisdiction"])("composes %s and status filters", async (scope) => {
     const f = fixture();
-    await f.controller.list({ scope, status: "verification" }, request());
+    await f.controller.list({ scope, status: "under-primary-verification" }, request());
     expect(f.prisma.mutation.findMany).toHaveBeenCalledWith({ where: {
-      parcel: { jurisdictionId: { in: ["j-office", "j-local"] } }, status: "verification",
+      parcel: { jurisdictionId: { in: ["j-office", "j-local"] } }, status: "under-primary-verification",
       ...(scope === "assigned" ? { assignedOfficerId: "usr-officer" } : {}),
     }, orderBy: { requestedAt: "desc" } });
   });
@@ -403,11 +407,11 @@ describe("mutation read and filing compatibility", () => {
     expect(f.tx.mutation.create).toHaveBeenCalledWith({ data: expect.objectContaining({ status: "submitted", fromOwnerId: "usr-old", fromOwnerName: "Old owner", requestedById: "usr-ayesha" }) });
   });
   it("derives detail from real users, documents, parcel and chronological audit events", async () => {
-    const f = fixture("verification");
+    const f = fixture("under-primary-verification");
     f.mutation.assignedOfficerId = "usr-officer";
     f.prisma.auditEvent.findMany.mockResolvedValue([
       { id: "au-1", action: "create", createdAt: new Date("2026-08-01T10:00:00.000Z"), actorName: "Applicant", payload: {} },
-      { id: "au-2", action: "status-change", createdAt: now, actorName: "Officer", payload: { actorRole: "land-office", previousStatus: "submitted", newStatus: "verification", note: "Assigned" } },
+      { id: "au-2", action: "status-change", createdAt: now, actorName: "Officer", payload: { actorRole: "land-office", previousStatus: "submitted", newStatus: "under-primary-verification", note: "Assigned" } },
       { id: "au-3", action: "update", createdAt: now, actorName: null, payload: null },
     ]);
     f.mutation.requestedById = "usr-ayesha";
@@ -425,7 +429,7 @@ describe("mutation read and filing compatibility", () => {
       objectionSummary: { total: 2, unresolved: 1, status: "unresolved" },
       timeline: [
         { id: "au-1", action: "create", at: "2026-08-01T10:00:00.000Z", actorName: "Applicant" },
-        { id: "au-2", action: "status-change", at: "2026-09-12T10:00:00.000Z", actorName: "Officer", actorRole: "land-office", previousStatus: "submitted", newStatus: "verification", note: "Assigned" },
+        { id: "au-2", action: "status-change", at: "2026-09-12T10:00:00.000Z", actorName: "Officer", actorRole: "land-office", previousStatus: "submitted", newStatus: "under-primary-verification", note: "Assigned" },
         { id: "au-3", action: "update", actorName: "System" },
       ] });
     expect(f.prisma.user.findUnique).toHaveBeenCalledWith({
@@ -439,3 +443,4 @@ describe("mutation read and filing compatibility", () => {
     expect(f.prisma.auditEvent.findMany).toHaveBeenCalledWith({ where: { entityType: "mutation", entityId: "m-1" }, orderBy: { createdAt: "asc" } });
   });
 });
+

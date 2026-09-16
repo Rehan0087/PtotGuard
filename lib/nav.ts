@@ -63,9 +63,9 @@ export const NAV: Record<Role, PortalNav> = {
   },
   "land-office": {
     portalKey: "landOffice",
-    home: "/records",
+    home: "/dashboard",
     items: [
-      { labelKey: "dashboard", href: "/records", icon: LayoutDashboard },
+      { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
       { labelKey: "profile", href: "/profile", icon: UserCog },
       {
         labelKey: "landOfficerResponsibilities",
@@ -88,8 +88,9 @@ export const NAV: Record<Role, PortalNav> = {
   },
   admin: {
     portalKey: "administration",
-    home: "/users",
+    home: "/dashboard",
     items: [
+      { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
       { labelKey: "users", href: "/users", icon: UserCog },
       { labelKey: "auditLedger", href: "/audit", icon: ShieldCheck },
       { labelKey: "jurisdictions", href: "/jurisdictions", icon: Building2 },

@@ -1,6 +1,16 @@
-import { Body, Controller, Get, Patch, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import type { Policy } from "@prisma/client";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { changedFields } from "../audit/changed-fields";
@@ -75,6 +85,8 @@ export class PoliciesController {
    * the fraud queue's threshold), so there is no rule above them to consult —
    * the DTO's bounds are the whole constraint.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("admin")
   @Patch()
   async update(@Body() body: UpdatePoliciesDto, @Req() req: Request) {
     const before = await this.prisma.policy.findUnique({ where: { id: "singleton" } });

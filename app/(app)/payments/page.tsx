@@ -25,6 +25,8 @@ interface PaymentEntry {
   paymentMethod: string;
   paidAt: string;
   parcelId?: string;
+  /** Only the rows that have something to open: a mutation has no detail screen. */
+  trackHref?: string;
 }
 
 const PAYMENT_METHOD_ICON: Record<string, LucideIcon> = {
@@ -51,7 +53,13 @@ function EntryRow({ entry }: { entry: PaymentEntry }) {
     <Card className="gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <IdChip>{entry.reference}</IdChip>
+          {entry.trackHref ? (
+            <Link href={entry.trackHref} className="hover:underline">
+              <IdChip>{entry.reference}</IdChip>
+            </Link>
+          ) : (
+            <IdChip>{entry.reference}</IdChip>
+          )}
           <span className="text-sm text-muted-foreground">{t.pages.payments.serviceLabel[entry.service]}</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -106,6 +114,7 @@ export default function PaymentsPage() {
       id: a.id,
       service: a.serviceType as ServiceKey,
       reference: a.applicationNo,
+      trackHref: `/applications/${a.id}`,
       amount: { amount: a.feeAmount, currency: "BDT" as const },
       paymentMethod: a.paymentMethod,
       paidAt: a.paidAt,

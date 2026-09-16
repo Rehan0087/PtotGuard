@@ -1,7 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { Map, Scale, FileWarning, Bell, Plus, Upload, ArrowRight } from "lucide-react";
+import {
+  Activity,
+  Building2,
+  ArrowRight,
+  Banknote,
+  Bell,
+  CalendarClock,
+  ClipboardCheck,
+  FileWarning,
+  GitBranch,
+  Map,
+  Plus,
+  ScanLine,
+  Scale,
+  ShieldAlert,
+  ShieldCheck,
+  Sprout,
+  Upload,
+  UserRoundSearch,
+  Users,
+} from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatTile } from "@/components/stat-tile";
 import { EmptyState } from "@/components/empty-state";
@@ -10,11 +30,18 @@ import { DisputeListItem } from "@/components/dispute-list-item";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusMetaBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
+import { sentenceCase } from "@/lib/format";
 import { useFmt } from "@/lib/i18n/format";
 import { useNotificationText } from "@/lib/i18n/content";
 import { useT } from "@/lib/i18n/provider";
+import { useStatusMeta } from "@/lib/i18n/status";
 import {
+  useAdminDashboard,
+  useLandOfficerDashboard,
+  useLandTaxCollection,
+  useRole,
   useSession,
   useParcels,
   useDisputes,
@@ -38,6 +65,15 @@ const severityDot: Record<NotificationSeverity, string> = {
   critical: "bg-flagged",
 };
 
+function activityReference(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return fallback;
+  const details = payload as Record<string, unknown>;
+  for (const key of ["applicationNo", "mutationNumber", "caseNumber", "parcelDagNo", "dagNo"]) {
+    if (typeof details[key] === "string" && details[key]) return details[key];
+  }
+  return fallback;
+}
+
 function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
@@ -47,7 +83,7 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
   );
 }
 
-export default function CitizenDashboardPage() {
+function CitizenDashboard() {
   const t = useT();
   const f = useFmt();
   const notificationText = useNotificationText();
@@ -215,4 +251,359 @@ export default function CitizenDashboardPage() {
       </div>
     </div>
   );
+}
+
+function DashboardLink({
+  href,
+  label,
+  count,
+  icon: Icon,
+  tone = "default",
+}: {
+  href: string;
+  label: string;
+  count: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone?: "default" | "marker" | "flagged";
+}) {
+  const styles = {
+    default: "border-primary/15 bg-primary/5 text-primary",
+    marker: "border-marker/25 bg-marker/10 text-marker",
+    flagged: "border-flagged/25 bg-flagged/10 text-flagged",
+  }[tone];
+  return (
+    <Link href={href} className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Card className="h-full gap-3 px-4 py-4 transition-colors group-hover:border-primary/35">
+        <div className="flex items-center justify-between gap-3">
+          <span className={cn("flex size-9 items-center justify-center rounded-lg border", styles)}>
+            <Icon className="size-4" />
+          </span>
+          <span className="tabular font-heading text-2xl font-semibold">{count}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-sm font-medium">
+          {label}<ArrowRight className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+function LandOfficerDashboard() {
+  const t = useT();
+  const f = useFmt();
+  const status = useStatusMeta();
+  const dashboardQ = useLandOfficerDashboard();
+  const taxQ = useLandTaxCollection();
+  const data = dashboardQ.data;
+  const tax = taxQ.data;
+  const labels = t.pages.landOfficerDashboard;
+  const firstName = data?.officer.name.split(" ")[0] ?? "";
+  const loading = dashboardQ.isLoading || taxQ.isLoading;
+
+  const attention = data ? [
+    { href: "/mutations", label: labels.primaryVerification, count: data.summary.primaryVerificationCount, icon: ClipboardCheck, tone: "marker" as const },
+    { href: "/agents", label: labels.needsAgent, count: data.summary.needsAgentCount, icon: UserRoundSearch, tone: "marker" as const },
+    { href: "/ocr-queue", label: labels.ocrReview, count: data.summary.documentsToReviewCount, icon: ScanLine, tone: "default" as const },
+    { href: "/fraud-review", label: labels.fraudFlags, count: data.summary.fraudFlagCount, icon: ShieldAlert, tone: "flagged" as const },
+  ] : [];
+  const services = data ? [
+    [labels.revenueCases, data.serviceCounts["revenue-case"] ?? 0, "/revenue-cases", Scale],
+    [labels.leaseSettlement, data.serviceCounts["lease-settlement"] ?? 0, "/lease-settlement", Sprout],
+    [labels.acquisition, data.serviceCounts.acquisition ?? 0, "/acquisition", Map],
+    [labels.appointments, data.serviceCounts.appointment ?? 0, "/appointments", CalendarClock],
+    [labels.activeFieldVisits, data.summary.activeFieldVisitCount, "/agents", UserRoundSearch],
+    [labels.openServices, data.summary.openServiceCount, "/land-officer-responsibilities", Activity],
+  ] as const : [];
+
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow={t.nav.portals.landOffice}
+        title={firstName ? labels.welcomeNamed(firstName) : t.pages.dashboard.welcome}
+        description={labels.description(data?.officer.jurisdictionName ?? "")}
+      >
+        <Link href="/land-officer-responsibilities" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+          {labels.viewResponsibilities}
+        </Link>
+        <Link href="/records" className={cn(buttonVariants({ size: "sm" }))}>
+          {labels.viewRecords}<ArrowRight className="size-3.5" />
+        </Link>
+      </PageHeader>
+
+      {loading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((item) => <Skeleton key={item} className="h-28 rounded-xl" />)}
+        </div>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile label={labels.statRecords} value={f.number(data.summary.recordCount)} icon={Map} />
+            <StatTile label={labels.statActiveMutations} value={f.number(data.summary.activeMutationCount)} icon={GitBranch} tone={data.summary.activeMutationCount ? "marker" : "default"} />
+            <StatTile label={labels.statOpenDisputes} value={f.number(data.summary.openDisputeCount)} icon={Scale} tone={data.summary.openDisputeCount ? "flagged" : "default"} />
+            <StatTile
+              label={labels.statTaxOutstanding}
+              value={f.money({ amount: tax?.summary.outstanding ?? 0, currency: "BDT" })}
+              icon={Banknote}
+              tone={(tax?.summary.outstanding ?? 0) > 0 ? "marker" : "verified"}
+            />
+          </div>
+
+          <section>
+            <SectionHeader title={labels.attention} />
+            <p className="-mt-2 mb-3 text-xs text-muted-foreground">{labels.attentionHint}</p>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {attention.map((item) => (
+                <DashboardLink key={item.label} {...item} count={f.number(item.count)} />
+              ))}
+            </div>
+          </section>
+
+          <div className="grid gap-8 xl:grid-cols-3">
+            <div className="space-y-8 xl:col-span-2">
+              <section>
+                <SectionHeader
+                  title={labels.mutationWorkload}
+                  action={<Link href="/mutations" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">{labels.viewAll}<ArrowRight className="size-3.5" /></Link>}
+                />
+                <Card className="gap-0 p-0">
+                  {data.queues.mutations.length ? (
+                    <ul className="divide-y divide-border">
+                      {data.queues.mutations.map((mutation) => (
+                        <li key={mutation.id}>
+                          <Link href="/mutations" className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-muted/40">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{mutation.mutationNumber}</p>
+                              <p className="text-xs text-muted-foreground">{mutation.parcelDagNo} · {labels.submitted(f.date(mutation.requestedAt))}</p>
+                            </div>
+                            <StatusMetaBadge meta={status.mutation[mutation.status]} />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className="px-4 py-8 text-center text-sm text-muted-foreground">{labels.noMutations}</p>}
+                </Card>
+              </section>
+
+              <section>
+                <SectionHeader
+                  title={labels.disputeWorkload}
+                  action={<Link href="/disputes" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">{labels.viewAll}<ArrowRight className="size-3.5" /></Link>}
+                />
+                {data.queues.disputes.length ? (
+                  <div className="space-y-2">{data.queues.disputes.map((item) => <DisputeListItem key={item.id} dispute={item} />)}</div>
+                ) : <Card><p className="py-5 text-center text-sm text-muted-foreground">{labels.noDisputes}</p></Card>}
+              </section>
+
+              <section>
+                <SectionHeader title={labels.services} />
+                <p className="-mt-2 mb-3 text-xs text-muted-foreground">{labels.servicesHint}</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {services.map(([label, count, href, Icon]) => (
+                    <Link key={label} href={href} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-primary/35">
+                      <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon className="size-4" /></span>
+                      <span className="min-w-0 flex-1 text-sm font-medium">{label}</span>
+                      <span className="tabular font-heading text-lg font-semibold">{f.number(count)}</span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            </div>
+
+            <aside className="space-y-8">
+              <section>
+                <SectionHeader title={labels.taxCollection} />
+                <Link href="/land-tax" className="block">
+                  <Card className="gap-3 border-verified/20 bg-gradient-to-br from-card to-verified/10">
+                    <div className="flex items-center justify-between">
+                      <Banknote className="size-5 text-verified" />
+                      <span className="tabular font-heading text-xl font-semibold text-verified">{f.money({ amount: tax?.summary.collected ?? 0, currency: "BDT" })}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {labels.taxProgress(f.number(tax?.summary.paidCount ?? 0), f.number(tax?.summary.holdingCount ?? 0), f.digits(String(tax?.assessmentYear ?? "")))}
+                    </p>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-verified" style={{ width: `${tax?.summary.holdingCount ? Math.round((tax.summary.paidCount / tax.summary.holdingCount) * 100) : 0}%` }} />
+                    </div>
+                  </Card>
+                </Link>
+              </section>
+
+              <section>
+                <SectionHeader title={labels.recentActivity} />
+                <Card className="gap-0 px-0 py-2">
+                  {data.recentActivity.length ? (
+                    <ul className="divide-y divide-border">
+                      {data.recentActivity.map((item) => (
+                        <li key={item.id} className="flex gap-2.5 px-4 py-3">
+                          <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium capitalize">{labels.activity(item.action.replaceAll("-", " "), item.entityType.replaceAll("-", " "))}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                              {activityReference(item.payload, item.entityId)} · {f.fromNow(item.createdAt)}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className="px-4 py-8 text-center text-sm text-muted-foreground">{labels.noActivity}</p>}
+                </Card>
+              </section>
+            </aside>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The administrator's landing view.
+ *
+ * Oversight rather than a worklist: an administrator does not decide
+ * mutations or rule on disputes, so the queue numbers are there to show
+ * where the system is backing up, and only the three surfaces they actually
+ * govern are links.
+ */
+function AdminDashboard() {
+  const t = useT();
+  const f = useFmt();
+  const a = t.pages.dashboard.admin;
+  const { data, isLoading } = useAdminDashboard();
+
+  if (isLoading || !data) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-16 rounded-xl" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const { queues, accounts, ledger, jurisdictionCount, recentAudit } = data;
+  const tiles: { label: string; value: number; icon: typeof Activity; tone?: "marker" | "flagged" }[] = [
+    { label: a.serviceApplications, value: queues.serviceApplications, icon: ClipboardCheck },
+    { label: a.mutations, value: queues.mutations, icon: GitBranch },
+    { label: a.disputes, value: queues.disputes, icon: Scale, tone: "flagged" },
+    { label: a.hearings, value: queues.hearings, icon: CalendarClock },
+    { label: a.fieldReports, value: queues.fieldReports, icon: Map },
+    { label: a.documentsToVerify, value: queues.documentsToVerify, icon: FileWarning, tone: "marker" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow={t.nav.portals.administration}
+        title={t.nav.dashboard}
+        description={a.description}
+      />
+
+      <section className="space-y-3">
+        <h2 className="font-heading text-base font-semibold text-foreground">{a.queuesTitle}</h2>
+        <div className="settle-stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {tiles.map((tile) => (
+            <StatTile
+              key={tile.label}
+              label={tile.label}
+              value={f.number(tile.value)}
+              icon={tile.icon}
+              tone={tile.value === 0 ? "default" : (tile.tone ?? "default")}
+            />
+          ))}
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="gap-3 px-4 lg:col-span-1">
+          <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+            <Users className="size-4 text-marker" />
+            {a.accountsTitle}
+          </h2>
+          <dl className="grid gap-2 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{a.active}</dt>
+              <dd className="tabular font-medium text-foreground">{f.number(accounts.active)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{a.suspended}</dt>
+              <dd className="tabular font-medium text-foreground">{f.number(accounts.suspended)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted-foreground">{a.invited}</dt>
+              <dd className="tabular font-medium text-foreground">{f.number(accounts.invited)}</dd>
+            </div>
+          </dl>
+          <ul className="grid gap-1 border-t border-border pt-3 text-xs text-muted-foreground">
+            {(Object.keys(accounts.byRole) as (keyof typeof accounts.byRole)[]).map((role) => (
+              <li key={role} className="flex justify-between gap-3">
+                <span>{t.roles[role]}</span>
+                <span className="tabular">{f.number(accounts.byRole[role])}</span>
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/users"
+            className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
+          >
+            {a.manageAccounts} <ArrowRight className="size-3.5" />
+          </Link>
+        </Card>
+
+        <Card className="gap-3 px-4 lg:col-span-2">
+          <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+            <ShieldCheck className="size-4 text-marker" />
+            {a.ledgerTitle}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {a.events(ledger.events)}
+            {ledger.lastAt ? ` · ${a.lastEntry(f.dateTime(ledger.lastAt))}` : ""}
+          </p>
+
+          <ul className="grid gap-2 border-t border-border pt-3">
+            {recentAudit.map((event) => (
+              <li key={event.id} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="text-foreground">
+                  {t.domain.auditAction[event.action as keyof typeof t.domain.auditAction] ??
+                    sentenceCase(event.action)}{" "}
+                  <span className="text-muted-foreground">
+                    {event.entityType}/{event.entityId}
+                  </span>
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {f.dateTime(event.createdAt)}
+                  {event.actorName ? ` · ${event.actorName}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex flex-wrap items-center gap-4 border-t border-border pt-3">
+            <Link
+              href="/audit"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              {a.openLedger} <ArrowRight className="size-3.5" />
+            </Link>
+            <Link
+              href="/jurisdictions"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              <Building2 className="size-3.5" />
+              {a.jurisdictions(jurisdictionCount)}
+            </Link>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const role = useRole();
+  if (role === "land-office") return <LandOfficerDashboard />;
+  if (role === "admin") return <AdminDashboard />;
+  return <CitizenDashboard />;
 }

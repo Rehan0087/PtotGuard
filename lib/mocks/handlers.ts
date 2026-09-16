@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MSW request handlers — a mock of the frozen PlotGuard Core API. Response shapes
  * match the planned NestJS backend exactly, so swapping MSW for the live API is a
  * config change (see lib/api-client.ts), not a rewrite. Paths after the /api base
@@ -30,7 +30,12 @@ import {
   calcInheritance,
   deletionGate,
   descendantIds,
+  disputeTransition,
   executionGate,
+  hearingTransition,
+  isHearingOpen,
+  passwordResetGate,
+  roleChangeGate,
   extractionReview,
   filingReview,
   analyzeGpsTrack,
@@ -58,6 +63,7 @@ import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
 import { DEMO_PASSWORD, findDemoAccount } from "../demo-accounts";
 import { hydrateMutationState } from "./mutation-store";
+import { hydrateProfileState, persistProfileState } from "./profile-store";
 import { applyMockProfileUpdate, MockProfileUpdateError } from "../field-profile";
 import { filterMutationReads } from "./mutation-contract.mjs";
 import { filterLandOfficeRecords, recordAuditEvents } from "./records-contract.mjs";
@@ -71,6 +77,7 @@ import {
 // Restore mutation-owned preview state before any handler (including parcel
 // reads) can observe the in-memory seed after a hard refresh.
 hydrateMutationState();
+hydrateProfileState(db.users);
 
 // --- helpers ---------------------------------------------------------------
 
@@ -79,6 +86,11 @@ async function latency() {
 }
 
 function getRole(request: Request): Role {
+  // Normal signed-in requests identify the actor through the bearer token.
+  // The role header exists only for legacy/demo calls and is not sent by the
+  // frontend after login.
+  const authenticated = authenticatedUser(request);
+  if (authenticated) return authenticated.role;
   const header = request.headers.get("x-plotguard-role");
   return (ROLES as string[]).includes(header ?? "") ? (header as Role) : "citizen";
 }
@@ -107,6 +119,26 @@ function mutationReadActor(request: Request): User | null {
     ? actor
     : null;
 }
+
+const HEARING_STATUS_VALUES: string[] = [
+  "scheduled",
+  "in-hearing",
+  "deliberation",
+  "ruled",
+  "appealed",
+  "closed",
+];
+
+const DISPUTE_STATUS_VALUES: string[] = [
+  "submitted",
+  "under-review",
+  "field-visit-scheduled",
+  "in-mediation",
+  "hearing-scheduled",
+  "resolved",
+  "rejected",
+  "withdrawn",
+];
 
 function badRequest(message = "Bad Request") {
   return HttpResponse.json({ error: "bad_request", message }, { status: 400 });
@@ -156,8 +188,8 @@ function transitionError(
   if (gate[action]) return null;
 
   const transitionAlreadyApplied =
-    (action === "canStartVerification" && ["verification", "objection-period"].includes(mutation.status))
-    || (action === "canCompleteVerification" && mutation.status === "objection-period");
+    (action === "canStartVerification" && ["under-primary-verification", "field-investigation"].includes(mutation.status))
+    || (action === "canCompleteVerification" && mutation.status === "field-investigation");
   if (transitionAlreadyApplied) {
     return conflict("This mutation has already moved past that workflow transition.");
   }
@@ -178,6 +210,7 @@ const VERIFICATION_FIELDS = [
   "deedVerified",
   "landRecordMatched",
   "documentsPresent",
+  "khajnaReceiptVerified",
 ] as const;
 
 type CreateMutationBody = {
@@ -252,7 +285,7 @@ function validateVerificationBody(value: unknown) {
 function validateDecisionBody(value: unknown) {
   const body = recordBody(value);
   if (!body) return { ok: false as const, response: badRequest("Request body must be an object.") };
-  const extra = unexpectedProperty(body, ["decision", "rejectionReason", "approvalNote"]);
+  const extra = unexpectedProperty(body, ["decision", "rejectionReason", "approvalNote", "orderSheet", "digitalSignature"]);
   if (extra) return { ok: false as const, response: badRequest(`property ${extra} should not exist`) };
   if (body.decision !== "approve" && body.decision !== "reject") {
     return { ok: false as const, response: badRequest("decision must be one of the following values: approve, reject") };
@@ -268,10 +301,18 @@ function validateDecisionBody(value: unknown) {
   if (body.decision === "approve" && body.approvalNote !== undefined && body.approvalNote !== null && typeof body.approvalNote !== "string") {
     return { ok: false as const, response: badRequest("approvalNote must be a string") };
   }
+  if (body.decision === "approve" && (typeof body.orderSheet !== "string" || !/\S/.test(body.orderSheet))) {
+    return { ok: false as const, response: badRequest("orderSheet is required") };
+  }
+  if (body.decision === "approve" && (typeof body.digitalSignature !== "string" || !/\S/.test(body.digitalSignature))) {
+    return { ok: false as const, response: badRequest("digitalSignature is required") };
+  }
   return { ok: true as const, value: {
     decision: body.decision,
     rejectionReason: typeof body.rejectionReason === "string" ? body.rejectionReason : undefined,
     approvalNote: typeof body.approvalNote === "string" ? body.approvalNote : undefined,
+    orderSheet: typeof body.orderSheet === "string" ? body.orderSheet : undefined,
+    digitalSignature: typeof body.digitalSignature === "string" ? body.digitalSignature : undefined,
   } };
 }
 
@@ -282,12 +323,32 @@ function paginate<T>(items: T[], url: URL): Paginated<T> {
   return { items: items.slice(start, start + pageSize), page, pageSize, total: items.length };
 }
 
+/** Mirrors bound() in audit.controller.ts: a date-only `to` covers that whole day. */
+function auditBound(value: string | undefined, endOfDay = false): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+}
+
 function notFound(message = "Not found") {
   return HttpResponse.json({ error: "not_found", message }, { status: 404 });
 }
 
 function unauthorized(message = "Authentication required") {
   return HttpResponse.json({ error: "unauthorized", message }, { status: 401 });
+}
+
+/**
+ * Mirrors @Roles() on the real controller: the same refusal, in the same
+ * shape, so a screen that works against the fixture API works against the
+ * real one and a screen that is refused is refused by both.
+ */
+function requireRole(request: Request, ...roles: User["role"][]) {
+  return roles.includes(currentUser(request).role)
+    ? null
+    : forbidden("This portal is restricted to the assigned role");
 }
 
 function forbidden(message = "This portal is restricted to the assigned role") {
@@ -299,7 +360,7 @@ function forbidden(message = "This portal is restricted to the assigned role") {
  * structured code so the client can word the refusal in the reader's language;
  * `message` stays as an English fallback for logs and unknown codes.
  */
-function unprocessable(errors: Record<string, { code: string } | undefined>) {
+function unprocessable(errors: Record<string, ({ code: string } & Record<string, unknown>) | undefined>) {
   const [field, reason] = Object.entries(errors).find(([, r]) => r) ?? [];
   return HttpResponse.json(
     {
@@ -449,10 +510,16 @@ export const handlers = [
     await latency();
     const body = (await request.json()) as { email?: string; password?: string };
     const account = body.email ? findDemoAccount(body.email) : undefined;
-    const user = account ? db.users.find((candidate) => candidate.email === account.email) : undefined;
-    if (!user || user.status !== "active" || body.password !== DEMO_PASSWORD) {
+    const normalizedEmail = body.email?.trim().toLowerCase();
+    const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail)
+      ?? (account ? db.users.find((candidate) => candidate.id === db.CURRENT_USER_BY_ROLE[account.role]) : undefined);
+    // Mirrors auth.controller.ts: suspended refuses, an invitation is taken
+    // up by using it. The password itself stays the fixture one here — the
+    // mock has never checked a real hash.
+    if (!user || user.status === "suspended" || body.password !== DEMO_PASSWORD) {
       return unauthorized("Invalid email or password");
     }
+    if (user.status === "invited") user.status = "active";
     return HttpResponse.json({
       user,
       tokens: {
@@ -493,7 +560,9 @@ export const handlers = [
 
     if (user.role === "field-agent") {
       try {
-        return HttpResponse.json(applyMockProfileUpdate(db.users, user.id, body));
+        const updated = applyMockProfileUpdate(db.users, user.id, body);
+        persistProfileState(db.users);
+        return HttpResponse.json(updated);
       } catch (error) {
         if (error instanceof MockProfileUpdateError) {
           if (error.status === 404) return notFound("User not found");
@@ -534,6 +603,8 @@ export const handlers = [
       };
     }
 
+    persistProfileState(db.users);
+
     return HttpResponse.json(user);
   }),
 
@@ -550,6 +621,8 @@ export const handlers = [
 
   http.post(`${API}/jurisdictions`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const body = (await request.json()) as Partial<Jurisdiction>;
     const draft = {
       name: (body.name ?? "").trim(),
@@ -579,6 +652,8 @@ export const handlers = [
 
   http.patch(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const target = db.jurisdictions.find((j) => j.id === params.id);
     if (!target) return notFound("Jurisdiction not found");
 
@@ -617,6 +692,8 @@ export const handlers = [
 
   http.delete(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const index = db.jurisdictions.findIndex((j) => j.id === params.id);
     if (index === -1) return notFound("Jurisdiction not found");
 
@@ -656,7 +733,14 @@ export const handlers = [
     // decision about what is public that the real API uses.
     return HttpResponse.json(
       toPublicParcel(
-        parcel,
+        {
+          ...parcel,
+          registryStatus: recordRegistryStatus(
+            db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
+            db.disputes.filter((dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status)).length,
+            db.documents.some((document) => document.parcelId === parcel.id && document.verificationStatus === "flagged"),
+          ),
+        },
         db.parcelRestrictions.filter((r) => r.parcelId === parcel.id),
       ),
     );
@@ -736,8 +820,9 @@ export const handlers = [
       parcel: {
         ...parcel,
         registryStatus: recordRegistryStatus(
-          parcel.registryStatus,
           mutations.map(({ mutation }) => mutation),
+          disputes.filter((dispute) => !isClosed(dispute.status)).length,
+          documents.some((document) => document.verificationStatus === "flagged"),
         ),
       },
       owner: {
@@ -772,7 +857,14 @@ export const handlers = [
       .filter((p) => p.id !== parcel.id)
       .sort((a, b) => distance(a.centroid, parcel.centroid) - distance(b.centroid, parcel.centroid))
       .slice(0, 4);
-    return HttpResponse.json(neighbours);
+    return HttpResponse.json(neighbours.map((item) => ({
+      ...item,
+      registryStatus: recordRegistryStatus(
+        db.mutations.filter((mutation) => mutation.parcelId === item.id),
+        db.disputes.filter((dispute) => dispute.parcelId === item.id && !isClosed(dispute.status)).length,
+        db.documents.some((document) => document.parcelId === item.id && document.verificationStatus === "flagged"),
+      ),
+    })));
   }),
 
   http.get(`${API}/parcels/:id/history`, async ({ params }) => {
@@ -792,7 +884,14 @@ export const handlers = [
       .sort((a, b) => b.fromDate.localeCompare(a.fromDate));
 
     return HttpResponse.json({
-      parcel,
+      parcel: {
+        ...parcel,
+        registryStatus: recordRegistryStatus(
+          db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
+          db.disputes.filter((dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status)).length,
+          db.documents.some((document) => document.parcelId === parcel.id && document.verificationStatus === "flagged"),
+        ),
+      },
       ownership: db.ownershipRecords.filter((o) => o.parcelId === parcel.id),
       documents: db.documents.filter((d) => d.parcelId === parcel.id),
       disputes: db.disputes.filter((d) => d.parcelId === parcel.id),
@@ -824,6 +923,8 @@ export const handlers = [
           jurisdictions: db.jurisdictions,
           parcels: items,
           mutations: db.mutations,
+          disputes: db.disputes,
+          documents: db.documents,
           q,
           status,
         });
@@ -833,7 +934,6 @@ export const handlers = [
     }
     if (owner === "me") items = items.filter((p) => p.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((p) => p.ownerId === owner);
-    if (status && !isLandOffice) items = items.filter((p) => p.registryStatus === status);
     // Exact, not a substring: a ULPIN is an identifier being cited, so a
     // near-miss returns nothing rather than a plausible wrong plot.
     if (ulpin) items = items.filter((p) => p.ulpin === normaliseUlpin(ulpin));
@@ -860,12 +960,35 @@ export const handlers = [
           // on it, without knowing which field it belongs to.
           Boolean(p.ulpin?.toLowerCase().includes(q)),
       );
+    // Keep this projection relational, like the Prisma implementation: the
+    // count must reflect current dispute rows rather than a stale parcel seed.
+    items = items.map((parcel) => {
+      const openDisputeCount = db.disputes.filter(
+        (dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status),
+      ).length;
+      return {
+        ...parcel,
+        openDisputeCount,
+        registryStatus: recordRegistryStatus(
+          db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
+          openDisputeCount,
+          db.documents.some(
+            (document) => document.parcelId === parcel.id && document.verificationStatus === "flagged",
+          ),
+        ),
+      };
+    });
+    // Apply the status filter only after deriving the status from the same
+    // mutation/dispute/document rows used by record detail.
+    if (status) items = items.filter((parcel) => parcel.registryStatus === status);
     return HttpResponse.json(paginate(items, url));
   }),
 
   // Documents --------------------------------------------------------------
-  http.post(`${API}/documents/:id/reprocess`, async ({ params }) => {
+  http.post(`${API}/documents/:id/reprocess`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     doc.ocrStatus = "processing";
@@ -883,6 +1006,8 @@ export const handlers = [
    */
   http.patch(`${API}/documents/:id/decision`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     const { decision } = (await request.json()) as {
@@ -935,6 +1060,8 @@ export const handlers = [
   // fields a human keyed in.
   http.patch(`${API}/documents/:id/fields`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     const { fields } = (await request.json()) as { fields: Record<string, string> };
@@ -1090,7 +1217,7 @@ export const handlers = [
     const previousStatus = mutation.status;
     const at = now.toISOString();
     Object.assign(mutation, {
-      status: "verification" as const,
+      status: "under-primary-verification" as const,
       assignedOfficerId: actor.id,
       verificationStartedAt: at,
       verificationStartedById: actor.id,
@@ -1121,7 +1248,7 @@ export const handlers = [
     if (accessError) return accessError;
 
     const now = new Date();
-    const gateError = transitionError(mutation, actor, now, "canCompleteVerification", ["verification"]);
+    const gateError = transitionError(mutation, actor, now, "canCompleteVerification", ["under-primary-verification"]);
     if (gateError) return gateError;
     const verification = verificationGate(checklist, notes);
     if (!verification.ok) return unprocessable({ verification: verification.reason });
@@ -1142,7 +1269,7 @@ export const handlers = [
     const previousStatus = mutation.status;
     const at = now.toISOString();
     Object.assign(mutation, {
-      status: "objection-period" as const,
+      status: "field-investigation" as const,
       assignedOfficerId: actor.id,
       verifiedAt: at,
       verifiedById: actor.id,
@@ -1182,7 +1309,7 @@ export const handlers = [
       actor,
       now,
       approving ? "canApprove" : "canReject",
-      approving ? ["objection-period"] : ["submitted", "verification", "objection-period"],
+      approving ? ["field-verification-complete"] : ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete"],
     );
     if (gateError) return gateError;
     const reason = body.rejectionReason?.trim() ?? "";
@@ -1190,9 +1317,6 @@ export const handlers = [
 
     const parcel = mutationParcel(mutation)!;
     if (approving) {
-      if (!mutation.objectionWindowEndsAt) {
-        return unprocessable({ decision: { code: "objection-window-missing" } });
-      }
       if (!mutation.fromOwnerId || parcel.ownerId !== mutation.fromOwnerId) {
         return conflict("The parcel owner has changed since this mutation was filed.");
       }
@@ -1208,10 +1332,13 @@ export const handlers = [
     mutation.decidedAt = at;
     mutation.updatedAt = at;
     if (approving) {
-      mutation.status = "approved";
+      mutation.status = "awaiting-dcr-payment";
       mutation.approvedAt = at;
       mutation.approvedById = actor.id;
       mutation.approvalNote = note;
+      mutation.orderSheet = body.orderSheet;
+      mutation.digitalSignature = body.digitalSignature;
+      mutation.mutationKhatianNumber = `MK-${now.getUTCFullYear()}-${mutation.mutationNumber.replace(/\D/g, "").slice(-8).padStart(8, "0")}`;
       const toOwnerId = mutation.toOwnerId!;
       parcel.ownerId = toOwnerId;
       parcel.ownerName = mutation.toOwnerName;
@@ -1257,6 +1384,64 @@ export const handlers = [
     return HttpResponse.json(mutation);
   }),
 
+  http.patch(`${API}/mutations/:id/dcr-payment`, async ({ params, request }) => {
+    await latency();
+    const actor = authenticatedUser(request);
+    if (!actor) return unauthorized();
+    const mutation = db.mutations.find((item) => item.id === params.id);
+    if (!mutation) return notFound("Mutation not found");
+    if (actor.role === "citizen" && mutation.requestedById !== actor.id) return forbidden();
+    if (mutation.status !== "awaiting-dcr-payment") {
+      return unprocessable({ status: { code: "wrong-status", expected: ["awaiting-dcr-payment"] } });
+    }
+    const now = new Date().toISOString();
+    mutation.status = "complete";
+    mutation.dcrPaidAt = now;
+    mutation.decidedAt = now;
+    mutation.updatedAt = now;
+    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dcr-paid", actorId: actor.id, actorName: actor.name, payload: { previousStatus: "awaiting-dcr-payment", newStatus: "complete" }, createdAt: now });
+    return HttpResponse.json(mutation);
+  }),
+
+  http.patch(`${API}/mutations/:id/flag-dispute`, async ({ params, request }) => {
+    await latency();
+    const actor = authenticatedUser(request);
+    if (!actor) return unauthorized();
+    if (!isActiveLandOffice(actor)) return forbidden();
+    const mutation = db.mutations.find((item) => item.id === params.id);
+    if (!mutation) return notFound("Mutation not found");
+    const accessError = mutationActionAccess(mutation, actor);
+    if (accessError) return accessError;
+    const body = (await request.json()) as { description?: string };
+    if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
+    if (mutation.disputeId) return conflict("A dispute is already linked to this mutation.");
+    const now = new Date().toISOString();
+    const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
+    const dispute = {
+      id: `ds-${Date.now()}`,
+      caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
+      parcelId: mutation.parcelId,
+      parcelDagNo: mutation.parcelDagNo,
+      type: "ownership" as const,
+      status: "in-mediation" as const,
+      priority: "high" as const,
+      filedById: actor.id,
+      filedByName: actor.name,
+      filedAt: now,
+      updatedAt: now,
+      description: body.description.trim(),
+      parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
+      assignedOfficerId: actor.id,
+      assignedMediatorId: mediator?.id,
+      evidenceDocumentIds: mutation.documentIds,
+    };
+    db.disputes.unshift(dispute);
+    mutation.disputeId = dispute.id;
+    mutation.updatedAt = now;
+    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: actor.id, actorName: actor.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
+    return HttpResponse.json(mutation);
+  }),
+
   http.get(`${API}/mutations/:id`, async ({ params, request }) => {
     await latency();
     hydrateMutationState();
@@ -1278,12 +1463,13 @@ export const handlers = [
       const user = id ? db.users.find((item) => item.id === id) : undefined;
       return user ? { id: user.id, name: user.name, ...(user.title ? { title: user.title } : {}) } : null;
     };
-    const statuses: MutationStatus[] = ["submitted", "verification", "objection-period", "approved", "rejected"];
+    const statuses: MutationStatus[] = ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete", "approved", "rejected", "awaiting-dcr-payment", "complete"];
     const asStatus = (value: unknown): MutationStatus | undefined =>
       typeof value === "string" && statuses.includes(value as MutationStatus) ? value as MutationStatus : undefined;
     const asString = (value: unknown): string | undefined => typeof value === "string" ? value : undefined;
     return HttpResponse.json({
-      mutation,
+      mutation: { ...mutation, fieldReportId: db.fieldReports.find((report) => report.mutationId === mutation.id)?.id },
+      fieldReport: db.fieldReports.find((report) => report.mutationId === mutation.id) ?? null,
       parcel: mutationParcel(mutation) ?? null,
       documents: db.documents.filter((document) => mutation.documentIds.includes(document.id)),
       applicant: summary(mutation.requestedById),
@@ -1332,11 +1518,177 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
+  // Land-office operational dashboard --------------------------------------
+  http.get(`${API}/land-office/dashboard`, async ({ request }) => {
+    await latency();
+    const officer = currentUser(request);
+    if (!isActiveLandOffice(officer)) return forbidden("Land Office Staff access required.");
+    const covered = coveredJurisdictionIds(officer);
+    const jurisdiction = db.jurisdictions.find((item) => item.id === officer.jurisdictionId);
+    const parcels = db.parcels.filter((parcel) => covered.has(parcel.jurisdictionId));
+    const parcelIds = new Set(parcels.map((parcel) => parcel.id));
+    const mutations = db.mutations
+      .filter((item) => parcelIds.has(item.parcelId))
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
+    const disputes = db.disputes
+      .filter((item) => parcelIds.has(item.parcelId))
+      .sort((a, b) => b.filedAt.localeCompare(a.filedAt));
+    const documents = db.documents
+      .filter((item) => {
+        if (item.parcelId && parcelIds.has(item.parcelId)) return true;
+        const owner = item.ownerId ? db.users.find((user) => user.id === item.ownerId) : undefined;
+        return !item.parcelId && Boolean(owner && covered.has(owner.jurisdictionId));
+      })
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+    const fieldReports = db.fieldReports
+      .filter((item) => parcelIds.has(item.parcelId))
+      .sort((a, b) => (b.assignedAt ?? "").localeCompare(a.assignedAt ?? ""));
+    const services = db.serviceApplications
+      .filter((item) => {
+        if (item.assignedOfficerId === officer.id || Boolean(item.parcelId && parcelIds.has(item.parcelId))) return true;
+        const applicant = db.users.find((user) => user.id === item.applicantId);
+        return Boolean(applicant && covered.has(applicant.jurisdictionId));
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    const activeMutations = mutations.filter((item) => !["complete", "rejected"].includes(item.status));
+    const openDisputes = disputes.filter((item) => !isClosed(item.status));
+    const reviewDocuments = documents.filter(
+      (item) => item.ocrStatus === "extracted" && item.verificationStatus === "unverified",
+    );
+    const flaggedDocuments = documents.filter((item) => item.verificationStatus === "flagged");
+    const activeFieldReports = fieldReports.filter((item) => !["completed", "cancelled"].includes(item.status));
+    const liveMutationVisits = new Set(
+      activeFieldReports.flatMap((item) => item.mutationId ? [item.mutationId] : []),
+    );
+    const needsAgent = activeMutations.filter(
+      (item) => item.status === "under-primary-verification" && !liveMutationVisits.has(item.id),
+    );
+    const openServices = services.filter((item) => !["approved", "rejected", "withdrawn"].includes(item.status));
+    const serviceCounts = openServices.reduce<Record<string, number>>((counts, item) => {
+      counts[item.serviceType] = (counts[item.serviceType] ?? 0) + 1;
+      return counts;
+    }, {});
+    const activity = (await getAuditChain())
+      .filter((item) => item.actorId === officer.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 8);
+
+    return HttpResponse.json({
+      officer: {
+        id: officer.id,
+        name: officer.name,
+        ...(officer.title ? { title: officer.title } : {}),
+        jurisdictionId: officer.jurisdictionId,
+        jurisdictionName: jurisdiction?.name ?? officer.jurisdictionId,
+      },
+      summary: {
+        recordCount: parcels.length,
+        activeMutationCount: activeMutations.length,
+        primaryVerificationCount: activeMutations.filter((item) => item.status === "under-primary-verification").length,
+        openDisputeCount: openDisputes.length,
+        documentsToReviewCount: reviewDocuments.length,
+        fraudFlagCount: flaggedDocuments.length,
+        needsAgentCount: needsAgent.length,
+        activeFieldVisitCount: activeFieldReports.length,
+        openServiceCount: openServices.length,
+      },
+      queues: {
+        mutations: activeMutations.slice(0, 5),
+        disputes: openDisputes.slice(0, 5),
+        documents: [...flaggedDocuments, ...reviewDocuments]
+          .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
+          .slice(0, 5),
+        fieldReports: activeFieldReports.slice(0, 5),
+      },
+      serviceCounts,
+      recentActivity: activity,
+    });
+  }),
+
   // Land development tax (khajna) --------------------------------------------
   // Assessments are computed here, never taken from the request: what a
   // citizen owes is the registry's determination. Mirrors
   // land-tax.controller.ts, including recording the payment as a
   // ServiceApplication rather than in a table of its own.
+  http.get(`${API}/land-tax/collection`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    if (!isActiveLandOffice(me)) return forbidden("Land Office Staff access required.");
+    const covered = coveredJurisdictionIds(me);
+    const year = new Date().getUTCFullYear();
+    const rates = landTaxRates();
+    const parcels = db.parcels
+      .filter((parcel) => covered.has(parcel.jurisdictionId))
+      .sort((a, b) => a.dagNo.localeCompare(b.dagNo));
+    const parcelIds = new Set(parcels.map((parcel) => parcel.id));
+    const paid = db.serviceApplications
+      .filter((application) => application.serviceType === "land-tax" && application.paidAt && application.parcelId && parcelIds.has(application.parcelId))
+      .sort((a, b) => (b.paidAt ?? "").localeCompare(a.paidAt ?? ""));
+    const payments = paid.flatMap((application) => {
+      const parcel = db.parcels.find((candidate) => candidate.id === application.parcelId);
+      const owner = parcel ? db.users.find((candidate) => candidate.id === parcel.ownerId) : undefined;
+      if (!parcel || !owner || !application.paidAt || !application.feeAmount || !application.paymentMethod || !application.transactionId) return [];
+      return [{
+        id: application.id,
+        applicationNo: application.applicationNo,
+        parcelId: parcel.id,
+        dagNo: parcel.dagNo,
+        khatianNo: parcel.khatianNo,
+        ownerId: owner.id,
+        ownerName: owner.name,
+        assessmentYear: Number(application.details.assessmentYear),
+        amount: application.feeAmount,
+        paymentMethod: application.paymentMethod,
+        transactionId: application.transactionId,
+        paidAt: application.paidAt,
+      }];
+    });
+    const holdings = parcels.map((parcel) => {
+      const settled = paidThroughYear(paid, parcel.id);
+      const assessment = assessLandTax({
+        area: parcel.area,
+        landUse: parcel.landUse,
+        assessmentYear: year,
+        paidThroughYear: settled,
+        liableFromYear: new Date(parcel.registeredAt).getUTCFullYear(),
+      }, rates);
+      return {
+        parcelId: parcel.id,
+        ulpin: parcel.ulpin ?? null,
+        dagNo: parcel.dagNo,
+        khatianNo: parcel.khatianNo,
+        title: parcel.title,
+        landUse: parcel.landUse,
+        area: parcel.area,
+        ownerId: parcel.ownerId,
+        ownerName: parcel.ownerName,
+        assessmentYear: year,
+        paidThroughYear: settled,
+        assessment,
+        status: assessment.exemption ? "exempt" as const : settled !== null && settled >= year ? "paid" as const : "due" as const,
+        latestPayment: payments.find((payment) => payment.parcelId === parcel.id) ?? null,
+      };
+    });
+    const currentPayments = payments.filter((payment) => payment.assessmentYear === year);
+    const collected = currentPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const outstanding = holdings.reduce((sum, holding) => sum + holding.assessment.total, 0);
+    return HttpResponse.json({
+      assessmentYear: year,
+      summary: {
+        holdingCount: holdings.length,
+        paidCount: holdings.filter((holding) => holding.status === "paid").length,
+        dueCount: holdings.filter((holding) => holding.status === "due").length,
+        exemptCount: holdings.filter((holding) => holding.status === "exempt").length,
+        assessed: collected + outstanding,
+        collected,
+        outstanding,
+      },
+      holdings,
+      payments,
+    });
+  }),
+
   http.get(`${API}/land-tax/holdings`, async ({ request }) => {
     await latency();
     const me = currentUser(request);
@@ -1411,7 +1763,7 @@ export const handlers = [
     const count = db.serviceApplications.filter((a) => a.serviceType === "land-tax").length;
     const application = {
       id: `sa-${Date.now()}`,
-      applicationNo: `LDT-2026-${String(1000 + count).padStart(6, "0")}`,
+      applicationNo: `LDT-${year}-${String(1000 + count).padStart(6, "0")}`,
       serviceType: "land-tax" as const,
       // Paying khajna is a counter transaction, not an application anyone
       // adjudicates — settled the moment it is paid.
@@ -1436,6 +1788,14 @@ export const handlers = [
       updatedAt: now,
     };
     db.serviceApplications.unshift(application);
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`,
+      applicationId: application.id,
+      at: now,
+      type: "payment-recorded",
+      title: "Land development tax paid",
+      actorId: me.id,
+    });
 
     await appendAudit({
       entityType: "service-application",
@@ -1451,15 +1811,72 @@ export const handlers = [
         amount: application.feeAmount,
       },
     });
+    return HttpResponse.json(application, { status: 201 });
+  }),
+
+  http.post(`${API}/land-tax/collect`, async ({ request }) => {
+    await latency();
+    const officer = currentUser(request);
+    if (!isActiveLandOffice(officer)) return forbidden("Land Office Staff access required.");
+    const body = (await request.json()) as { parcelId: string; paymentMethod: string };
+    if (!["bkash", "nagad", "card"].includes(body.paymentMethod)) return badRequest("Invalid payment method");
+    const parcel = db.parcels.find((candidate) => candidate.id === body.parcelId);
+    if (!parcel || !coveredJurisdictionIds(officer).has(parcel.jurisdictionId)) return notFound("Parcel not found");
+
+    const year = new Date().getUTCFullYear();
+    const paid = db.serviceApplications.filter(
+      (application) => application.applicantId === parcel.ownerId && application.serviceType === "land-tax" && application.paidAt,
+    );
+    const settled = paidThroughYear(paid, parcel.id);
+    if (settled !== null && settled >= year) return conflict("This holding is already paid for the current year.");
+    const assessment = assessLandTax({
+      area: parcel.area,
+      landUse: parcel.landUse,
+      assessmentYear: year,
+      paidThroughYear: settled,
+      liableFromYear: new Date(parcel.registeredAt).getUTCFullYear(),
+    }, landTaxRates());
+    if (assessment.total <= 0) return conflict("Nothing is due on this holding.");
+
+    const now = new Date().toISOString();
+    const count = db.serviceApplications.filter((application) => application.serviceType === "land-tax").length;
+    const application = {
+      id: `sa-${Date.now()}`,
+      applicationNo: `LDT-${year}-${String(1000 + count).padStart(6, "0")}`,
+      serviceType: "land-tax" as const,
+      status: "approved" as const,
+      parcelId: parcel.id,
+      applicantId: parcel.ownerId,
+      assignedOfficerId: officer.id,
+      details: { assessmentYear: year, decimals: assessment.decimals, arrears: assessment.arrears, currentYearDue: assessment.currentYearDue, years: assessment.years },
+      documentIds: [],
+      feeAmount: assessment.total,
+      paymentMethod: body.paymentMethod as never,
+      transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+      paidAt: now,
+      submittedAt: now,
+      decidedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.serviceApplications.unshift(application);
     db.serviceApplicationEvents.push({
       id: `sae-${Date.now()}`,
       applicationId: application.id,
       at: now,
       type: "payment-recorded",
-      title: "Land development tax paid",
-      actorId: me.id,
+      title: "Land development tax collected by land office",
+      actorId: officer.id,
+      actorName: officer.name,
     });
-
+    await appendAudit({
+      entityType: "service-application",
+      entityId: application.id,
+      action: "payment",
+      actorId: officer.id,
+      actorName: officer.name,
+      payload: { applicationNo: application.applicationNo, serviceType: "land-tax", parcelDagNo: parcel.dagNo, assessmentYear: year, amount: application.feeAmount },
+    });
     return HttpResponse.json(application, { status: 201 });
   }),
 
@@ -1628,6 +2045,8 @@ export const handlers = [
 
   http.patch(`${API}/revenue-cases/:id/schedule-hearing`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (!application.paidAt) {
@@ -1741,6 +2160,8 @@ export const handlers = [
   // under-review. Mirrors acquisition.controller.ts.
   http.post(`${API}/acquisition/notice`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as {
       parcelId: string;
@@ -1853,7 +2274,18 @@ export const handlers = [
       .sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))
       .map((application) => ({
         application,
-        parcel: db.parcels.find((p) => p.id === application.parcelId),
+        parcel: (() => {
+          const parcel = db.parcels.find((p) => p.id === application.parcelId);
+          if (!parcel) return undefined;
+          return {
+            ...parcel,
+            registryStatus: recordRegistryStatus(
+              db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
+              db.disputes.filter((dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status)).length,
+              db.documents.some((document) => document.parcelId === parcel.id && document.verificationStatus === "flagged"),
+            ),
+          };
+        })(),
       }))
       .filter((e): e is { application: (typeof db.serviceApplications)[number]; parcel: NonNullable<typeof e.parcel> } =>
         Boolean(e.parcel),
@@ -2131,6 +2563,8 @@ export const handlers = [
 
   http.patch(`${API}/service-applications/:id/decision`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (application.status === "draft") {
@@ -2174,6 +2608,11 @@ export const handlers = [
     if (!dispute) return notFound("Dispute not found");
     const { status } = (await request.json()) as { status: string };
     const from = dispute.status;
+    // Mirrors UpdateDisputeStatusDto's @IsIn, then the same gate the real
+    // endpoint runs: an unknown value is a 400, a disallowed move a 422.
+    if (!DISPUTE_STATUS_VALUES.includes(status)) return badRequest("Invalid status");
+    const review = disputeTransition(from as never, status as never);
+    if (!review.canChange) return unprocessable({ status: review.blockers[0] });
     dispute.status = status as never;
     dispute.updatedAt = new Date().toISOString();
 
@@ -2214,6 +2653,8 @@ export const handlers = [
    */
   http.patch(`${API}/disputes/:id/execute`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const dispute = db.disputes.find((d) => d.id === params.id);
     if (!dispute) return notFound("Dispute not found");
 
@@ -2599,6 +3040,7 @@ export const handlers = [
     const body = (await request.json()) as {
       photo?: { url: string; caption?: string };
       gps?: { lat: number; lng: number; accuracyMeters: number; label?: string };
+      sketchMap?: { url: string; fileName: string };
     };
     const now = new Date().toISOString();
     if (body.photo)
@@ -2611,6 +3053,10 @@ export const handlers = [
         label: body.gps.label,
         capturedAt: now,
       });
+    if (body.sketchMap) {
+      report.sketchMapUrl = body.sketchMap.url;
+      report.sketchMapFileName = body.sketchMap.fileName;
+    }
     return HttpResponse.json(report);
   }),
 
@@ -2626,7 +3072,7 @@ export const handlers = [
     const survey = db.fieldSurveySessions.find(
       (candidate) => candidate.fieldReportId === report.id && candidate.assignedAgentId === me.id,
     );
-    const body = (await request.json()) as { notes?: string; expectedVersion?: number };
+    const body = (await request.json()) as { notes?: string; expectedVersion?: number; disputeFound?: boolean; disputeDescription?: string };
     const notes = body.notes ?? "";
     const key = request.headers.get("idempotency-key");
     try {
@@ -2681,6 +3127,38 @@ export const handlers = [
       });
         }
 
+        const mutation = report.mutationId
+          ? db.mutations.find((candidate) => candidate.id === report.mutationId)
+          : undefined;
+        if (mutation && mutation.status === "field-investigation") {
+          mutation.status = "field-verification-complete";
+          mutation.updatedAt = now;
+          if (body.disputeFound && !mutation.disputeId) {
+            const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
+            const linkedDispute = {
+              id: `ds-${Date.now()}`,
+              caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
+              parcelId: mutation.parcelId,
+              parcelDagNo: mutation.parcelDagNo,
+              type: "boundary" as const,
+              status: "in-mediation" as const,
+              priority: "high" as const,
+              filedById: me.id,
+              filedByName: me.name,
+              filedAt: now,
+              updatedAt: now,
+              description: body.disputeDescription?.trim() || notes,
+              parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
+              assignedAgentId: me.id,
+              assignedMediatorId: mediator?.id,
+              evidenceDocumentIds: mutation.documentIds,
+            };
+            db.disputes.unshift(linkedDispute);
+            mutation.disputeId = linkedDispute.id;
+          }
+          await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "field-verification-complete", actorId: me.id, actorName: me.name, payload: { previousStatus: "field-investigation", newStatus: "field-verification-complete", fieldReportId: report.id, note: notes }, createdAt: now });
+        }
+
         await appendAudit({
       entityType: "field-survey",
       entityId: survey.id,
@@ -2714,6 +3192,36 @@ export const handlers = [
       }
       throw error;
     }
+  }),
+
+  http.patch(`${API}/field-reports/:id/flag-dispute`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    if (me.role !== "field-agent") return forbidden();
+    const report = db.fieldReports.find((item) => item.id === params.id && item.assignedAgentId === me.id);
+    if (!report?.mutationId) return notFound("Mutation field report not found");
+    const mutation = db.mutations.find((item) => item.id === report.mutationId);
+    if (!mutation) return notFound("Mutation not found");
+    if (mutation.disputeId) return HttpResponse.json(report);
+    const body = (await request.json()) as { description?: string };
+    if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
+    const now = new Date().toISOString();
+    const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
+    const dispute = {
+      id: `ds-${Date.now()}`, caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
+      parcelId: mutation.parcelId, parcelDagNo: mutation.parcelDagNo,
+      type: "boundary" as const, status: "in-mediation" as const, priority: "high" as const,
+      filedById: me.id, filedByName: me.name, filedAt: now, updatedAt: now,
+      description: body.description.trim(),
+      parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
+      assignedAgentId: me.id, assignedMediatorId: mediator?.id, evidenceDocumentIds: mutation.documentIds,
+    };
+    db.disputes.unshift(dispute);
+    mutation.disputeId = dispute.id;
+    mutation.updatedAt = now;
+    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: me.id, actorName: me.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
+    return HttpResponse.json(report);
   }),
 
   // Notes and the optional travel marker. Survey start/completion use the
@@ -2803,6 +3311,7 @@ export const handlers = [
     const body = (await request.json()) as Partial<{
       parcelId: string;
       disputeId: string;
+      mutationId: string;
       purpose: string;
       assignedAgentId: string;
       scheduledFor: string;
@@ -2816,6 +3325,17 @@ export const handlers = [
     if (!agent || agent.role !== "field-agent") return notFound("Field agent not found");
     const dispute = body.disputeId ? db.disputes.find((d) => d.id === body.disputeId) : undefined;
     if (body.disputeId && !dispute) return notFound("Dispute not found");
+    const mutation = body.mutationId ? db.mutations.find((item) => item.id === body.mutationId) : undefined;
+    if (body.mutationId && !mutation) return notFound("Mutation not found");
+    if (mutation && mutation.parcelId !== parcel.id) {
+      return unprocessable({ mutationId: { code: "mutation-parcel-mismatch" } });
+    }
+    if (mutation && mutation.status !== "under-primary-verification") {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["under-primary-verification"] } });
+    }
+    if (mutation && db.fieldReports.some((report) => report.mutationId === mutation.id && report.status !== "cancelled")) {
+      return conflict("This mutation already has a field visit.");
+    }
 
     const agentReports = db.fieldReports.filter((v) => v.assignedAgentId === agent.id);
     const [candidate] = rankCandidates(
@@ -2834,6 +3354,7 @@ export const handlers = [
       parcelId: parcel.id,
       parcelDagNo: parcel.dagNo,
       disputeId: body.disputeId || undefined,
+      mutationId: body.mutationId || undefined,
       purpose: purpose as never,
       status: "assigned" as const,
       assignedAgentId: agent.id,
@@ -2844,6 +3365,23 @@ export const handlers = [
       photos: [],
     };
     db.fieldReports.unshift(report);
+
+    if (mutation) {
+      await appendAudit({
+        entityType: "mutation",
+        entityId: mutation.id,
+        action: "assign-field-agent",
+        actorId: me.id,
+        actorName: me.name,
+        payload: {
+          previousStatus: mutation.status,
+          newStatus: mutation.status,
+          fieldReportId: report.id,
+          assignedAgentId: agent.id,
+        },
+        createdAt: now,
+      });
+    }
 
     // Booking a survey against an open dispute moves the case along and shows
     // up on its tracking timeline, same as the real workflow.
@@ -2886,6 +3424,8 @@ export const handlers = [
   // Hearings ---------------------------------------------------------------
   http.patch(`${API}/hearings/:id/ruling`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
     const { ruling } = (await request.json()) as { ruling: string };
@@ -2955,8 +3495,166 @@ export const handlers = [
 
   // Additive to the frozen spec: recording what happened in a sitting. The
   // ruling gate reads these, so this is the write that unblocks a decision.
+  // Mirrors hearings.controller.ts's updateStatus(): deliberation, reopening,
+  // closing without a ruling, and recording an appeal.
+  http.patch(`${API}/hearings/:id/status`, async ({ params, request }) => {
+    await latency();
+    const hearing = db.hearings.find((h) => h.id === params.id);
+    if (!hearing) return notFound("Hearing not found");
+
+    const body = (await request.json()) as Partial<{ status: string; note: string }>;
+    const to = body.status;
+    if (!to || !HEARING_STATUS_VALUES.includes(to)) return badRequest("Invalid status");
+
+    const review = hearingTransition(hearing.status, to as never);
+    if (!review.canChange) return unprocessable({ status: review.blockers[0] });
+
+    const now = new Date().toISOString();
+    const me = currentUser(request);
+    // Read before the write: the ledger records where it came from.
+    const from = hearing.status;
+    hearing.status = to as never;
+
+    await appendAudit({
+      entityType: "hearing",
+      entityId: hearing.id,
+      action: "status-change",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { caseNumber: hearing.caseNumber, from, to },
+    });
+
+    const publicEvent =
+      to === "closed"
+        ? { code: "hearing-closed" as const, title: "Hearing closed without a ruling" }
+        : to === "appealed"
+          ? { code: "hearing-appealed" as const, title: "Ruling appealed" }
+          : null;
+
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute && publicEvent) {
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "hearing",
+        title: publicEvent.title,
+        content: { code: publicEvent.code },
+        ...(body.note?.trim() ? { description: body.note.trim() } : {}),
+        actorId: me.id,
+        actorName: me.name,
+      } as never);
+      if (to === "closed" && !isClosed(dispute.status) && dispute.status === "hearing-scheduled") {
+        dispute.status = "in-mediation";
+        dispute.updatedAt = now;
+      }
+    }
+
+    return HttpResponse.json(hearing);
+  }),
+
+  // Adjournment. Mirrors hearings.controller.ts's reschedule().
+  http.patch(`${API}/hearings/:id/schedule`, async ({ params, request }) => {
+    await latency();
+    const hearing = db.hearings.find((h) => h.id === params.id);
+    if (!hearing) return notFound("Hearing not found");
+    if (!isHearingOpen(hearing.status)) {
+      return unprocessable({ status: { code: "already-decided" } });
+    }
+
+    const body = (await request.json()) as Partial<{ hearingDate: string; reason: string }>;
+    const at = body.hearingDate ? new Date(body.hearingDate) : new Date(NaN);
+    if (Number.isNaN(at.getTime())) return unprocessable({ hearingDate: { code: "need-date" } });
+
+    const now = new Date().toISOString();
+    const me = currentUser(request);
+    const from = hearing.hearingDate ?? "";
+    hearing.hearingDate = at.toISOString();
+
+    await appendAudit({
+      entityType: "hearing",
+      entityId: hearing.id,
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { caseNumber: hearing.caseNumber, from, to: hearing.hearingDate },
+    });
+
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute) {
+      dispute.hearingDate = hearing.hearingDate;
+      dispute.updatedAt = now;
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "hearing",
+        title: "Hearing adjourned",
+        content: { code: "hearing-adjourned" },
+        ...(body.reason?.trim() ? { description: body.reason.trim() } : {}),
+        actorId: me.id,
+        actorName: me.name,
+      } as never);
+    }
+
+    return HttpResponse.json(hearing);
+  }),
+
+  // Handing the case to another mediator. Mirrors reassign().
+  http.patch(`${API}/hearings/:id/mediator`, async ({ params, request }) => {
+    await latency();
+    const hearing = db.hearings.find((h) => h.id === params.id);
+    if (!hearing) return notFound("Hearing not found");
+    if (!isHearingOpen(hearing.status)) {
+      return unprocessable({ status: { code: "already-decided" } });
+    }
+
+    const body = (await request.json()) as Partial<{ mediatorId: string }>;
+    const mediator = db.users.find((u) => u.id === body.mediatorId);
+    if (!mediator || mediator.role !== "mediator" || mediator.status !== "active") {
+      return notFound("Mediator not found");
+    }
+    if (mediator.id === hearing.mediatorId) {
+      return conflict("This case is already with that mediator.");
+    }
+
+    const now = new Date().toISOString();
+    const me = currentUser(request);
+    const from = hearing.mediatorId;
+    hearing.mediatorId = mediator.id;
+
+    await appendAudit({
+      entityType: "hearing",
+      entityId: hearing.id,
+      action: "assign",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { caseNumber: hearing.caseNumber, from, to: mediator.id },
+    });
+
+    const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
+    if (dispute) {
+      dispute.assignedMediatorId = mediator.id;
+      dispute.updatedAt = now;
+      db.disputeEvents.push({
+        id: `de-${Date.now()}`,
+        disputeId: dispute.id,
+        at: now,
+        type: "assignment",
+        title: `Assigned to ${mediator.name}`,
+        content: { code: "assigned", to: mediator.name },
+        actorId: me.id,
+        actorName: me.name,
+      } as never);
+    }
+
+    return HttpResponse.json(hearing);
+  }),
+
   http.post(`${API}/hearings/:id/sessions`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
 
@@ -3033,6 +3731,8 @@ export const handlers = [
   // hearing is over that record. Mirrors hearings.controller.ts's convene().
   http.post(`${API}/hearings`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const body = (await request.json()) as { disputeId: string; hearingDate: string };
     const me = currentUser(request);
 
@@ -3115,16 +3815,87 @@ export const handlers = [
   }),
 
   // Audit ------------------------------------------------------------------
-  http.get(`${API}/audit/verify`, async () => {
+  http.get(`${API}/audit/verify`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     return HttpResponse.json(await verifyAuditChain());
   }),
 
-  // Full ledger (admin). Additive to the frozen spec's per-entity + verify routes.
-  http.get(`${API}/audit`, async () => {
+  /** Mirrors AdminDashboardController — counts, not queues, and no chain walk. */
+  http.get(`${API}/admin/dashboard`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") {
+      return forbidden("Administrator access required.");
+    }
+    const CLOSED_SERVICES = ["approved", "rejected", "withdrawn"];
+    const TERMINAL_MUTATIONS = ["complete", "rejected"];
+    const CLOSED_DISPUTES = ["resolved", "rejected", "withdrawn"];
+    const CLOSED_FIELD_REPORTS = ["completed", "cancelled"];
+    const OPEN_HEARINGS = ["scheduled", "in-hearing", "deliberation"];
+    const ROLE_LIST = ["citizen", "land-office", "field-agent", "mediator", "admin"] as const;
+
     const chain = await getAuditChain();
-    return HttpResponse.json([...chain].reverse());
+    const newest = [...chain].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const byStatus = (status: string) => db.users.filter((u) => u.status === status).length;
+
+    return HttpResponse.json({
+      queues: {
+        serviceApplications: db.serviceApplications.filter((a) => !CLOSED_SERVICES.includes(a.status)).length,
+        mutations: db.mutations.filter((m) => !TERMINAL_MUTATIONS.includes(m.status)).length,
+        disputes: db.disputes.filter((d) => !CLOSED_DISPUTES.includes(d.status)).length,
+        hearings: db.hearings.filter((h) => OPEN_HEARINGS.includes(h.status)).length,
+        fieldReports: db.fieldReports.filter((r) => !CLOSED_FIELD_REPORTS.includes(r.status)).length,
+        documentsToVerify: db.documents.filter((d) => d.verificationStatus === "unverified").length,
+      },
+      accounts: {
+        total: db.users.length,
+        active: byStatus("active"),
+        suspended: byStatus("suspended"),
+        invited: byStatus("invited"),
+        byRole: Object.fromEntries(
+          ROLE_LIST.map((role) => [role, db.users.filter((u) => u.role === role).length]),
+        ),
+      },
+      ledger: {
+        events: chain.length,
+        ...(newest[0] ? { lastAt: newest[0].createdAt } : {}),
+      },
+      jurisdictionCount: db.jurisdictions.length,
+      recentAudit: newest.slice(0, 5),
+    });
+  }),
+
+  // The entity types actually present, so the filter offers real options.
+  http.get(`${API}/audit/entity-types`, async ({ request }) => {
+    await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
+    const chain = await getAuditChain();
+    return HttpResponse.json([...new Set(chain.map((e) => e.entityType))].sort());
+  }),
+
+  // Full ledger (admin), filtered and paged — mirrors AuditController.list().
+  http.get(`${API}/audit`, async ({ request }) => {
+    await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
+    const url = new URL(request.url);
+    const chain = await getAuditChain();
+    const p = (key: string) => url.searchParams.get(key)?.trim() || undefined;
+    const entityType = p("entityType");
+    const action = p("action");
+    const actorId = p("actorId");
+    const from = auditBound(p("from"));
+    const to = auditBound(p("to"), true);
+
+    const items = [...chain].reverse().filter((e) => {
+      if (entityType && e.entityType !== entityType) return false;
+      if (action && e.action !== action) return false;
+      if (actorId && e.actorId !== actorId) return false;
+      const at = new Date(e.createdAt).getTime();
+      if (from && at < from.getTime()) return false;
+      if (to && at >= to.getTime()) return false;
+      return true;
+    });
+    return HttpResponse.json(paginate(items, url));
   }),
 
   http.get(`${API}/audit/:entityType/:id`, async ({ params }) => {
@@ -3195,6 +3966,82 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
+  /** Mirrors UsersController.invite(). */
+  http.post(`${API}/users`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
+
+    const body = (await request.json()) as Partial<{
+      name: string;
+      email: string;
+      role: User["role"];
+      jurisdictionId: string;
+      title: string;
+    }>;
+    const email = body.email?.trim().toLowerCase();
+    if (!body.name?.trim() || !email || !body.role || !body.jurisdictionId) {
+      return badRequest("Missing required fields");
+    }
+    if (db.users.some((u) => u.email.toLowerCase() === email)) {
+      return conflict("An account with that email already exists.");
+    }
+    if (!db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
+      return notFound("Jurisdiction not found");
+    }
+
+    const user: User = {
+      id: `usr-${Math.random().toString(36).slice(2, 10)}`,
+      name: body.name.trim(),
+      email,
+      role: body.role,
+      jurisdictionId: body.jurisdictionId,
+      ...(body.title?.trim() ? { title: body.title.trim() } : {}),
+      status: "invited",
+      createdAt: new Date().toISOString(),
+    } as User;
+    db.users.push(user);
+
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: user.name, email: user.email, role: user.role },
+    });
+
+    // The fixture API authenticates on the demo password, so the issued one
+    // is cosmetic here — the shape matches, which is what parity means.
+    return HttpResponse.json(
+      { user, temporaryPassword: Math.random().toString(36).slice(2, 10) },
+      { status: 201 },
+    );
+  }),
+
+  /** Mirrors UsersController.resetPassword(). */
+  http.post(`${API}/users/:id/password-reset`, async ({ params, request }) => {
+    await latency();
+    const user = db.users.find((u) => u.id === params.id);
+    if (!user) return notFound("User not found");
+
+    const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
+
+    const review = passwordResetGate({ status: user.status });
+    if (!review.canReset) return unprocessable({ status: review.blockers[0] });
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: user.name, passwordReset: "true" },
+    });
+
+    return HttpResponse.json({ temporaryPassword: Math.random().toString(36).slice(2, 10) });
+  }),
+
   /** Mirrors UsersController.update() — see its own note on scope. */
   http.patch(`${API}/users/:id`, async ({ params, request }) => {
     await latency();
@@ -3204,11 +4051,17 @@ export const handlers = [
     const body = (await request.json()) as Partial<{
       status: "active" | "suspended";
       jurisdictionId: string;
+      role: User["role"];
     }>;
 
     const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
     if (body.status === "suspended" && user.id === me.id) {
       return conflict("You cannot suspend your own account.");
+    }
+    if (body.role) {
+      const review = roleChangeGate(me.id, { id: user.id, role: user.role }, body.role);
+      if (!review.canChange) return unprocessable({ role: review.blockers[0] });
     }
     if (body.jurisdictionId && !db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
       return notFound("Jurisdiction not found");
@@ -3216,6 +4069,7 @@ export const handlers = [
 
     if (body.status) user.status = body.status;
     if (body.jurisdictionId) user.jurisdictionId = body.jurisdictionId;
+    if (body.role) user.role = body.role;
 
     await appendAudit({
       entityType: "user",
@@ -3227,6 +4081,7 @@ export const handlers = [
         name: user.name,
         ...(body.status ? { status: user.status } : {}),
         ...(body.jurisdictionId ? { jurisdictionId: user.jurisdictionId } : {}),
+        ...(body.role ? { role: user.role } : {}),
       },
     });
 
@@ -3240,6 +4095,8 @@ export const handlers = [
 
   http.patch(`${API}/policies`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const updates = (await request.json()) as Partial<Policy>;
     // Recorded as before/after: a fee or a threshold changing is exactly the
     // kind of thing someone later needs to date precisely.

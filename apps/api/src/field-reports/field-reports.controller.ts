@@ -192,7 +192,7 @@ export class FieldReportsController {
   async create(@Body() body: BookFieldSurveyDto, @Req() req: Request) {
     const actorId = currentUserId(req);
 
-    const [parcel, agent, agentReports, jurisdictions, dispute] = await Promise.all([
+    const [parcel, agent, agentReports, jurisdictions, dispute, mutation] = await Promise.all([
       this.prisma.parcel.findUnique({ where: { id: body.parcelId } }),
       this.prisma.user.findUnique({ where: { id: body.assignedAgentId } }),
       this.prisma.fieldReport.findMany({ where: { assignedAgentId: body.assignedAgentId } }),
@@ -200,10 +200,20 @@ export class FieldReportsController {
       body.disputeId
         ? this.prisma.dispute.findUnique({ where: { id: body.disputeId } })
         : Promise.resolve(null),
+      body.mutationId
+        ? this.prisma.mutation.findUnique({ where: { id: body.mutationId } })
+        : Promise.resolve(null),
     ]);
     if (!parcel) throw new NotFoundError("Parcel not found");
     if (!agent || agent.role !== "field-agent") throw new NotFoundError("Field agent not found");
     if (body.disputeId && !dispute) throw new NotFoundError("Dispute not found");
+    if (body.mutationId && !mutation) throw new NotFoundError("Mutation not found");
+    if (mutation && mutation.parcelId !== parcel.id) {
+      throw new ValidationError({ code: "mutation-parcel-mismatch" }, "mutationId");
+    }
+    if (mutation && mutation.status !== "under-primary-verification") {
+      throw new ValidationError({ code: "wrong-status", expected: ["under-primary-verification"] }, "mutationId");
+    }
 
     const [candidate] = rankCandidates(
       parcel as unknown as Parcel,
@@ -216,12 +226,20 @@ export class FieldReportsController {
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
+      if (mutation) {
+        const existing = await tx.fieldReport.findFirst({
+          where: { mutationId: mutation.id, status: { not: "cancelled" } },
+          select: { id: true },
+        });
+        if (existing) throw new ConflictError("This mutation already has a field visit.");
+      }
       const created = await tx.fieldReport.create({
         data: {
           id: `fr-${randomUUID()}`,
           parcelId: parcel.id,
           parcelDagNo: parcel.dagNo,
           disputeId: body.disputeId,
+          mutationId: body.mutationId,
           purpose: body.purpose,
           status: "assigned",
           assignedAgentId: agent.id,
@@ -243,6 +261,21 @@ export class FieldReportsController {
           assignedAgentId: agent.id,
         },
       });
+
+      if (mutation) {
+        await this.audit.append(tx, {
+          entityType: "mutation",
+          entityId: mutation.id,
+          action: "assign-field-agent",
+          actorId,
+          payload: {
+            previousStatus: mutation.status,
+            newStatus: mutation.status,
+            fieldReportId: created.id,
+            assignedAgentId: agent.id,
+          },
+        });
+      }
 
       // Booking a survey against an open dispute moves the case along and
       // shows up on its tracking timeline, same as the real workflow.
@@ -347,6 +380,12 @@ export class FieldReportsController {
                   capturedAt: now,
                 },
               ] as never,
+            }
+          : {}),
+        ...(body.sketchMap
+          ? {
+              sketchMapUrl: body.sketchMap.url,
+              sketchMapFileName: body.sketchMap.fileName,
             }
           : {}),
       },
@@ -759,6 +798,61 @@ export class FieldReportsController {
         }
       }
 
+      if (updatedReport.mutationId) {
+        const parentMutation = await tx.mutation.findUnique({
+          where: { id: updatedReport.mutationId },
+        });
+        if (parentMutation && parentMutation.status === "field-investigation") {
+          await tx.mutation.update({
+            where: { id: parentMutation.id },
+            data: { status: "field-verification-complete" },
+          });
+          await this.audit.append(tx, {
+            entityType: "mutation",
+            entityId: parentMutation.id,
+            action: "field-verification-complete",
+            actorId,
+            payload: {
+              previousStatus: parentMutation.status,
+              newStatus: "field-verification-complete",
+              fieldReportId: updatedReport.id,
+              note: body.notes,
+            },
+          });
+
+          if (body.disputeFound && !parentMutation.disputeId) {
+            const [count, mediator, agent] = await Promise.all([
+              tx.dispute.count(),
+              tx.user.findFirst({ where: { role: "mediator", status: "active" } }),
+              tx.user.findUnique({ where: { id: actorId } }),
+            ]);
+            const dispute = await tx.dispute.create({
+              data: {
+                id: `ds-${randomUUID()}`,
+                caseNumber: `DSP-${now.getUTCFullYear()}-${String(500 + count).padStart(5, "0")}`,
+                parcelId: parentMutation.parcelId,
+                parcelDagNo: parentMutation.parcelDagNo,
+                type: "boundary",
+                status: "in-mediation",
+                priority: "high",
+                filedById: actorId,
+                filedByName: agent?.name ?? "Field agent",
+                filedAt: now,
+                description: body.disputeDescription?.trim() || body.notes,
+                parties: [{ name: parentMutation.fromOwnerName, role: "claimant" }, { name: parentMutation.toOwnerName, role: "respondent" }],
+                assignedAgentId: actorId,
+                assignedMediatorId: mediator?.id,
+                evidenceDocumentIds: parentMutation.documentIds,
+              },
+            });
+            await tx.mutation.update({
+              where: { id: parentMutation.id },
+              data: { disputeId: dispute.id },
+            });
+          }
+        }
+      }
+
       await this.audit.append(tx, {
         entityType: "field-survey",
         entityId: updatedSurvey.id,
@@ -793,6 +887,52 @@ export class FieldReportsController {
    * Notes and the optional travel marker. Session start and completion use
    * dedicated transactional actions and cannot be reached from this patch.
    */
+  @Patch(":id/flag-dispute")
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("field-agent")
+  async flagDispute(
+    @Param("id") id: string,
+    @Body() body: { description?: string },
+    @Req() req: Request,
+  ) {
+    const actorId = currentUserId(req);
+    const description = body.description?.trim();
+    if (!description) throw new ValidationError({ code: "dispute-description-required" }, "description");
+    return this.prisma.$transaction(async (tx) => {
+      const report = await tx.fieldReport.findFirst({ where: { id, assignedAgentId: actorId } });
+      if (!report || !report.mutationId) throw new NotFoundError("Mutation field report not found");
+      const mutation = await tx.mutation.findUnique({ where: { id: report.mutationId } });
+      if (!mutation) throw new NotFoundError("Mutation not found");
+      if (mutation.disputeId) return report;
+      const [count, mediator, agent] = await Promise.all([
+        tx.dispute.count(),
+        tx.user.findFirst({ where: { role: "mediator", status: "active" } }),
+        tx.user.findUnique({ where: { id: actorId } }),
+      ]);
+      const now = new Date();
+      const dispute = await tx.dispute.create({
+        data: {
+          id: `ds-${randomUUID()}`,
+          caseNumber: `DSP-${now.getUTCFullYear()}-${String(500 + count).padStart(5, "0")}`,
+          parcelId: mutation.parcelId,
+          parcelDagNo: mutation.parcelDagNo,
+          type: "boundary", status: "in-mediation", priority: "high",
+          filedById: actorId, filedByName: agent?.name ?? "Field agent", filedAt: now,
+          description,
+          parties: [{ name: mutation.fromOwnerName, role: "claimant" }, { name: mutation.toOwnerName, role: "respondent" }],
+          assignedAgentId: actorId, assignedMediatorId: mediator?.id,
+          evidenceDocumentIds: mutation.documentIds,
+        },
+      });
+      await tx.mutation.update({ where: { id: mutation.id }, data: { disputeId: dispute.id } });
+      await this.audit.append(tx, {
+        entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId,
+        payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: description },
+      });
+      return report;
+    });
+  }
+
   @Patch(":id")
   @UseGuards(AccessTokenGuard, RolesGuard)
   @Roles("field-agent")

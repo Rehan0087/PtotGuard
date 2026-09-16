@@ -338,7 +338,9 @@ function MyRevenueCaseCard({ application }: { application: ServiceApplication })
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <IdChip>{application.applicationNo}</IdChip>
+            <Link href={`/applications/${application.id}`} className="hover:underline">
+                <IdChip>{application.applicationNo}</IdChip>
+              </Link>
             <span className="text-sm text-muted-foreground">
               {t.pages.revenueCases.caseType[isAppeal ? "appeal" : "miscellaneous"]}
             </span>
@@ -469,7 +471,9 @@ function QueueCard({ application }: { application: ServiceApplication }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <IdChip>{application.applicationNo}</IdChip>
+            <Link href={`/applications/${application.id}`} className="hover:underline">
+                <IdChip>{application.applicationNo}</IdChip>
+              </Link>
             <span className="text-sm font-medium text-foreground">
               {t.pages.revenueCases.caseType[isAppeal ? "appeal" : "miscellaneous"]}
             </span>
