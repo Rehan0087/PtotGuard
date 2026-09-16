@@ -152,18 +152,26 @@ export class MutationsController {
   @Post()
   @HttpCode(201)
   async create(@Body() body: CreateMutationDto, @Req() req: Request) {
+    const isCorrection = body.type === "correction";
+
     const [parcel, restrictions, policy, toOwner] = await Promise.all([
       this.prisma.parcel.findUnique({
         where: { id: body.parcelId },
-        include: { owner: { select: { name: true } } },
+        include: { owner: { select: { id: true, name: true, role: true } } },
       }),
       this.prisma.parcelRestriction.findMany({ where: { parcelId: body.parcelId } }),
       this.prisma.policy.findUnique({ where: { id: "singleton" } }),
-      this.prisma.user.findUnique({ where: { id: body.toOwnerId } }),
+      // Correction type: no new owner — the existing owner stays, so skip the lookup.
+      isCorrection
+        ? Promise.resolve(null)
+        : this.prisma.user.findUnique({ where: { id: body.toOwnerId } }),
     ]);
     if (!parcel) throw new NotFoundError("Parcel not found");
-    if (!toOwner || toOwner.role !== "citizen") {
-      throw new NotFoundError("Recipient not found");
+
+    if (!isCorrection) {
+      if (!toOwner || toOwner.role !== "citizen") {
+        throw new NotFoundError("Recipient not found");
+      }
     }
 
     const review = transferReview(restrictions as unknown as ParcelRestriction[]);
@@ -197,12 +205,14 @@ export class MutationsController {
           // does not get to assert who the current owner is.
           fromOwnerName: parcel.owner.name,
           fromOwnerId: parcel.ownerId,
-          toOwnerId: toOwner.id,
-          toOwnerName: toOwner.name,
+          // For correction: ownership stays — toOwner is the same as fromOwner.
+          toOwnerId: isCorrection ? parcel.ownerId : toOwner!.id,
+          toOwnerName: isCorrection ? parcel.owner.name : toOwner!.name,
           requestedById: actorId,
           documentIds: body.documentIds ?? [],
           deedNumber: body.deedNumber,
           deedDate: body.deedDate ? new Date(body.deedDate) : undefined,
+          metadata: body.metadata ?? null,
           fee: policy ? { amount: policy.mutationFeeBdt, currency: "BDT" } : undefined,
           paymentMethod: body.paymentMethod,
           // Simulated — no gateway is called. See PaymentMethod's own note.

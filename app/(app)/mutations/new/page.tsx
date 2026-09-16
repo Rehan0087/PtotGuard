@@ -23,6 +23,7 @@ import {
   Search,
   UserRound,
   X,
+  Info,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -62,27 +63,62 @@ const PAYMENT_METHODS: { value: PaymentMethod; icon: LucideIcon }[] = [
   { value: "card", icon: CreditCard },
 ];
 
+/** Types that require a new owner picker */
+const TYPES_WITH_RECIPIENT: MutationType[] = ["sale", "inheritance", "gift", "partition"];
+/** Types that show deed number + deed date */
+const TYPES_WITH_DEED: MutationType[] = ["sale", "gift"];
+
 /** Built per locale — every message here is read by the person filing. */
 function makeSchema(t: Dictionary) {
-  return z.object({
-    parcelId: z.string().min(1, t.pages.newMutation.errors.parcelRequired),
-    type: z.enum(["sale", "inheritance", "gift", "partition", "correction"]),
-    toOwnerId: z.string().min(1, t.pages.newMutation.errors.toOwnerRequired),
-    deedNumber: z.string().max(60),
-    deedDate: z.string(),
-    paymentMethod: z.enum(["bkash", "nagad", "card"]),
-  });
+  return z
+    .object({
+      parcelId: z.string().min(1, t.pages.newMutation.errors.parcelRequired),
+      type: z.enum(["sale", "inheritance", "gift", "partition", "correction"]),
+      toOwnerId: z.string().optional().default(""),
+      deedNumber: z.string().max(60).optional().default(""),
+      deedDate: z.string().optional().default(""),
+      paymentMethod: z.enum(["bkash", "nagad", "card"]),
+      correctionReason: z.string().optional().default(""),
+      heirRelationship: z.string().optional().default(""),
+      partitionNote: z.string().optional().default(""),
+    })
+    .superRefine((data, ctx) => {
+      if (TYPES_WITH_RECIPIENT.includes(data.type as MutationType) && !data.toOwnerId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t.pages.newMutation.errors.toOwnerRequired,
+          path: ["toOwnerId"],
+        });
+      }
+      if (data.type === "correction" && !data.correctionReason?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t.pages.newMutation.errors.correctionReasonRequired,
+          path: ["correctionReason"],
+        });
+      }
+      if (data.type === "inheritance" && !data.heirRelationship?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t.pages.newMutation.errors.heirRelationshipRequired,
+          path: ["heirRelationship"],
+        });
+      }
+    });
 }
 
 type FormValues = z.infer<ReturnType<typeof makeSchema>>;
 
 const STEP_KEYS = ["parcel", "transfer", "payment", "review"] as const;
-const STEP_FIELDS: (keyof FormValues)[][] = [
-  ["parcelId"],
-  ["type", "toOwnerId"],
-  ["paymentMethod"],
-  [],
-];
+
+/** Fields to validate per step — type-specific fields validated at step 1. */
+function stepFields(type: MutationType): (keyof FormValues)[][] {
+  const transferFields: (keyof FormValues)[] = ["type"];
+  if (TYPES_WITH_RECIPIENT.includes(type)) transferFields.push("toOwnerId");
+  if (type === "correction") transferFields.push("correctionReason");
+  if (type === "inheritance") transferFields.push("heirRelationship");
+  return [["parcelId"], transferFields, ["paymentMethod"], []];
+}
 
 export default function NewMutationPage() {
   const t = useT();
@@ -103,6 +139,7 @@ export default function NewMutationPage() {
     handleSubmit,
     trigger,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
@@ -113,39 +150,59 @@ export default function NewMutationPage() {
       deedNumber: "",
       deedDate: "",
       paymentMethod: "bkash",
+      correctionReason: "",
+      heirRelationship: "",
+      partitionNote: "",
     },
   });
 
   // useWatch (vs watch()) keeps the component React-Compiler friendly.
   const parcelId = useWatch({ control, name: "parcelId" });
-  const type = useWatch({ control, name: "type" });
+  const type = useWatch({ control, name: "type" }) as MutationType;
   const toOwnerId = useWatch({ control, name: "toOwnerId" });
   const deedNumber = useWatch({ control, name: "deedNumber" });
   const deedDate = useWatch({ control, name: "deedDate" });
   const paymentMethod = useWatch({ control, name: "paymentMethod" });
+  const correctionReason = useWatch({ control, name: "correctionReason" });
+  const heirRelationship = useWatch({ control, name: "heirRelationship" });
+  const partitionNote = useWatch({ control, name: "partitionNote" });
 
   // Display-only — the form only ever submits toOwnerId, but the picked
   // name is what the review step and a "change" chip need to show.
   const [toOwnerName, setToOwnerName] = useState("");
 
+  const needsRecipient = TYPES_WITH_RECIPIENT.includes(type);
+  const needsDeed = TYPES_WITH_DEED.includes(type);
+  const isCorrection = type === "correction";
+  const isInheritance = type === "inheritance";
+  const isPartition = type === "partition";
+
   const selectedParcel = parcels.find((p) => p.id === parcelId);
   const fee = policy ? { amount: policy.mutationFeeBdt, currency: "BDT" as const } : null;
 
   async function next() {
-    const ok = await trigger(STEP_FIELDS[step]);
+    const fields = stepFields(type)[step];
+    const ok = await trigger(fields as (keyof FormValues)[]);
     if (ok) setStep((current) => Math.min(current + 1, STEP_KEYS.length - 1));
   }
 
   function onSubmit(values: FormValues) {
+    const metadata: Record<string, unknown> = {};
+    if (values.correctionReason) metadata.correctionReason = values.correctionReason;
+    if (values.heirRelationship) metadata.heirRelationship = values.heirRelationship;
+    if (values.partitionNote) metadata.partitionNote = values.partitionNote;
+
     createMutation.mutate(
       {
         parcelId: values.parcelId,
         type: values.type as never,
-        toOwnerId: values.toOwnerId,
+        // Correction: no toOwnerId sent — backend self-assigns to current owner
+        ...(isCorrection ? {} : { toOwnerId: values.toOwnerId }),
         deedNumber: values.deedNumber || undefined,
         deedDate: values.deedDate || undefined,
         paymentMethod: values.paymentMethod as never,
-      },
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      } as never,
       {
         onSuccess: (mutation) => {
           toast.success(t.pages.newMutation.filedTitle, {
@@ -259,9 +316,10 @@ export default function NewMutationPage() {
           </section>
         ) : null}
 
-        {/* Step 1 — Transfer details */}
+        {/* Step 1 — Transfer details (type-aware) */}
         {step === 1 ? (
           <section className="space-y-5">
+            {/* Transfer type selector */}
             <div>
               <span className="mb-1.5 block text-sm font-medium text-foreground">
                 {t.pages.newMutation.typeOfTransfer}
@@ -278,7 +336,15 @@ export default function NewMutationPage() {
                         <button
                           type="button"
                           key={option.value}
-                          onClick={() => field.onChange(option.value)}
+                          onClick={() => {
+                            field.onChange(option.value);
+                            // Reset type-specific fields when type changes
+                            setValue("toOwnerId", "");
+                            setValue("correctionReason", "");
+                            setValue("heirRelationship", "");
+                            setValue("partitionNote", "");
+                            setToOwnerName("");
+                          }}
                           className={cn(
                             "flex items-start gap-2.5 rounded-lg border bg-card p-3 text-left transition-colors",
                             active ? "border-primary ring-1 ring-primary" : "border-border hover:bg-muted/50",
@@ -301,40 +367,127 @@ export default function NewMutationPage() {
               />
             </div>
 
-            <RecipientPicker
-              toOwnerId={toOwnerId}
-              toOwnerName={toOwnerName}
-              error={errors.toOwnerId?.message}
-              onPick={(id, name) => {
-                setValue("toOwnerId", id, { shouldValidate: true });
-                setToOwnerName(name);
-              }}
-              onClear={() => {
-                setValue("toOwnerId", "", { shouldValidate: true });
-                setToOwnerName("");
-              }}
-            />
+            {/* ── CORRECTION: No owner picker; show correction reason ── */}
+            {isCorrection ? (
+              <div className="space-y-3">
+                {/* Info banner */}
+                <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+                  <Info className="mt-0.5 size-4 shrink-0" />
+                  <span>{t.pages.newMutation.correctionNote}</span>
+                </div>
+                {/* Correction reason textarea */}
+                <div>
+                  <label htmlFor="correctionReason" className="mb-1.5 block text-sm font-medium text-foreground">
+                    {t.pages.newMutation.correctionReasonLabel}
+                  </label>
+                  <textarea
+                    id="correctionReason"
+                    rows={4}
+                    placeholder={t.pages.newMutation.correctionReasonPlaceholder}
+                    className={cn(
+                      "w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      errors.correctionReason && "border-destructive ring-destructive/20",
+                    )}
+                    {...register("correctionReason")}
+                  />
+                  {errors.correctionReason ? (
+                    <p className="mt-1.5 flex items-center gap-1.5 text-sm text-destructive">
+                      <AlertCircle className="size-4" />
+                      {errors.correctionReason.message}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="deedNumber" className="mb-1.5 block text-sm font-medium text-foreground">
-                  {t.pages.newMutation.deedNumberLabel}{" "}
-                  <span className="text-muted-foreground">({t.common.optional})</span>
-                </label>
-                <Input
-                  id="deedNumber"
-                  placeholder={t.pages.newMutation.deedNumberPlaceholder}
-                  {...register("deedNumber")}
+            {/* ── ALL OTHER TYPES: New owner picker ── */}
+            {needsRecipient ? (
+              <div className="space-y-3">
+                <RecipientPicker
+                  label={t.pages.newMutation.toOwnerLabel}
+                  hint={
+                    isInheritance
+                      ? t.pages.newMutation.heirNote
+                      : isPartition
+                        ? t.pages.newMutation.partitionRecipientNote
+                        : t.pages.newMutation.toOwnerHint
+                  }
+                  toOwnerId={toOwnerId ?? ""}
+                  toOwnerName={toOwnerName}
+                  error={errors.toOwnerId?.message}
+                  onPick={(id, name) => {
+                    setValue("toOwnerId", id, { shouldValidate: true });
+                    setToOwnerName(name);
+                  }}
+                  onClear={() => {
+                    setValue("toOwnerId", "", { shouldValidate: true });
+                    setToOwnerName("");
+                  }}
                 />
+
+                {/* Inheritance: heir relationship field */}
+                {isInheritance ? (
+                  <div>
+                    <label htmlFor="heirRelationship" className="mb-1.5 block text-sm font-medium text-foreground">
+                      {t.pages.newMutation.heirRelationshipLabel}
+                    </label>
+                    <Input
+                      id="heirRelationship"
+                      placeholder={t.pages.newMutation.heirRelationshipPlaceholder}
+                      className={cn(errors.heirRelationship && "border-destructive")}
+                      {...register("heirRelationship")}
+                    />
+                    {errors.heirRelationship ? (
+                      <p className="mt-1.5 flex items-center gap-1.5 text-sm text-destructive">
+                        <AlertCircle className="size-4" />
+                        {errors.heirRelationship.message}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* Partition: partition note field */}
+                {isPartition ? (
+                  <div>
+                    <label htmlFor="partitionNote" className="mb-1.5 block text-sm font-medium text-foreground">
+                      {t.pages.newMutation.partitionNoteLabel}{" "}
+                      <span className="text-muted-foreground">({t.common.optional})</span>
+                    </label>
+                    <textarea
+                      id="partitionNote"
+                      rows={3}
+                      placeholder={t.pages.newMutation.partitionNotePlaceholder}
+                      className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      {...register("partitionNote")}
+                    />
+                  </div>
+                ) : null}
               </div>
-              <div>
-                <label htmlFor="deedDate" className="mb-1.5 block text-sm font-medium text-foreground">
-                  {t.pages.newMutation.deedDateLabel}{" "}
-                  <span className="text-muted-foreground">({t.common.optional})</span>
-                </label>
-                <Input id="deedDate" type="date" {...register("deedDate")} />
+            ) : null}
+
+            {/* ── SALE / GIFT: Deed fields ── */}
+            {needsDeed ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="deedNumber" className="mb-1.5 block text-sm font-medium text-foreground">
+                    {t.pages.newMutation.deedNumberLabel}{" "}
+                    <span className="text-muted-foreground">({t.common.optional})</span>
+                  </label>
+                  <Input
+                    id="deedNumber"
+                    placeholder={t.pages.newMutation.deedNumberPlaceholder}
+                    {...register("deedNumber")}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="deedDate" className="mb-1.5 block text-sm font-medium text-foreground">
+                    {t.pages.newMutation.deedDateLabel}{" "}
+                    <span className="text-muted-foreground">({t.common.optional})</span>
+                  </label>
+                  <Input id="deedDate" type="date" {...register("deedDate")} />
+                </div>
               </div>
-            </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -405,12 +558,38 @@ export default function NewMutationPage() {
                 )}
               </Row>
               <Row label={t.pages.newMutation.rowType}>{t.domain.mutationType[type]}</Row>
-              <Row label={t.pages.newMutation.rowToOwner}>{toOwnerName}</Row>
-              <Row label={t.pages.newMutation.rowDeed}>
-                {deedNumber || deedDate
-                  ? [deedNumber, deedDate ? f.date(deedDate) : null].filter(Boolean).join(" · ")
-                  : t.pages.newMutation.notSpecified}
-              </Row>
+
+              {/* Type-specific review rows */}
+              {isCorrection ? (
+                <Row label={t.pages.newMutation.rowCurrentOwner}>
+                  <span className="text-muted-foreground">{selectedParcel?.ownerName ?? t.common.notAvailable}</span>
+                </Row>
+              ) : (
+                <Row label={t.pages.newMutation.rowToOwner}>{toOwnerName || t.pages.newMutation.notSpecified}</Row>
+              )}
+
+              {isInheritance && heirRelationship ? (
+                <Row label={t.pages.newMutation.rowHeirRelationship}>{heirRelationship}</Row>
+              ) : null}
+
+              {isPartition && partitionNote ? (
+                <Row label={t.pages.newMutation.rowPartitionNote}>{partitionNote}</Row>
+              ) : null}
+
+              {isCorrection && correctionReason ? (
+                <Row label={t.pages.newMutation.rowCorrectionReason}>
+                  <span className="text-pretty text-sm">{correctionReason}</span>
+                </Row>
+              ) : null}
+
+              {needsDeed ? (
+                <Row label={t.pages.newMutation.rowDeed}>
+                  {deedNumber || deedDate
+                    ? [deedNumber, deedDate ? f.date(deedDate) : null].filter(Boolean).join(" · ")
+                    : t.pages.newMutation.notSpecified}
+                </Row>
+              ) : null}
+
               <Row label={t.pages.newMutation.rowPayment}>
                 {t.pages.newMutation.paymentMethods[paymentMethod]}
                 {fee ? ` · ${f.money(fee)}` : ""}
@@ -455,12 +634,16 @@ export default function NewMutationPage() {
  * See useSearchCitizens's own note on the minimum-length guard.
  */
 function RecipientPicker({
+  label,
+  hint,
   toOwnerId,
   toOwnerName,
   error,
   onPick,
   onClear,
 }: {
+  label: string;
+  hint: string;
   toOwnerId: string;
   toOwnerName: string;
   error?: string;
@@ -474,9 +657,7 @@ function RecipientPicker({
   if (toOwnerId) {
     return (
       <div>
-        <span className="mb-1.5 block text-sm font-medium text-foreground">
-          {t.pages.newMutation.toOwnerLabel}
-        </span>
+        <span className="mb-1.5 block text-sm font-medium text-foreground">{label}</span>
         <div className="flex items-center gap-2.5 rounded-lg border border-primary bg-card p-3">
           <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
             <UserRound className="size-4" />
@@ -494,7 +675,7 @@ function RecipientPicker({
   return (
     <div>
       <label htmlFor="toOwner" className="mb-1.5 block text-sm font-medium text-foreground">
-        {t.pages.newMutation.toOwnerLabel}
+        {label}
       </label>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -506,7 +687,7 @@ function RecipientPicker({
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">{t.pages.newMutation.toOwnerHint}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
 
       {query.trim().length >= 4 ? (
         <div className="mt-2 space-y-1.5">

@@ -359,6 +359,8 @@ model Mutation {
   /// The deed (dolil) the transfer rests on.
   deedNumber              String?
   deedDate                DateTime?
+  /// Type-specific metadata: correctionReason, heirRelationship, partitionNote, etc.
+  metadata                Json?
   objectionWindowEndsAt   DateTime?
   approvedAt              DateTime?
   approvedById            String?

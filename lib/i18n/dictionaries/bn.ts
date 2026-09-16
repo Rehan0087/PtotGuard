@@ -1494,10 +1494,30 @@ export const bn: Dictionary = {
       errors: {
         parcelRequired: "এই আবেদন যে দাগ নিয়ে, সেটি বেছে নিন।",
         toOwnerRequired: "নতুন মালিকের নাম লিখুন।",
+        correctionReasonRequired: "সংশোধনের বিবরণ লিখুন।",
+        heirRelationshipRequired: "মৃত মালিকের সাথে আপনার সম্পর্ক উল্লেখ করুন।",
       },
       toOwnerHint: "নতুন মালিকের একটি PlotGuard অ্যাকাউন্ট থাকতে হবে — তাঁর নিবন্ধিত ইমেইল বা ফোন নম্বর দিয়ে খুঁজুন।",
       toOwnerNoMatch: "এর সাথে মিলে এমন কোনো নিবন্ধিত অ্যাকাউন্ট নেই। প্রথমে তাঁকে একটি অ্যাকাউন্ট তৈরি করতে বলুন।",
       changeRecipient: "পরিবর্তন করুন",
+      // Correction-specific
+      correctionReasonLabel: "সংশোধনের কারণ",
+      correctionReasonPlaceholder: "ভুলটি ব্যাখ্যা করুন এবং সঠিক তথ্য কী হওয়া উচিত তা লিখুন (যেমন: নামের বানান ভুল, ভুল দাগ নম্বর)",
+      correctionNote: "কোনো মালিকানা হস্তান্তর হবে না — শুধুমাত্র রেকর্ডকৃত তথ্য সংশোধিত হবে।",
+      // Inheritance-specific
+      heirRelationshipLabel: "মৃত মালিকের সাথে সম্পর্ক",
+      heirRelationshipPlaceholder: "যেমন: পুত্র, কন্যা, স্বামী/স্ত্রী, ভাই",
+      heirNote: "উত্তরাধিকারীর একটি PlotGuard অ্যাকাউন্ট থাকতে হবে — তাঁর ইমেইল বা ফোন নম্বর দিয়ে খুঁজুন।",
+      // Partition-specific
+      partitionNoteLabel: "বণ্টনের বিবরণ",
+      partitionNotePlaceholder: "পক্ষগুলির মধ্যে জমি কীভাবে ভাগ হবে তা বর্ণনা করুন (শেয়ার, পরিমাণ, ব্যবস্থাপনা)",
+      partitionRecipientNote: "প্রধান উত্তরাধিকারী / নতুন রেকর্ডধারী বেছে নিন।",
+      // Review rows
+      rowCorrectionReason: "সংশোধনের কারণ",
+      rowHeirRelationship: "উত্তরাধিকার সম্পর্ক",
+      rowPartitionNote: "বণ্টনের বিবরণ",
+      rowCurrentOwner: "বর্তমান মালিক (অপরিবর্তিত)",
+
     },
 
     fraudReview: {

@@ -52,7 +52,7 @@ export const NAV: Record<Role, PortalNav> = {
   // including what is not built yet, is on `/portal`.
   citizen: {
     portalKey: "citizen",
-    home: "/portal",
+    home: "/dashboard",
     items: [
       { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
       { labelKey: "profile", href: "/profile", icon: UserCog },

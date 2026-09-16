@@ -17,6 +17,10 @@ export const DEMO_PASSWORD = "demo1234";
 
 export const DEMO_ACCOUNTS: DemoAccount[] = [
   { email: "ayesha.siddika@example.bd", name: "Ayesha Siddika", role: "citizen" },
+  { email: "demo2@example.bd", name: "Fatema Begum", role: "citizen" },
+  { email: "demo3@example.bd", name: "Rashed Khan", role: "citizen" },
+  { email: "demo4@example.bd", name: "Noor Jahan", role: "citizen" },
+  { email: "demo5@example.bd", name: "Habib Molla", role: "citizen" },
   {
     email: "n.akter@minland.gov.bd",
     name: "Nasrin Akter",

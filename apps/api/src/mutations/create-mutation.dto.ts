@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsOptional, IsString } from "class-validator";
+import { IsArray, IsIn, IsObject, IsOptional, IsString } from "class-validator";
 
 const TYPES = ["sale", "inheritance", "gift", "partition", "correction"] as const;
 const PAYMENT_METHODS = ["bkash", "nagad", "card"] as const;
@@ -13,8 +13,10 @@ export class CreateMutationDto {
   // A registered account, not a typed name — see MutationsController's own
   // note on why this can't be free text if approval is ever going to
   // actually move ownership.
+  // Optional for "correction" type — no ownership change occurs.
+  @IsOptional()
   @IsString()
-  toOwnerId!: string;
+  toOwnerId?: string;
 
   @IsOptional()
   @IsString()
@@ -35,4 +37,9 @@ export class CreateMutationDto {
   // reached the payment step hasn't reached submit either.
   @IsIn(PAYMENT_METHODS)
   paymentMethod!: (typeof PAYMENT_METHODS)[number];
+
+  /** Type-specific metadata: correctionReason, heirRelationship, partitionNote, etc. */
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
 }

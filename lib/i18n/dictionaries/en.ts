@@ -1545,10 +1545,30 @@ export const en = {
       errors: {
         parcelRequired: "Select the parcel this application is about.",
         toOwnerRequired: "Enter the name of the new owner.",
+        correctionReasonRequired: "Describe the correction to be made.",
+        heirRelationshipRequired: "Enter your relationship to the deceased owner.",
       },
       toOwnerHint: "The new owner needs a PlotGuard account — search by the email or phone they registered with.",
       toOwnerNoMatch: "No registered account matches that. Ask them to create one first.",
       changeRecipient: "Change",
+      // Correction-specific
+      correctionReasonLabel: "Correction reason",
+      correctionReasonPlaceholder: "Explain the error and what the correct information should be (e.g. name misspelling, wrong plot number)",
+      correctionNote: "No ownership transfer occurs — only the recorded details will be corrected.",
+      // Inheritance-specific
+      heirRelationshipLabel: "Relationship to deceased",
+      heirRelationshipPlaceholder: "e.g. Son, Daughter, Spouse, Brother",
+      heirNote: "The heir must have a PlotGuard account — search by their email or phone.",
+      // Partition-specific
+      partitionNoteLabel: "Partition schedule",
+      partitionNotePlaceholder: "Describe how the land is divided among the parties (shares, areas, arrangement)",
+      partitionRecipientNote: "Select the lead heir / primary recipient who will hold the new record.",
+      // Review rows
+      rowCorrectionReason: "Correction reason",
+      rowHeirRelationship: "Heir relationship",
+      rowPartitionNote: "Partition schedule",
+      rowCurrentOwner: "Current owner (unchanged)",
+
     },
 
     fraudReview: {
