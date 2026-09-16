@@ -1,6 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, HttpCode, Param, Patch, Post, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -114,6 +126,8 @@ export class RevenueCasesController {
    * Callable again while already `hearing-scheduled` so a date can be
    * corrected without a separate reschedule endpoint.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/schedule-hearing")
   async scheduleHearing(
     @Param("id") id: string,

@@ -34,6 +34,8 @@ import {
   executionGate,
   hearingTransition,
   isHearingOpen,
+  passwordResetGate,
+  roleChangeGate,
   extractionReview,
   filingReview,
   analyzeGpsTrack,
@@ -338,6 +340,17 @@ function unauthorized(message = "Authentication required") {
   return HttpResponse.json({ error: "unauthorized", message }, { status: 401 });
 }
 
+/**
+ * Mirrors @Roles() on the real controller: the same refusal, in the same
+ * shape, so a screen that works against the fixture API works against the
+ * real one and a screen that is refused is refused by both.
+ */
+function requireRole(request: Request, ...roles: User["role"][]) {
+  return roles.includes(currentUser(request).role)
+    ? null
+    : forbidden("This portal is restricted to the assigned role");
+}
+
 function forbidden(message = "This portal is restricted to the assigned role") {
   return HttpResponse.json({ error: "forbidden", message }, { status: 403 });
 }
@@ -500,9 +513,13 @@ export const handlers = [
     const normalizedEmail = body.email?.trim().toLowerCase();
     const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail)
       ?? (account ? db.users.find((candidate) => candidate.id === db.CURRENT_USER_BY_ROLE[account.role]) : undefined);
-    if (!user || user.status !== "active" || body.password !== DEMO_PASSWORD) {
+    // Mirrors auth.controller.ts: suspended refuses, an invitation is taken
+    // up by using it. The password itself stays the fixture one here — the
+    // mock has never checked a real hash.
+    if (!user || user.status === "suspended" || body.password !== DEMO_PASSWORD) {
       return unauthorized("Invalid email or password");
     }
+    if (user.status === "invited") user.status = "active";
     return HttpResponse.json({
       user,
       tokens: {
@@ -604,6 +621,8 @@ export const handlers = [
 
   http.post(`${API}/jurisdictions`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const body = (await request.json()) as Partial<Jurisdiction>;
     const draft = {
       name: (body.name ?? "").trim(),
@@ -633,6 +652,8 @@ export const handlers = [
 
   http.patch(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const target = db.jurisdictions.find((j) => j.id === params.id);
     if (!target) return notFound("Jurisdiction not found");
 
@@ -671,6 +692,8 @@ export const handlers = [
 
   http.delete(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const index = db.jurisdictions.findIndex((j) => j.id === params.id);
     if (index === -1) return notFound("Jurisdiction not found");
 
@@ -962,8 +985,10 @@ export const handlers = [
   }),
 
   // Documents --------------------------------------------------------------
-  http.post(`${API}/documents/:id/reprocess`, async ({ params }) => {
+  http.post(`${API}/documents/:id/reprocess`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     doc.ocrStatus = "processing";
@@ -981,6 +1006,8 @@ export const handlers = [
    */
   http.patch(`${API}/documents/:id/decision`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     const { decision } = (await request.json()) as {
@@ -1033,6 +1060,8 @@ export const handlers = [
   // fields a human keyed in.
   http.patch(`${API}/documents/:id/fields`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     const { fields } = (await request.json()) as { fields: Record<string, string> };
@@ -2016,6 +2045,8 @@ export const handlers = [
 
   http.patch(`${API}/revenue-cases/:id/schedule-hearing`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (!application.paidAt) {
@@ -2129,6 +2160,8 @@ export const handlers = [
   // under-review. Mirrors acquisition.controller.ts.
   http.post(`${API}/acquisition/notice`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as {
       parcelId: string;
@@ -2530,6 +2563,8 @@ export const handlers = [
 
   http.patch(`${API}/service-applications/:id/decision`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (application.status === "draft") {
@@ -2618,6 +2653,8 @@ export const handlers = [
    */
   http.patch(`${API}/disputes/:id/execute`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const dispute = db.disputes.find((d) => d.id === params.id);
     if (!dispute) return notFound("Dispute not found");
 
@@ -3387,6 +3424,8 @@ export const handlers = [
   // Hearings ---------------------------------------------------------------
   http.patch(`${API}/hearings/:id/ruling`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
     const { ruling } = (await request.json()) as { ruling: string };
@@ -3614,6 +3653,8 @@ export const handlers = [
 
   http.post(`${API}/hearings/:id/sessions`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
 
@@ -3690,6 +3731,8 @@ export const handlers = [
   // hearing is over that record. Mirrors hearings.controller.ts's convene().
   http.post(`${API}/hearings`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const body = (await request.json()) as { disputeId: string; hearingDate: string };
     const me = currentUser(request);
 
@@ -3772,14 +3815,60 @@ export const handlers = [
   }),
 
   // Audit ------------------------------------------------------------------
-  http.get(`${API}/audit/verify`, async () => {
+  http.get(`${API}/audit/verify`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     return HttpResponse.json(await verifyAuditChain());
   }),
 
-  // The entity types actually present, so the filter offers real options.
-  http.get(`${API}/audit/entity-types`, async () => {
+  /** Mirrors AdminDashboardController — counts, not queues, and no chain walk. */
+  http.get(`${API}/admin/dashboard`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") {
+      return forbidden("Administrator access required.");
+    }
+    const CLOSED_SERVICES = ["approved", "rejected", "withdrawn"];
+    const TERMINAL_MUTATIONS = ["complete", "rejected"];
+    const CLOSED_DISPUTES = ["resolved", "rejected", "withdrawn"];
+    const CLOSED_FIELD_REPORTS = ["completed", "cancelled"];
+    const OPEN_HEARINGS = ["scheduled", "in-hearing", "deliberation"];
+    const ROLE_LIST = ["citizen", "land-office", "field-agent", "mediator", "admin"] as const;
+
+    const chain = await getAuditChain();
+    const newest = [...chain].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const byStatus = (status: string) => db.users.filter((u) => u.status === status).length;
+
+    return HttpResponse.json({
+      queues: {
+        serviceApplications: db.serviceApplications.filter((a) => !CLOSED_SERVICES.includes(a.status)).length,
+        mutations: db.mutations.filter((m) => !TERMINAL_MUTATIONS.includes(m.status)).length,
+        disputes: db.disputes.filter((d) => !CLOSED_DISPUTES.includes(d.status)).length,
+        hearings: db.hearings.filter((h) => OPEN_HEARINGS.includes(h.status)).length,
+        fieldReports: db.fieldReports.filter((r) => !CLOSED_FIELD_REPORTS.includes(r.status)).length,
+        documentsToVerify: db.documents.filter((d) => d.verificationStatus === "unverified").length,
+      },
+      accounts: {
+        total: db.users.length,
+        active: byStatus("active"),
+        suspended: byStatus("suspended"),
+        invited: byStatus("invited"),
+        byRole: Object.fromEntries(
+          ROLE_LIST.map((role) => [role, db.users.filter((u) => u.role === role).length]),
+        ),
+      },
+      ledger: {
+        events: chain.length,
+        ...(newest[0] ? { lastAt: newest[0].createdAt } : {}),
+      },
+      jurisdictionCount: db.jurisdictions.length,
+      recentAudit: newest.slice(0, 5),
+    });
+  }),
+
+  // The entity types actually present, so the filter offers real options.
+  http.get(`${API}/audit/entity-types`, async ({ request }) => {
+    await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     const chain = await getAuditChain();
     return HttpResponse.json([...new Set(chain.map((e) => e.entityType))].sort());
   }),
@@ -3787,6 +3876,7 @@ export const handlers = [
   // Full ledger (admin), filtered and paged — mirrors AuditController.list().
   http.get(`${API}/audit`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     const url = new URL(request.url);
     const chain = await getAuditChain();
     const p = (key: string) => url.searchParams.get(key)?.trim() || undefined;
@@ -3876,6 +3966,82 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
+  /** Mirrors UsersController.invite(). */
+  http.post(`${API}/users`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
+
+    const body = (await request.json()) as Partial<{
+      name: string;
+      email: string;
+      role: User["role"];
+      jurisdictionId: string;
+      title: string;
+    }>;
+    const email = body.email?.trim().toLowerCase();
+    if (!body.name?.trim() || !email || !body.role || !body.jurisdictionId) {
+      return badRequest("Missing required fields");
+    }
+    if (db.users.some((u) => u.email.toLowerCase() === email)) {
+      return conflict("An account with that email already exists.");
+    }
+    if (!db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
+      return notFound("Jurisdiction not found");
+    }
+
+    const user: User = {
+      id: `usr-${Math.random().toString(36).slice(2, 10)}`,
+      name: body.name.trim(),
+      email,
+      role: body.role,
+      jurisdictionId: body.jurisdictionId,
+      ...(body.title?.trim() ? { title: body.title.trim() } : {}),
+      status: "invited",
+      createdAt: new Date().toISOString(),
+    } as User;
+    db.users.push(user);
+
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: user.name, email: user.email, role: user.role },
+    });
+
+    // The fixture API authenticates on the demo password, so the issued one
+    // is cosmetic here — the shape matches, which is what parity means.
+    return HttpResponse.json(
+      { user, temporaryPassword: Math.random().toString(36).slice(2, 10) },
+      { status: 201 },
+    );
+  }),
+
+  /** Mirrors UsersController.resetPassword(). */
+  http.post(`${API}/users/:id/password-reset`, async ({ params, request }) => {
+    await latency();
+    const user = db.users.find((u) => u.id === params.id);
+    if (!user) return notFound("User not found");
+
+    const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
+
+    const review = passwordResetGate({ status: user.status });
+    if (!review.canReset) return unprocessable({ status: review.blockers[0] });
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: user.name, passwordReset: "true" },
+    });
+
+    return HttpResponse.json({ temporaryPassword: Math.random().toString(36).slice(2, 10) });
+  }),
+
   /** Mirrors UsersController.update() — see its own note on scope. */
   http.patch(`${API}/users/:id`, async ({ params, request }) => {
     await latency();
@@ -3885,11 +4051,17 @@ export const handlers = [
     const body = (await request.json()) as Partial<{
       status: "active" | "suspended";
       jurisdictionId: string;
+      role: User["role"];
     }>;
 
     const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
     if (body.status === "suspended" && user.id === me.id) {
       return conflict("You cannot suspend your own account.");
+    }
+    if (body.role) {
+      const review = roleChangeGate(me.id, { id: user.id, role: user.role }, body.role);
+      if (!review.canChange) return unprocessable({ role: review.blockers[0] });
     }
     if (body.jurisdictionId && !db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
       return notFound("Jurisdiction not found");
@@ -3897,6 +4069,7 @@ export const handlers = [
 
     if (body.status) user.status = body.status;
     if (body.jurisdictionId) user.jurisdictionId = body.jurisdictionId;
+    if (body.role) user.role = body.role;
 
     await appendAudit({
       entityType: "user",
@@ -3908,6 +4081,7 @@ export const handlers = [
         name: user.name,
         ...(body.status ? { status: user.status } : {}),
         ...(body.jurisdictionId ? { jurisdictionId: user.jurisdictionId } : {}),
+        ...(body.role ? { role: user.role } : {}),
       },
     });
 
@@ -3921,6 +4095,8 @@ export const handlers = [
 
   http.patch(`${API}/policies`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const updates = (await request.json()) as Partial<Policy>;
     // Recorded as before/after: a fee or a threshold changing is exactly the
     // kind of thing someone later needs to date precisely.

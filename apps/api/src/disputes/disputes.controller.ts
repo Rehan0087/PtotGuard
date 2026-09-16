@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import {
   activeRestrictions,
@@ -15,6 +26,9 @@ import {
   type RulingOutcome,
   type User,
 } from "@plotguard/rules";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -241,6 +255,10 @@ export class DisputesController {
    * which writes more than a status. `disputeTransition()` is the same gate
    * the mediator's screen uses to decide what to offer.
    */
+  // Both roles that handle a case: the mediator on their own screen, the
+  // officer on the dispute record. A party to the case cannot move it.
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("mediator", "land-office")
   @Patch(":id/status")
   async updateStatus(
     @Param("id") id: string,
@@ -321,6 +339,8 @@ export class DisputesController {
    * ruling is executed: it unblocks the record for the real transfer
    * channel rather than reimplementing one here.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/execute")
   async execute(@Param("id") id: string, @Body() body: ExecuteRulingDto, @Req() req: Request) {
     const dispute = await this.prisma.dispute.findUnique({ where: { id } });

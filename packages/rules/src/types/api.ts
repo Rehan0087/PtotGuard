@@ -24,6 +24,7 @@ import type {
   FieldSurveySession,
   Hearing,
   AuditEvent,
+  Role,
   DocumentType,
   VerificationStatus,
 } from ".";
@@ -247,6 +248,41 @@ export interface LandTaxCollection {
   };
   holdings: LandTaxCollectionHolding[];
   payments: LandTaxPaymentRecord[];
+}
+
+/**
+ * What an administrator needs on arrival: what is waiting on somebody,
+ * who can get in, and how the ledger is growing.
+ *
+ * Counts rather than queues — an administrator governs the system, they do
+ * not work its cases, so each number is a door into the screen that does.
+ * Chain verification is deliberately absent: it walks every event, and a
+ * dashboard should not do that on every load. The audit screen has the
+ * button.
+ */
+export interface AdminDashboard {
+  queues: {
+    serviceApplications: number;
+    mutations: number;
+    disputes: number;
+    hearings: number;
+    fieldReports: number;
+    documentsToVerify: number;
+  };
+  accounts: {
+    total: number;
+    active: number;
+    suspended: number;
+    invited: number;
+    byRole: Record<Role, number>;
+  };
+  ledger: {
+    events: number;
+    lastAt?: ISODateString;
+  };
+  jurisdictionCount: number;
+  /** The last handful of ledger entries, so the page shows events and not only totals. */
+  recentAudit: AuditEvent[];
 }
 
 export interface LandOfficerDashboard {

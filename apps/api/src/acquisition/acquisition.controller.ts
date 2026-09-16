@@ -1,6 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, HttpCode, Param, Patch, Post, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError } from "../common/domain-exceptions";
@@ -32,6 +44,8 @@ export class AcquisitionController {
     private readonly audit: AuditService,
   ) {}
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Post("notice")
   @HttpCode(201)
   async issueNotice(@Body() body: IssueNoticeDto, @Req() req: Request) {

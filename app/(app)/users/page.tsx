@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { UserRound } from "lucide-react";
+import { KeyRound, UserPlus, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -17,7 +19,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useUsers, useJurisdictions, useUpdateUser, useSession } from "@/hooks/queries";
+import {
+  useInviteUser,
+  useJurisdictions,
+  useResetUserPassword,
+  useSession,
+  useUpdateUser,
+  useUsers,
+} from "@/hooks/queries";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import { useJurisdictionName } from "@/components/jurisdiction-name";
@@ -32,18 +41,24 @@ function UserRow({
   jurisdictions,
   jName,
   isSelf,
+  onIssued,
 }: {
   user: User;
   jurisdictions: Jurisdiction[];
   jName: (id: string) => string;
   isSelf: boolean;
+  /** A password the administrator must read now; the page shows it once. */
+  onIssued: (name: string, password: string) => void;
 }) {
   const dict = useT();
   const t = dict.pages.users;
   const s = useStatusMeta();
   const update = useUpdateUser(user.id);
+  const resetPassword = useResetUserPassword(user.id);
   const [confirming, setConfirming] = useState(false);
   const selfSuspendBlocked = isSelf && user.status === "active";
+  // passwordResetGate()'s answer, shown before the endpoint has to give it.
+  const resetBlocked = user.status === "invited";
 
   function onError() {
     toast.error(t.failedTitle, {
@@ -97,10 +112,31 @@ function UserRow({
           </div>
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground">
-        {/* Role reassignment isn't offered here — see UsersController's own
-            note on why account creation and role changes stay out. */}
-        {dict.roles[user.role]}
+      <TableCell>
+        {/* Never your own: roleChangeGate() refuses it, because an admin who
+            can demote themselves can lock the registry out of itself. */}
+        <select
+          className={selectClass}
+          value={user.role}
+          disabled={isSelf || update.isPending}
+          title={isSelf ? t.cannotChangeOwnRole : undefined}
+          onChange={(e) =>
+            update.mutate(
+              { role: e.target.value as Role },
+              {
+                onSuccess: () =>
+                  toast.success(t.updatedTitle, { description: t.roleUpdatedBody(user.name) }),
+                onError,
+              },
+            )
+          }
+        >
+          {ROLES.map((r) => (
+            <option key={r} value={r}>
+              {dict.roles[r]}
+            </option>
+          ))}
+        </select>
       </TableCell>
       <TableCell>
         <select
@@ -145,17 +181,34 @@ function UserRow({
             </div>
           </div>
         ) : (
-          <Button
-            size="xs"
-            variant={user.status === "suspended" ? "secondary" : "outline"}
-            disabled={selfSuspendBlocked}
-            title={selfSuspendBlocked ? t.cannotSuspendSelf : undefined}
-            onClick={() =>
-              user.status === "suspended" ? toggleStatus() : setConfirming(true)
-            }
-          >
-            {user.status === "suspended" ? t.reactivate : t.suspend}
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="xs"
+              variant={user.status === "suspended" ? "secondary" : "outline"}
+              disabled={selfSuspendBlocked}
+              title={selfSuspendBlocked ? t.cannotSuspendSelf : undefined}
+              onClick={() =>
+                user.status === "suspended" ? toggleStatus() : setConfirming(true)
+              }
+            >
+              {user.status === "suspended" ? t.reactivate : t.suspend}
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={resetBlocked || resetPassword.isPending}
+              title={resetBlocked ? t.cannotResetInvited : undefined}
+              onClick={() =>
+                resetPassword.mutate(undefined, {
+                  onSuccess: (result) => onIssued(user.name, result.temporaryPassword),
+                  onError: () => toast.error(t.failedTitle),
+                })
+              }
+            >
+              <KeyRound className="size-3.5" />
+              {t.resetPassword}
+            </Button>
+          </div>
         )}
       </TableCell>
     </TableRow>
@@ -176,6 +229,39 @@ export default function UsersPage() {
   const { data: jurisdictions = [] } = useJurisdictions();
   const users = data?.items ?? [];
 
+  const invite = useInviteUser();
+  const [inviting, setInviting] = useState(false);
+  const [issued, setIssued] = useState<{ name: string; password: string } | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    role: "citizen" as Role,
+    jurisdictionId: "",
+    title: "",
+  });
+  const u = t.pages.users;
+
+  function submitInvite() {
+    invite.mutate(
+      {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        role: form.role,
+        jurisdictionId: form.jurisdictionId || jurisdictions[0]?.id || "",
+        ...(form.title.trim() ? { title: form.title.trim() } : {}),
+      },
+      {
+        onSuccess: (result) => {
+          setIssued({ name: result.user.name, password: result.temporaryPassword });
+          setInviting(false);
+          setForm({ name: "", email: "", role: "citizen", jurisdictionId: "", title: "" });
+          toast.success(u.updatedTitle, { description: u.invitedBody(result.user.name) });
+        },
+        onError: () => toast.error(u.failedTitle),
+      },
+    );
+  }
+
   const jName = (id: string) =>
     jurisdictionName(jurisdictions.find((j) => j.id === id)) || t.common.notAvailable;
 
@@ -185,7 +271,92 @@ export default function UsersPage() {
         eyebrow={t.nav.portals.administration}
         title={t.nav.users}
         description={t.pages.users.description}
-      />
+      >
+        <Button onClick={() => setInviting((open) => !open)}>
+          <UserPlus className="size-4" />
+          {u.invite}
+        </Button>
+      </PageHeader>
+
+      {/* Shown once, never again: the hash is all that is kept. */}
+      {issued ? (
+        <Card className="gap-2 border-marker/40 bg-marker/5 px-4 py-3">
+          <h2 className="font-heading text-sm font-semibold text-foreground">
+            {u.issuedTitle(issued.name)}
+          </h2>
+          <code className="tabular w-fit rounded-md bg-background px-2.5 py-1 text-base font-semibold text-foreground ring-1 ring-border">
+            {issued.password}
+          </code>
+          <p className="text-xs text-muted-foreground">{u.issuedBody}</p>
+          <Button size="sm" variant="outline" className="w-fit" onClick={() => setIssued(null)}>
+            {u.issuedDone}
+          </Button>
+        </Card>
+      ) : null}
+
+      {inviting ? (
+        <Card className="gap-3 px-4 py-4">
+          <h2 className="font-heading text-sm font-semibold text-foreground">{u.inviteTitle}</h2>
+          <p className="text-xs text-muted-foreground">{u.inviteBody}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              aria-label={u.nameLabel}
+              placeholder={u.nameLabel}
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            <Input
+              aria-label={u.emailLabel}
+              type="email"
+              placeholder={u.emailLabel}
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+            <select
+              aria-label={u.roleLabel}
+              className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              value={form.role}
+              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
+            >
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {t.roles[r]}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label={u.jurisdictionLabel}
+              className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              value={form.jurisdictionId || jurisdictions[0]?.id || ""}
+              onChange={(e) => setForm((f) => ({ ...f, jurisdictionId: e.target.value }))}
+            >
+              {jurisdictions.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {jName(j.id)}
+                </option>
+              ))}
+            </select>
+            <Input
+              aria-label={u.titleLabel}
+              placeholder={u.titleLabel}
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              disabled={!form.name.trim() || !form.email.trim() || invite.isPending}
+              onClick={submitInvite}
+            >
+              {u.createAccount}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setInviting(false)}>
+              {t.common.cancel}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap gap-1">
         {roleFilters.map((f) => (
@@ -232,6 +403,7 @@ export default function UsersPage() {
                   jurisdictions={jurisdictions}
                   jName={jName}
                   isSelf={u.id === session?.user.id}
+                  onIssued={(name, password) => setIssued({ name, password })}
                 />
               ))}
             </TableBody>

@@ -1,5 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import type { Prisma } from "@prisma/client";
 import {
@@ -14,6 +26,9 @@ import {
   type MutationStatus,
   type ParcelRestriction,
 } from "@plotguard/rules";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -251,6 +266,8 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/start-verification")
   async startVerification(@Param("id") id: string, @Req() req: Request) {
     return this.runAction(id, req, async (tx, { mutation, actor }, now) => {
@@ -275,6 +292,8 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/complete-verification")
   async completeVerification(
     @Param("id") id: string,
@@ -332,6 +351,8 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/decision")
   async decide(
     @Param("id") id: string,
@@ -463,6 +484,8 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/flag-dispute")
   async flagDispute(
     @Param("id") id: string,
