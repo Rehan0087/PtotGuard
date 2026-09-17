@@ -412,12 +412,14 @@ Namjari uses one status sequence in the citizen, Land Office, Field Agent, and r
 `submitted` -> `under-primary-verification` -> `field-investigation` ->
 `field-verification-complete` -> `awaiting-dcr-payment` -> `complete` (or `rejected`).
 Primary verification records deed, Khatian, Khajna-receipt, party, and document checks plus
-officer comments. While the file is in `under-primary-verification`, the officer assigns a field
-agent, whose report includes GPS/photo
-evidence and a sketch-map upload. Final approval requires an order sheet and digital-signature
+officer comments. Completing that step moves the file to `field-investigation`, where the officer
+assigns a field agent. The agent's report includes GPS/photo evidence, a sketch-map upload, and a
+dispute/no-dispute finding. Filing the report does not advance the mutation: the land officer must
+accept it first. If a dispute was reported, the officer records the linked case description before
+making the final decision. Final approval requires an order sheet and digital-signature
 confirmation, generates a Mutation Khatian number, and opens DCR payment.
 
-Disputes run in parallel: either the officer or field agent can create a linked mediator case.
+Disputes run in parallel: the field agent reports the finding and the officer creates the linked mediator case.
 The mutation and parcel record show `disputed`, while the assigned officer's workflow remains
 available. The API, mock handlers, and shared rules enforce the same transitions.
 
@@ -472,7 +474,7 @@ existing `/decision` verb.
 
 ### Assigning field surveys
 
-`/agents` is the booking board: mutations in primary verification with nobody going to inspect
+`/agents` is the booking board: mutations whose primary verification is complete and have nobody going to inspect
 the land, the roster
 and what each agent is carrying, and the visits already in flight. The roster tiles double as
 the filter for the visit list.
@@ -487,13 +489,13 @@ the filter for the visit list.
 - **A suspended account can't be given work**, full stop.
 - **`rankCandidates()` puts the cheapest trip first.** An agent with an open visit already booked
   on that parcel leads the list — one trip covers both jobs. After that it sorts by load.
-- **`mutationsNeedingAgent()`** fills the board from `under-primary-verification` mutations with
+- **`mutationsNeedingAgent()`** fills the board from `field-investigation` mutations with
   no non-cancelled field report. A cancelled visit puts the mutation back for reassignment.
 - **`PURPOSE_FOR_MUTATION`** pre-selects the survey the mutation type normally calls for. The
   officer can change it.
 
 Booking posts to `POST /field-reports` with the mutation, agent, and date. Both the live API and
-mock API accept mutation assignments only during primary verification and reject duplicate
+mock API accept mutation assignments only after primary verification, during `field-investigation`, and reject duplicate
 non-cancelled visits. The preview persists the resulting report and audit event across refreshes.
 
 ### Carrying out the survey
@@ -502,6 +504,12 @@ non-cancelled visits. The preview persists the resulting report and audit event 
 standing on the land. It moves the visit along its status ladder (assigned → accepted → en
 route → on site), collects GPS points and photos, and takes the findings that the case will
 actually read. `/visits/[id]` remains as a protected compatibility route.
+
+Filing a report stores the agent's dispute/no-dispute finding but does not advance the mutation.
+The assigned land officer must explicitly accept the completed investigation; that transactional
+review records the officer and time, then advances the mutation to `field-verification-complete`.
+If the agent reported a dispute, the officer must record its description before approving or
+rejecting the mutation. Final decisions are refused until this sequence is complete.
 
 `field-capture.ts` (`filingReview`) is the pure rule, and it is a rule about *evidence*:
 

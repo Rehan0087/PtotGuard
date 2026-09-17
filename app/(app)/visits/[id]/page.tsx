@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useFieldReport, useAddFieldReportMedia, useAcceptFieldReport, useUpdateFieldReport, useFlagFieldReportDispute } from "@/hooks/queries";
+import { useFieldReport, useAddFieldReportMedia, useAcceptFieldReport, useUpdateFieldReport } from "@/hooks/queries";
 import { useBoundaryWalk } from "@/hooks/use-boundary-walk";
 import { filingReview, type FilingBlocker } from "@plotguard/rules";
 import { formatCoord } from "@/lib/format";
@@ -53,7 +53,6 @@ export default function CapturePage() {
   const addMedia = useAddFieldReportMedia(id);
   const acceptCase = useAcceptFieldReport();
   const updateReport = useUpdateFieldReport(id);
-  const flagDispute = useFlagFieldReportDispute(id);
   const [caption, setCaption] = useState("");
   const [notes, setNotes] = useState<string | null>(null);
   const [disputeFound, setDisputeFound] = useState(false);
@@ -106,8 +105,10 @@ export default function CapturePage() {
   };
   const file = async () => {
     try {
-      await walk.complete(draftNotes);
-      if (disputeFound) await flagDispute.mutateAsync(disputeDescription.trim() || draftNotes);
+      await walk.complete(draftNotes, {
+        disputeFound,
+        ...(disputeFound ? { disputeDescription: disputeDescription.trim() || draftNotes } : {}),
+      });
       toast.success(t.pages.capture.filed);
       if (walk.online) void refetch();
     } catch { toast.error(t.common.somethingWentWrong); }

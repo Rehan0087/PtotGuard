@@ -1228,6 +1228,14 @@ export const en = {
       scheduledFor: "Scheduled for",
       fieldReport: "Field verification report",
       fieldInvestigationPending: "Field investigation begins after primary verification.",
+      fieldFinding: "Agent finding",
+      disputeReported: "Dispute reported",
+      noDisputeReported: "No dispute reported",
+      agentDisputeDescription: "Agent's dispute notes",
+      acceptInvestigation: "Accept investigation",
+      investigationAccepted: "Accepted by land office",
+      investigationAcceptedTitle: "Field investigation accepted",
+      investigationAcceptFailed: "Could not accept the field investigation",
       objections: "Objections",
       objectionTotal: "Total objections",
       objectionUnresolved: "Unresolved",
@@ -1507,7 +1515,7 @@ export const en = {
 
     agents: {
       description:
-        "Assign field agents to mutations during primary verification, and see who is carrying what. An agent has to cover the parcel's jurisdiction — sending someone outside theirs takes a deliberate override.",
+        "Assign field agents after primary verification, and see who is carrying what. An agent has to cover the parcel's jurisdiction — sending someone outside theirs takes a deliberate override.",
       roster: "Agents on the roll",
       rosterTileAria: (name: string, load: number) =>
         `${name}, ${n(load)} open ${load === 1 ? "visit" : "visits"}`,
@@ -1519,9 +1527,9 @@ export const en = {
       needsAgent: "Needs an agent",
       loading: "Loading…",
       openCases: (count: number) =>
-        `${n(count)} primary-verification ${count === 1 ? "mutation" : "mutations"} with nobody booked`,
-      allBookedTitle: "Every primary-verification mutation has an agent",
-      allBookedBody: "A mutation appears here after primary verification starts and until a visit is booked.",
+        `${n(count)} field-investigation ${count === 1 ? "mutation" : "mutations"} with nobody booked`,
+      allBookedTitle: "Every field-investigation mutation has an agent",
+      allBookedBody: "A mutation appears here after primary verification is completed and until a visit is booked.",
       inTheField: "In the field",
       showEveryAgent: "Show every agent",
       noneForAgentTitle: "Nothing open for this agent",

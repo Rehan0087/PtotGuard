@@ -403,7 +403,7 @@ function JobCard({
             {t.pages.agents.assign}
           </Button>
           <Link
-            href="/mutations?status=under-primary-verification"
+            href="/mutations?status=field-investigation"
             className={cn(
               buttonVariants({ variant: "ghost", size: "sm" }),
               "ml-auto text-muted-foreground",
@@ -426,7 +426,7 @@ export default function AgentsPage() {
   const s = useStatusMeta();
   const resolveJurisdictionName = useJurisdictionName();
   const { data: mutationsData, isLoading: mutationsLoading } = useMutations({
-    status: "under-primary-verification",
+    status: "field-investigation",
     pageSize: 100,
   });
   const { data: reportsData, isLoading: reportsLoading } = useFieldReports({ pageSize: 100 });
@@ -634,7 +634,7 @@ export default function AgentsPage() {
                 ) : null}
                 {v.mutationId ? (
                   <Link
-                    href="/mutations?status=under-primary-verification"
+                    href="/mutations?status=field-investigation"
                     className={cn(
                       buttonVariants({ variant: "ghost", size: "sm" }),
                       "w-fit text-muted-foreground",

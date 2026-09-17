@@ -14,7 +14,7 @@ type ReportFixture = {
   parcelId: string;
   parcelDagNo: string;
   disputeId: string | null;
-  mutationId: null;
+  mutationId: string | null;
   purpose: string;
   status: string;
   assignedAgentId: string;
@@ -26,6 +26,10 @@ type ReportFixture = {
   photos: unknown[];
   notes: string | null;
   submittedAt: Date | null;
+  disputeFound?: boolean | null;
+  disputeDescription?: string | null;
+  reviewedAt?: Date | null;
+  reviewedById?: string | null;
 };
 
 type SurveyFixture = {
@@ -90,6 +94,7 @@ describe("field report assignment authorization", () => {
   let auditEntries: Array<Record<string, unknown>>;
   let gpsPoints: GpsPointFixture[];
   let syncReceipts: Array<Record<string, unknown>>;
+  let mutation: { id: string; status: string; assignedOfficerId: string; updatedAt: Date };
 
   beforeEach(async () => {
     process.env.AUTH_TOKEN_SECRET = "test-secret-that-is-long-enough";
@@ -123,6 +128,12 @@ describe("field report assignment authorization", () => {
     notifications = [];
     gpsPoints = [];
     syncReceipts = [];
+    mutation = {
+      id: "m-1",
+      status: "field-investigation",
+      assignedOfficerId: "usr-officer",
+      updatedAt: new Date("2026-09-10T08:00:00Z"),
+    };
 
     const fieldReport = {
       findMany: async ({ where }: { where: { assignedAgentId?: string } }) =>
@@ -134,10 +145,11 @@ describe("field report assignment authorization", () => {
           : null,
       findUnique: async ({ where }: { where: { id: string } }) =>
         where.id === report.id ? report : null,
-      updateMany: async ({ where, data }: { where: { id: string; assignedAgentId: string; status: string }; data: Record<string, unknown> }) => {
+      updateMany: async ({ where, data }: { where: { id: string; assignedAgentId?: string; status: string; reviewedAt?: null }; data: Record<string, unknown> }) => {
         if (
           where.id !== report.id ||
-          where.assignedAgentId !== report.assignedAgentId ||
+          (where.assignedAgentId !== undefined && where.assignedAgentId !== report.assignedAgentId) ||
+          (where.reviewedAt === null && report.reviewedAt != null) ||
           where.status !== report.status
         ) {
           return { count: 0 };
@@ -266,7 +278,15 @@ describe("field report assignment authorization", () => {
           return data;
         },
       },
-      mutation: { findMany: async () => [] },
+      mutation: {
+        findMany: async () => [],
+        findUnique: async ({ where }: { where: { id: string } }) => where.id === mutation.id ? mutation : null,
+        updateMany: async ({ where, data }: { where: { id: string; status: string; updatedAt: Date }; data: Partial<typeof mutation> }) => {
+          if (where.id !== mutation.id || where.status !== mutation.status || where.updatedAt !== mutation.updatedAt) return { count: 0 };
+          mutation = { ...mutation, ...data };
+          return { count: 1 };
+        },
+      },
       $transaction: async (operation: (tx: unknown) => Promise<unknown>) => operation(prismaFixture),
     };
     auditEntries = [];
@@ -354,6 +374,36 @@ describe("field report assignment authorization", () => {
       .post("/field-reports/fr-1/accept")
       .set("authorization", token)
       .expect(409);
+  });
+
+  it("lets the responsible land officer accept a completed mutation investigation", async () => {
+    report.status = "completed";
+    report.mutationId = mutation.id;
+    report.submittedAt = new Date("2026-09-15T09:00:00Z");
+    report.disputeFound = false;
+
+    const response = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/review")
+      .set("authorization", bearer("usr-officer", "land-office"))
+      .expect(200);
+
+    expect(response.body.reviewedAt).toBeTruthy();
+    expect(response.body.reviewedById).toBe("usr-officer");
+    expect(mutation.status).toBe("field-verification-complete");
+    expect(auditEntries.map((entry) => entry.action)).toEqual([
+      "review-accepted",
+      "field-verification-complete",
+    ]);
+  });
+
+  it("does not let the field agent accept their own investigation as the officer review", async () => {
+    report.status = "completed";
+    report.mutationId = mutation.id;
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/review")
+      .set("authorization", bearer("usr-agent", "field-agent"))
+      .expect(403);
+    expect(mutation.status).toBe("field-investigation");
   });
 
   it("does not expose or accept another agent's case", async () => {

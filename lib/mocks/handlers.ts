@@ -1248,9 +1248,18 @@ export const handlers = [
       actor,
       now,
       approving ? "canApprove" : "canReject",
-      approving ? ["field-verification-complete"] : ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete"],
+      ["field-verification-complete"],
     );
     if (gateError) return gateError;
+    const acceptedFieldReport = db.fieldReports
+      .filter((report) => report.mutationId === mutation.id && report.status === "completed" && report.reviewedAt)
+      .sort((a, b) => (b.reviewedAt ?? "").localeCompare(a.reviewedAt ?? ""))[0];
+    if (!acceptedFieldReport) {
+      return unprocessable({ fieldReport: { code: "field-investigation-not-accepted" } });
+    }
+    if (acceptedFieldReport.disputeFound === true && !mutation.disputeId) {
+      return unprocessable({ dispute: { code: "dispute-details-required" } });
+    }
     const reason = body.rejectionReason?.trim() ?? "";
     const note = body.approvalNote?.trim();
 
@@ -1354,6 +1363,18 @@ export const handlers = [
     const body = (await request.json()) as { description?: string };
     if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
     if (mutation.disputeId) return conflict("A dispute is already linked to this mutation.");
+    if (mutation.status !== "field-verification-complete") {
+      return unprocessable({ status: { code: "wrong-status", expected: ["field-verification-complete"] } });
+    }
+    const acceptedFieldReport = db.fieldReports
+      .filter((report) => report.mutationId === mutation.id && report.status === "completed" && report.reviewedAt)
+      .sort((a, b) => (b.reviewedAt ?? "").localeCompare(a.reviewedAt ?? ""))[0];
+    if (!acceptedFieldReport) {
+      return unprocessable({ fieldReport: { code: "field-investigation-not-accepted" } });
+    }
+    if (acceptedFieldReport.disputeFound !== true) {
+      return unprocessable({ fieldReport: { code: "no-dispute-reported" } });
+    }
     const now = new Date().toISOString();
     const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
     const dispute = {
@@ -1498,10 +1519,12 @@ export const handlers = [
     const flaggedDocuments = documents.filter((item) => item.verificationStatus === "flagged");
     const activeFieldReports = fieldReports.filter((item) => !["completed", "cancelled"].includes(item.status));
     const liveMutationVisits = new Set(
-      activeFieldReports.flatMap((item) => item.mutationId ? [item.mutationId] : []),
+      fieldReports
+        .filter((item) => item.status !== "cancelled")
+        .flatMap((item) => item.mutationId ? [item.mutationId] : []),
     );
     const needsAgent = activeMutations.filter(
-      (item) => item.status === "under-primary-verification" && !liveMutationVisits.has(item.id),
+      (item) => item.status === "field-investigation" && !liveMutationVisits.has(item.id),
     );
     const openServices = services.filter((item) => !["approved", "rejected", "withdrawn"].includes(item.status));
     const serviceCounts = openServices.reduce<Record<string, number>>((counts, item) => {
@@ -3029,6 +3052,10 @@ export const handlers = [
         report.status = "completed";
         report.submittedAt = now;
         report.notes = notes;
+        report.disputeFound = body.disputeFound ?? false;
+        report.disputeDescription = body.disputeFound
+          ? body.disputeDescription?.trim()
+          : undefined;
         survey.status = "completed";
         survey.completedAt = now;
         survey.version += 1;
@@ -3051,38 +3078,6 @@ export const handlers = [
         actorId: me.id,
         actorName: me.name,
       });
-        }
-
-        const mutation = report.mutationId
-          ? db.mutations.find((candidate) => candidate.id === report.mutationId)
-          : undefined;
-        if (mutation && mutation.status === "field-investigation") {
-          mutation.status = "field-verification-complete";
-          mutation.updatedAt = now;
-          if (body.disputeFound && !mutation.disputeId) {
-            const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
-            const linkedDispute = {
-              id: `ds-${Date.now()}`,
-              caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
-              parcelId: mutation.parcelId,
-              parcelDagNo: mutation.parcelDagNo,
-              type: "boundary" as const,
-              status: "in-mediation" as const,
-              priority: "high" as const,
-              filedById: me.id,
-              filedByName: me.name,
-              filedAt: now,
-              updatedAt: now,
-              description: body.disputeDescription?.trim() || notes,
-              parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
-              assignedAgentId: me.id,
-              assignedMediatorId: mediator?.id,
-              evidenceDocumentIds: mutation.documentIds,
-            };
-            db.disputes.unshift(linkedDispute);
-            mutation.disputeId = linkedDispute.id;
-          }
-          await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "field-verification-complete", actorId: me.id, actorName: me.name, payload: { previousStatus: "field-investigation", newStatus: "field-verification-complete", fieldReportId: report.id, note: notes }, createdAt: now });
         }
 
         await appendAudit({
@@ -3120,33 +3115,42 @@ export const handlers = [
     }
   }),
 
-  http.patch(`${API}/field-reports/:id/flag-dispute`, async ({ params, request }) => {
+  http.post(`${API}/field-reports/:id/review`, async ({ params, request }) => {
     await latency();
-    const me = authenticatedUser(request);
-    if (!me) return unauthorized();
-    if (me.role !== "field-agent") return forbidden();
-    const report = db.fieldReports.find((item) => item.id === params.id && item.assignedAgentId === me.id);
+    const officer = authenticatedUser(request);
+    if (!officer) return unauthorized();
+    if (!isActiveLandOffice(officer)) return forbidden();
+    const report = db.fieldReports.find((item) => item.id === params.id);
     if (!report?.mutationId) return notFound("Mutation field report not found");
+    if (report.status !== "completed") {
+      return unprocessable({ status: { code: "field-report-not-completed" } });
+    }
+    if (report.reviewedAt) return conflict("This field investigation was already accepted");
     const mutation = db.mutations.find((item) => item.id === report.mutationId);
     if (!mutation) return notFound("Mutation not found");
-    if (mutation.disputeId) return HttpResponse.json(report);
-    const body = (await request.json()) as { description?: string };
-    if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
+    if (mutation.assignedOfficerId && mutation.assignedOfficerId !== officer.id) {
+      return conflict("This mutation is assigned to another land officer");
+    }
+    if (mutation.status !== "field-investigation") {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["field-investigation"] } });
+    }
     const now = new Date().toISOString();
-    const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
-    const dispute = {
-      id: `ds-${Date.now()}`, caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
-      parcelId: mutation.parcelId, parcelDagNo: mutation.parcelDagNo,
-      type: "boundary" as const, status: "in-mediation" as const, priority: "high" as const,
-      filedById: me.id, filedByName: me.name, filedAt: now, updatedAt: now,
-      description: body.description.trim(),
-      parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
-      assignedAgentId: me.id, assignedMediatorId: mediator?.id, evidenceDocumentIds: mutation.documentIds,
-    };
-    db.disputes.unshift(dispute);
-    mutation.disputeId = dispute.id;
+    report.reviewedAt = now;
+    report.reviewedById = officer.id;
+    mutation.status = "field-verification-complete";
+    mutation.assignedOfficerId = officer.id;
     mutation.updatedAt = now;
-    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: me.id, actorName: me.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
+    await appendAudit({
+      entityType: "field-report", entityId: report.id, action: "review-accepted",
+      actorId: officer.id, actorName: officer.name,
+      payload: { mutationId: mutation.id, reviewedAt: now }, createdAt: now,
+    });
+    await appendAudit({
+      entityType: "mutation", entityId: mutation.id, action: "field-verification-complete",
+      actorId: officer.id, actorName: officer.name,
+      payload: { previousStatus: "field-investigation", newStatus: "field-verification-complete", fieldReportId: report.id, note: report.notes ?? "" },
+      createdAt: now,
+    });
     return HttpResponse.json(report);
   }),
 
@@ -3256,8 +3260,8 @@ export const handlers = [
     if (mutation && mutation.parcelId !== parcel.id) {
       return unprocessable({ mutationId: { code: "mutation-parcel-mismatch" } });
     }
-    if (mutation && mutation.status !== "under-primary-verification") {
-      return unprocessable({ mutationId: { code: "wrong-status", expected: ["under-primary-verification"] } });
+    if (mutation && mutation.status !== "field-investigation") {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["field-investigation"] } });
     }
     if (mutation && db.fieldReports.some((report) => report.mutationId === mutation.id && report.status !== "cancelled")) {
       return conflict("This mutation already has a field visit.");

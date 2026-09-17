@@ -258,16 +258,16 @@ describe("mutation objection summary", () => {
 });
 
 describe("mutationActionGate", () => {
-  it("allows an unassigned submitted mutation to start verification or be rejected", () => {
+  it("allows an unassigned submitted mutation to start verification without a final decision", () => {
     expect(mutationActionGate(mutation({ status: "submitted" }), "usr-officer", NOW)).toMatchObject({
       canStartVerification: true,
       canCompleteVerification: false,
       canApprove: false,
-      canReject: true,
+      canReject: false,
     });
   });
 
-  it("allows an assigned verification mutation to be completed or rejected", () => {
+  it("allows an assigned verification mutation to be completed without a final decision", () => {
     expect(
       mutationActionGate(
         mutation({ status: "under-primary-verification", assignedOfficerId: "usr-officer" }),
@@ -278,7 +278,7 @@ describe("mutationActionGate", () => {
       canStartVerification: false,
       canCompleteVerification: true,
       canApprove: false,
-      canReject: true,
+      canReject: false,
     });
   });
 
@@ -302,9 +302,9 @@ describe("mutationActionGate", () => {
   });
 
   it.each(["submitted", "under-primary-verification", "field-investigation"] as const)(
-    "allows rejection from the active %s state",
+    "does not allow rejection before the accepted field report from %s",
     (status) => {
-      expect(mutationActionGate(mutation({ status }), "usr-officer", NOW).canReject).toBe(true);
+      expect(mutationActionGate(mutation({ status }), "usr-officer", NOW).canReject).toBe(false);
     },
   );
 

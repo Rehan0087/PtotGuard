@@ -76,11 +76,11 @@ export class LandOfficeDashboardController {
     const flaggedDocuments = documents.filter((item) => item.verificationStatus === "flagged");
     const liveMutationVisits = new Set(
       fieldReports
-        .filter((report) => report.mutationId && !CLOSED_FIELD_REPORTS.includes(report.status))
+        .filter((report) => report.mutationId && report.status !== "cancelled")
         .map((report) => report.mutationId),
     );
     const needsAgent = activeMutations.filter(
-      (item) => item.status === "under-primary-verification" && !liveMutationVisits.has(item.id),
+      (item) => item.status === "field-investigation" && !liveMutationVisits.has(item.id),
     );
     const activeFieldReports = fieldReports.filter((item) => !CLOSED_FIELD_REPORTS.includes(item.status));
     const openServices = services.filter((item) => !CLOSED_SERVICES.includes(item.status));

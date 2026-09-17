@@ -71,7 +71,7 @@ describe("Land Office dashboard", () => {
       openDisputeCount: 1,
       documentsToReviewCount: 1,
       fraudFlagCount: 1,
-      needsAgentCount: 1,
+      needsAgentCount: 0,
       activeFieldVisitCount: 1,
       openServiceCount: 1,
     });

@@ -225,7 +225,7 @@ async function main(): Promise<void> {
     data: [
       { id: "fr-1", parcelId: "p-205", parcelDagNo: "BS-205", disputeId: "ds-402", purpose: "encroachment-check", status: "assigned", assignedAgentId: "usr-agent", assignedAt: new Date("2026-07-22T08:00:00Z"), scheduledFor: new Date("2026-07-24T04:00:00Z"), addressHint: "NW corner, near canal road, Payalgacha", gpsCaptures: [], photos: [] },
       {
-        id: "fr-2", parcelId: "p-142", parcelDagNo: "CS-142/3", disputeId: "ds-417", mutationId: "m-1200", purpose: "boundary-survey", status: "completed", assignedAgentId: "usr-agent", assignedAt: new Date("2026-07-17T09:00:00Z"), acceptedAt: new Date("2026-07-17T09:30:00Z"), scheduledFor: new Date("2026-07-19T04:30:00Z"), submittedAt: new Date("2026-07-19T07:10:00Z"), addressHint: "Eastern edge, paddy field, Rajamehar",
+        id: "fr-2", parcelId: "p-142", parcelDagNo: "CS-142/3", disputeId: "ds-417", mutationId: "m-1200", purpose: "boundary-survey", status: "completed", assignedAgentId: "usr-agent", assignedAt: new Date("2026-07-17T09:00:00Z"), acceptedAt: new Date("2026-07-17T09:30:00Z"), scheduledFor: new Date("2026-07-19T04:30:00Z"), submittedAt: new Date("2026-07-19T07:10:00Z"), reviewedAt: new Date("2026-07-19T08:00:00Z"), reviewedById: "usr-officer", disputeFound: true, disputeDescription: "Boundary occupation reported.", addressHint: "Eastern edge, paddy field, Rajamehar",
         gpsCaptures: [
           { id: "g-1", point: { lat: 23.5494, lng: 90.9895 }, accuracyMeters: 3.2, capturedAt: "2026-07-19T05:00:00Z", label: "NE corner pillar" },
           { id: "g-2", point: { lat: 23.5486, lng: 90.9896 }, accuracyMeters: 4.1, capturedAt: "2026-07-19T05:12:00Z", label: "SE corner pillar" },
