@@ -21,8 +21,9 @@ DB_PASSWORD="${DB_PASSWORD:-plotguard}"
 DB_NAME="${DB_NAME:-plotguard}"
 API_PORT=3001
 WEB_PORT=3000
-LOG_DIR="logs"
-PID_FILE=".demo.pids"
+ROOT_DIR="$PWD"
+LOG_DIR="$ROOT_DIR/logs"
+PID_FILE="$ROOT_DIR/.demo.pids"
 
 mkdir -p "$LOG_DIR"
 
@@ -122,19 +123,23 @@ cmd_start() {
 
   ensure_api_env
 
+  echo "== Shared packages =="
+  pnpm --filter @plotguard/rules build
+
   echo "== Database schema =="
   # Prisma's generated client is not committed. Regenerate it after pulling a
   # schema change, before Nest type-checks the controllers against it.
-  (cd apps/api && pnpm exec prisma generate && pnpm exec prisma migrate deploy)
+  (cd apps/api && pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm db:demo-logins)
 
   echo "== Backend (NestJS) =="
   if is_up "$API_PORT"; then
     echo "  already running on :$API_PORT"
   else
-    (cd apps/api && pnpm dev) >"$LOG_DIR/api.log" 2>&1 &
-    save_pid api "$!"
-    echo "  starting (pid $!, log: $LOG_DIR/api.log)…"
-    wait_for_port "$API_PORT" "backend" 30
+    (cd "$ROOT_DIR/apps/api" && setsid pnpm dev >"$LOG_DIR/api.log" 2>&1 &)
+    echo "  starting backend (log: logs/api.log)…"
+    if wait_for_port "$API_PORT" "backend" 30; then
+      save_pid api "$(port_pid "$API_PORT")"
+    fi
   fi
 
   echo "== Frontend (Next.js) =="
@@ -142,10 +147,11 @@ cmd_start() {
     echo "  already running on :$WEB_PORT"
   else
     # A demo must never quietly fall back to browser-only fixture data.
-    NEXT_PUBLIC_API_MOCKING=disabled pnpm dev >"$LOG_DIR/web.log" 2>&1 &
-    save_pid web "$!"
-    echo "  starting (pid $!, log: $LOG_DIR/web.log)…"
-    wait_for_port "$WEB_PORT" "frontend" 30
+    (cd "$ROOT_DIR" && NEXT_PUBLIC_API_MOCKING=disabled setsid pnpm dev >"$LOG_DIR/web.log" 2>&1 &)
+    echo "  starting frontend (log: logs/web.log)…"
+    if wait_for_port "$WEB_PORT" "frontend" 30; then
+      save_pid web "$(port_pid "$WEB_PORT")"
+    fi
   fi
 
   echo
@@ -176,6 +182,7 @@ cmd_stop() {
       kill "$p" 2>/dev/null
       echo "  stopped process on :$port (pid $p)"
     fi
+    fuser -k "$port/tcp" 2>/dev/null || true
   done
 
   rm -f "$PID_FILE"

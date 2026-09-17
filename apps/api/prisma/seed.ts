@@ -334,6 +334,7 @@ async function main(): Promise<void> {
         residential: 22,
         commercial: 125,
         industrial: 150,
+        mixed: 50,
         vacant: 5
       },
       landTaxAgriculturalExemptionDecimals: 825,
@@ -353,6 +354,7 @@ async function main(): Promise<void> {
         residential: 22,
         commercial: 125,
         industrial: 150,
+        mixed: 50,
         vacant: 5
       },
       landTaxAgriculturalExemptionDecimals: 825,
@@ -379,12 +381,36 @@ async function main(): Promise<void> {
         documentIds: [], feeAmount: 570, paymentMethod: "nagad", transactionId: "TXN-LDT311B",
         paidAt: new Date("2026-09-12T08:15:00Z"), submittedAt: new Date("2026-09-12T08:15:00Z"), decidedAt: new Date("2026-09-12T08:15:00Z"), createdAt: new Date("2026-09-12T08:15:00Z"), updatedAt: new Date("2026-09-12T08:15:00Z"),
       },
+      {
+        id: "sa-tax-d2", applicationNo: "LDT-2026-001002", serviceType: "land-tax", status: "approved",
+        parcelId: "p-d2-2", applicantId: "usr-fatema", assignedOfficerId: "usr-officer",
+        details: { assessmentYear: 2026, decimals: 6.6, arrears: 0, currentYearDue: 145, years: [{ year: 2026, assessed: 145, surcharge: 0, due: 145, isArrear: false }] },
+        documentIds: [], feeAmount: 145, paymentMethod: "bkash", transactionId: "TXN-LDTD2",
+        paidAt: new Date("2026-09-13T09:00:00Z"), submittedAt: new Date("2026-09-13T09:00:00Z"), decidedAt: new Date("2026-09-13T09:00:00Z"), createdAt: new Date("2026-09-13T09:00:00Z"), updatedAt: new Date("2026-09-13T09:00:00Z"),
+      },
+      {
+        id: "sa-tax-d3", applicationNo: "LDT-2026-001003", serviceType: "land-tax", status: "approved",
+        parcelId: "p-d3-1", applicantId: "usr-rashed", assignedOfficerId: "usr-officer",
+        details: { assessmentYear: 2026, decimals: 9.9, arrears: 0, currentYearDue: 1238, years: [{ year: 2026, assessed: 1238, surcharge: 0, due: 1238, isArrear: false }] },
+        documentIds: [], feeAmount: 1238, paymentMethod: "card", transactionId: "TXN-LDTD3",
+        paidAt: new Date("2026-09-14T10:15:00Z"), submittedAt: new Date("2026-09-14T10:15:00Z"), decidedAt: new Date("2026-09-14T10:15:00Z"), createdAt: new Date("2026-09-14T10:15:00Z"), updatedAt: new Date("2026-09-14T10:15:00Z"),
+      },
+      {
+        id: "sa-tax-d5", applicationNo: "LDT-2026-001005", serviceType: "land-tax", status: "payment-pending",
+        parcelId: "p-d5-1", applicantId: "usr-habib", assignedOfficerId: "usr-officer",
+        details: { assessmentYear: 2026, decimals: 95, arrears: 4750, currentYearDue: 4750, years: [{ year: 2025, assessed: 4750, surcharge: 0, due: 4750, isArrear: true }, { year: 2026, assessed: 4750, surcharge: 0, due: 4750, isArrear: false }] },
+        documentIds: [], feeAmount: 9500, paymentMethod: null, transactionId: null,
+        paidAt: null, submittedAt: new Date("2026-09-15T11:00:00Z"), decidedAt: null, createdAt: new Date("2026-09-15T11:00:00Z"), updatedAt: new Date("2026-09-15T11:00:00Z"),
+      },
     ] as Prisma.ServiceApplicationCreateManyInput[],
   });
   await prisma.serviceApplicationEvent.createMany({
     data: [
       { id: "sae-tax-1", applicationId: "sa-tax-1", at: new Date("2026-09-10T06:30:00Z"), type: "payment-recorded", title: "Land development tax paid", actorId: "usr-officer", actorName: "Nasrin Akter" },
       { id: "sae-tax-2", applicationId: "sa-tax-2", at: new Date("2026-09-12T08:15:00Z"), type: "payment-recorded", title: "Land development tax paid", actorId: "usr-officer", actorName: "Nasrin Akter" },
+      { id: "sae-tax-d2", applicationId: "sa-tax-d2", at: new Date("2026-09-13T09:00:00Z"), type: "payment-recorded", title: "Land development tax paid", actorId: "usr-officer", actorName: "Nasrin Akter" },
+      { id: "sae-tax-d3", applicationId: "sa-tax-d3", at: new Date("2026-09-14T10:15:00Z"), type: "payment-recorded", title: "Land development tax paid", actorId: "usr-officer", actorName: "Nasrin Akter" },
+      { id: "sae-tax-d5", applicationId: "sa-tax-d5", at: new Date("2026-09-15T11:00:00Z"), type: "submitted", title: "Application submitted", actorId: "usr-habib", actorName: "Habib Molla" },
     ] as Prisma.ServiceApplicationEventCreateManyInput[],
   });
 
