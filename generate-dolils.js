@@ -28,6 +28,12 @@ const documents = [
   { parcelId: "p-804", fileName: "dolil-804.pdf" },
   { parcelId: "p-888", fileName: "khatian-888.pdf" },
   { parcelId: "p-999", fileName: "dolil-999.pdf" },
+  { parcelId: "p-d2-1", fileName: "dolil-d2-1.pdf" },
+  { parcelId: "p-d2-2", fileName: "dolil-d2-2.pdf" },
+  { parcelId: "p-d3-1", fileName: "dolil-d3-1.pdf" },
+  { parcelId: "p-d4-1", fileName: "dolil-d4-1.pdf" },
+  { parcelId: "p-d5-1", fileName: "dolil-d5-1.pdf" },
+  { parcelId: "p-d5-2", fileName: "dolil-d5-2.pdf" },
 ];
 
 async function main() {
