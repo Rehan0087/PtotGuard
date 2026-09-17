@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowRight, FileText, Loader2, MapPin } from "lucide-react";
+import React, { useState } from "react";
+import { ArrowRight, FileText, Loader2, MapPin, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 import { IdChip } from "@/components/id-chip";
 import { MutationDecisionDialog } from "@/components/mutations/mutation-decision-dialog";
@@ -29,6 +29,7 @@ import {
   useAssignFieldSurvey,
   useFlagMutationDispute,
   useUsers,
+  useRunOcr,
 } from "@/hooks/queries";
 import { mutationActionState } from "@/components/mutations/mutation-action-state";
 import {
@@ -100,6 +101,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
   const start = useStartMutationVerification(detail.mutation.id);
   const assignSurvey = useAssignFieldSurvey();
   const flagDispute = useFlagMutationDispute(detail.mutation.id);
+  const runOcr = useRunOcr();
   const agents = useUsers({ role: "field-agent", pageSize: 50 });
   const [agentId, setAgentId] = useState("");
   const [scheduledFor, setScheduledFor] = useState(() => {
@@ -244,38 +246,76 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                   const previewUrl = document.thumbnailUrl?.trim();
                   const canPreview = isUsableMutationPreviewUrl(previewUrl);
                   return (
-                    <li key={document.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <FileText className="size-4 shrink-0 text-muted-foreground" />
-                          <span className="truncate font-medium text-foreground">{document.fileName}</span>
+                    <React.Fragment key={document.id}>
+                      <li className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <FileText className="size-4 shrink-0 text-muted-foreground" />
+                            <span className="truncate font-medium text-foreground">{document.fileName}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {t.domain.documentType[document.type]} · {f.fileSize(document.sizeBytes)}
+                            {document.pageCount ? ` · ${t.pages.mutations.documentPages(document.pageCount)}` : ""}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {t.pages.mutations.documentUploaded(f.date(document.uploadedAt))}
+                          </p>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {t.domain.documentType[document.type]} · {f.fileSize(document.sizeBytes)}
-                          {document.pageCount ? ` · ${t.pages.mutations.documentPages(document.pageCount)}` : ""}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {t.pages.mutations.documentUploaded(f.date(document.uploadedAt))}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-2">
-                        <StatusMetaBadge meta={s.verification[verificationStatus]} />
-                        {canPreview && previewUrl ? (
-                          <a
-                            href={previewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-                          >
-                            {t.common.view}
-                          </a>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            {t.pages.mutations.documentUnavailable}
-                          </span>
-                        )}
-                      </div>
-                    </li>
+                        <div className="flex shrink-0 flex-col items-end gap-2">
+                          <StatusMetaBadge meta={s.verification[verificationStatus]} />
+                          <div className="flex items-center gap-2">
+                            {canPreview && previewUrl ? (
+                              <a
+                                href={previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                              >
+                                {t.common.view}
+                              </a>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {t.pages.mutations.documentUnavailable}
+                              </span>
+                            )}
+                            {role === "land-office" ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={runOcr.isPending || document.ocrStatus === "processing"}
+                                onClick={() => {
+                                  runOcr.mutate(document.id, {
+                                    onSuccess: () => toast.success("OCR completed"),
+                                    onError: () => toast.error("OCR failed"),
+                                  });
+                                }}
+                              >
+                                {document.ocrStatus === "processing" ? (
+                                  <Loader2 className="size-4 mr-2 animate-spin" />
+                                ) : (
+                                  <ScanLine className="size-4 mr-2" />
+                                )}
+                                Run OCR
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </li>
+                      {document.extractedFields && Object.keys(document.extractedFields).length > 0 ? (
+                        <li className="bg-muted/30 px-3 py-2 text-xs">
+                          <div className="font-medium mb-1 text-muted-foreground">Extracted Fields:</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(document.extractedFields).map(([key, value]) => (
+                              <div key={key}>
+                                <span className="text-muted-foreground">{key}: </span>
+                                <span className="font-medium text-foreground">{value as string}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </li>
+                      ) : null}
+                    </React.Fragment>
                   );
                 })}
               </ul>

@@ -613,6 +613,21 @@ export function useReprocessDocument() {
     mutationFn: (id: string) => api.post<LandDocument>(`/documents/${id}/reprocess`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      qc.invalidateQueries({ queryKey: ["mutation"] });
+      invalidateRecordViews(qc);
+    },
+  });
+}
+
+export function useRunOcr() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<LandDocument>(`/documents/${id}/run-ocr`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      qc.invalidateQueries({ queryKey: ["mutation"] });
       invalidateRecordViews(qc);
     },
   });

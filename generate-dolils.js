@@ -61,15 +61,27 @@ async function main() {
     });
 
     // Page 2
-    const randomImageName = otherImages[Math.floor(Math.random() * otherImages.length)];
-    const randomImgBytes = fs.readFileSync(path.join(DOLIL_DIR, randomImageName));
-    const randomImage = await pdfDoc.embedPng(randomImgBytes);
-    const page2 = pdfDoc.addPage([randomImage.width, randomImage.height]);
-    page2.drawImage(randomImage, {
+    const randomImageName2 = otherImages[Math.floor(Math.random() * otherImages.length)];
+    const randomImgBytes2 = fs.readFileSync(path.join(DOLIL_DIR, randomImageName2));
+    const randomImage2 = await pdfDoc.embedPng(randomImgBytes2);
+    const page2 = pdfDoc.addPage([randomImage2.width, randomImage2.height]);
+    page2.drawImage(randomImage2, {
       x: 0,
       y: 0,
-      width: randomImage.width,
-      height: randomImage.height,
+      width: randomImage2.width,
+      height: randomImage2.height,
+    });
+
+    // Page 3
+    const randomImageName3 = otherImages[Math.floor(Math.random() * otherImages.length)];
+    const randomImgBytes3 = fs.readFileSync(path.join(DOLIL_DIR, randomImageName3));
+    const randomImage3 = await pdfDoc.embedPng(randomImgBytes3);
+    const page3 = pdfDoc.addPage([randomImage3.width, randomImage3.height]);
+    page3.drawImage(randomImage3, {
+      x: 0,
+      y: 0,
+      width: randomImage3.width,
+      height: randomImage3.height,
     });
 
     const pdfBytes = await pdfDoc.save();

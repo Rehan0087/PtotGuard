@@ -7,6 +7,7 @@ import { AuditService } from "../audit/audit.service";
 import { NotFoundError, ValidationError } from "../common/domain-exceptions";
 import { pageParams, paginate } from "../common/pagination";
 import { currentUserId } from "../auth/dev-current-user";
+import { GeminiOcrService } from "../ocr/gemini-ocr.service";
 import { DocumentDecisionDto } from "./document-decision.dto";
 import { UpdateDocumentFieldsDto } from "./update-document-fields.dto";
 import { UploadDocumentDto } from "./upload-document.dto";
@@ -23,27 +24,24 @@ export class DocumentsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly ocrService: GeminiOcrService,
   ) { }
 
-  private scheduleOcrWorker(documentId: string, parcelId?: string, delayMs = OCR_WORKER_MS) {
+  private scheduleOcrWorker(documentId: string, parcelId?: string, delayMs = 1000) {
     setTimeout(() => {
       void (async () => {
         const doc = await this.prisma.landDocument.findUnique({ where: { id: documentId } });
         if (!doc || (doc.ocrStatus !== "processing" && doc.ocrStatus !== "pending")) return;
 
-        const parcel = parcelId
-          ? await this.prisma.parcel.findUnique({ where: { id: parcelId } })
-          : null;
-        const extractedFields = {
-          "Document type": doc.type.replace(/-/g, " "),
-          ...(parcel ? { "Dag No": parcel.dagNo, Khatian: parcel.khatianNo } : {}),
-          "Pages read": String(doc.pageCount ?? 1),
-        };
+        const { ocrStatus, extractedFields } = await this.ocrService.runOcr(
+          doc.parcelId || null,
+          doc.fileName
+        );
 
         await this.prisma.$transaction(async (tx) => {
           await tx.landDocument.update({
             where: { id: documentId },
-            data: { ocrStatus: "extracted", fraudScore: 0.04, extractedFields },
+            data: { ocrStatus, fraudScore: 0.04, extractedFields },
           });
 
           const ownerId = doc.ownerId ?? doc.uploadedById;
@@ -254,5 +252,40 @@ export class DocumentsController {
 
     this.scheduleOcrWorker(updated.id, updated.parcelId ?? undefined);
     return updated;
+  }
+
+  @Post(":id/run-ocr")
+  async runOcrNow(@Param("id") id: string, @Req() req: Request) {
+    const doc = await this.prisma.landDocument.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundError("Document not found");
+
+    // Immediately mark as processing
+    await this.prisma.landDocument.update({
+      where: { id },
+      data: { ocrStatus: "processing" },
+    });
+
+    const { ocrStatus, extractedFields } = await this.ocrService.runOcr(
+      doc.parcelId || null,
+      doc.fileName
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.landDocument.update({
+        where: { id },
+        data: { ocrStatus, extractedFields, fraudScore: 0.04 },
+      });
+
+      const actorId = currentUserId(req);
+      await this.audit.append(tx, {
+        entityType: "document",
+        entityId: updated.id,
+        action: "status-change",
+        actorId,
+        payload: { fileName: updated.fileName, ocrStatus },
+      });
+
+      return updated;
+    });
   }
 }
