@@ -27,6 +27,8 @@ import {
   useSession,
   useStartMutationVerification,
   useAssignFieldSurvey,
+  useJurisdictions,
+  useReviewFieldInvestigation,
   useFlagMutationDispute,
   useUsers,
   useRunOcr,
@@ -42,6 +44,7 @@ import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import type { MutationDetail, MutationVerificationChecklist } from "@/lib/types";
+import { rankCandidates } from "@plotguard/rules";
 
 const CHECKLIST_KEYS: (keyof MutationVerificationChecklist)[] = [
   "applicantVerified",
@@ -100,9 +103,11 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
   const session = useSession();
   const start = useStartMutationVerification(detail.mutation.id);
   const assignSurvey = useAssignFieldSurvey();
+  const reviewInvestigation = useReviewFieldInvestigation(detail.mutation.id);
   const flagDispute = useFlagMutationDispute(detail.mutation.id);
   const runOcr = useRunOcr();
   const agents = useUsers({ role: "field-agent", pageSize: 50 });
+  const jurisdictions = useJurisdictions();
   const [agentId, setAgentId] = useState("");
   const [scheduledFor, setScheduledFor] = useState(() => {
     const date = new Date(Date.now() + 86_400_000);
@@ -126,6 +131,13 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
   const presentation = mutationDetailPresentation(detail);
   const actorId = session.data?.user.id;
   const action = actorId ? mutationActionState(mutation, actorId) : null;
+  const requiresDisputeEntry = fieldReport?.disputeFound === true && !mutation.disputeId;
+  const eligibleAgents = rankCandidates(
+    parcel ?? undefined,
+    agents.data?.items ?? [],
+    fieldReport ? [fieldReport] : [],
+    jurisdictions.data ?? [],
+  ).filter((candidate) => !candidate.blocker);
 
   function startVerification() {
     start.mutate(undefined, {
@@ -172,18 +184,47 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
 
           <DetailSection title={t.pages.mutations.fieldInvestigation}>
             {fieldReport ? (
-              <DefinitionList rows={[
-                { label: t.pages.mutations.assignedFieldAgent, value: agents.data?.items.find((agent) => agent.id === fieldReport.assignedAgentId)?.name ?? fieldReport.assignedAgentId },
-                { label: t.pages.mutations.currentStatus, value: <StatusMetaBadge meta={s.fieldReport[fieldReport.status]} /> },
-                { label: t.pages.mutations.scheduledFor, value: f.dateTime(fieldReport.scheduledFor) },
-                { label: t.pages.mutations.fieldReport, value: fieldReport.notes ?? t.common.notAvailable },
-              ]} />
+              <div className="space-y-3">
+                <DefinitionList rows={[
+                  { label: t.pages.mutations.assignedFieldAgent, value: agents.data?.items.find((agent) => agent.id === fieldReport.assignedAgentId)?.name ?? fieldReport.assignedAgentId },
+                  { label: t.pages.mutations.currentStatus, value: <StatusMetaBadge meta={s.fieldReport[fieldReport.status]} /> },
+                  { label: t.pages.mutations.scheduledFor, value: f.dateTime(fieldReport.scheduledFor) },
+                  { label: t.pages.mutations.fieldReport, value: fieldReport.notes ?? t.common.notAvailable },
+                  ...(fieldReport.status === "completed" ? [{
+                    label: t.pages.mutations.fieldFinding,
+                    value: fieldReport.disputeFound
+                      ? t.pages.mutations.disputeReported
+                      : t.pages.mutations.noDisputeReported,
+                  }] : []),
+                  ...(fieldReport.disputeDescription ? [{
+                    label: t.pages.mutations.agentDisputeDescription,
+                    value: fieldReport.disputeDescription,
+                  }] : []),
+                  ...(fieldReport.reviewedAt ? [{
+                    label: t.pages.mutations.investigationAccepted,
+                    value: f.dateTime(fieldReport.reviewedAt),
+                  }] : []),
+                ]} />
+                {role === "land-office" && mutation.status === "field-investigation" && fieldReport.status === "completed" && !fieldReport.reviewedAt ? (
+                  <Button
+                    type="button"
+                    disabled={reviewInvestigation.isPending}
+                    onClick={() => reviewInvestigation.mutate(fieldReport.id, {
+                      onSuccess: () => toast.success(t.pages.mutations.investigationAcceptedTitle),
+                      onError: () => toast.error(t.pages.mutations.investigationAcceptFailed),
+                    })}
+                  >
+                    {reviewInvestigation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {t.pages.mutations.acceptInvestigation}
+                  </Button>
+                ) : null}
+              </div>
             ) : role === "land-office" && mutation.status === "field-investigation" ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select value={agentId} onValueChange={(value) => setAgentId(value ?? "")}>
                   <SelectTrigger><SelectValue placeholder={t.pages.mutations.selectFieldAgent} /></SelectTrigger>
                   <SelectContent>
-                    {(agents.data?.items ?? []).filter((agent) => agent.status === "active").map((agent) => (
+                    {eligibleAgents.map(({ agent }) => (
                       <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -198,15 +239,20 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                     assignedAgentId: agentId,
                     scheduledFor: new Date(scheduledFor).toISOString(),
                     addressHint: parcel?.title,
+                  }, {
+                    onSuccess: () => toast.success(t.pages.agents.assignedTitle),
+                    onError: () => toast.error(t.pages.agents.failedTitle, {
+                      description: t.pages.agents.failedBody,
+                    }),
                   })}
                 >
                   {assignSurvey.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
                   {t.pages.mutations.assignFieldAgent}
                 </Button>
               </div>
-            ) : (
+            ) : mutation.status === "submitted" || mutation.status === "under-primary-verification" ? (
               <p className="text-sm text-muted-foreground">{t.pages.mutations.fieldInvestigationPending}</p>
-            )}
+            ) : null}
           </DetailSection>
 
           <DetailSection title={t.pages.mutations.ownershipChange}>
@@ -382,7 +428,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
             <div className="space-y-3">
               {mutation.disputeId ? (
                 <StatusMetaBadge meta={s.registry.disputed} />
-              ) : role === "land-office" ? (
+              ) : role === "land-office" && mutation.status === "field-verification-complete" && fieldReport?.reviewedAt && fieldReport.disputeFound ? (
                 <div className="space-y-2 rounded-lg border border-border p-3">
                   <Textarea
                     value={disputeDescription}
@@ -456,12 +502,12 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
               {role === "land-office" && action?.hold?.code === "no-recipient" ? (
                 <p className="text-sm text-muted-foreground">{t.pages.mutations.hold.noRecipient}</p>
               ) : null}
-              {role === "land-office" && action?.primary === "approve" ? (
+              {role === "land-office" && action?.primary === "approve" && !requiresDisputeEntry ? (
                 <Button type="button" onClick={() => setDecision("approve")}>
                   {t.pages.mutations.approve}
                 </Button>
               ) : null}
-              {role === "land-office" && action?.canReject ? (
+              {role === "land-office" && action?.canReject && !requiresDisputeEntry ? (
                 <Button type="button" variant="destructive" onClick={() => setDecision("reject")}>
                   {t.pages.mutations.reject}
                 </Button>

@@ -391,7 +391,17 @@ export class MutationsController {
       }
       const approving = body.decision === "approve";
       this.assertTransition(mutation, actor, now, approving ? "canApprove" : "canReject",
-        approving ? ["field-verification-complete"] : ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete"]);
+        ["field-verification-complete"]);
+      const acceptedFieldReport = await tx.fieldReport.findFirst({
+        where: { mutationId: mutation.id, status: "completed", reviewedAt: { not: null } },
+        orderBy: { reviewedAt: "desc" },
+      });
+      if (!acceptedFieldReport) {
+        throw new ValidationError({ code: "field-investigation-not-accepted" }, "fieldReport");
+      }
+      if (acceptedFieldReport.disputeFound === true && !mutation.disputeId) {
+        throw new ValidationError({ code: "dispute-details-required" }, "dispute");
+      }
       const reason = typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
       const note = typeof body.approvalNote === "string" ? body.approvalNote.trim() : undefined;
       const orderSheet = typeof body.orderSheet === "string" ? body.orderSheet.trim() : "";
@@ -522,6 +532,19 @@ export class MutationsController {
       const description = body.description?.trim();
       if (!description) throw new ValidationError({ code: "dispute-description-required" }, "description");
       if (mutation.disputeId) throw new ConflictError("A dispute is already linked to this mutation.");
+      if (mutation.status !== "field-verification-complete") {
+        throw new ValidationError({ code: "wrong-status", expected: ["field-verification-complete"] }, "status");
+      }
+      const acceptedFieldReport = await tx.fieldReport.findFirst({
+        where: { mutationId: mutation.id, status: "completed", reviewedAt: { not: null } },
+        orderBy: { reviewedAt: "desc" },
+      });
+      if (!acceptedFieldReport) {
+        throw new ValidationError({ code: "field-investigation-not-accepted" }, "fieldReport");
+      }
+      if (acceptedFieldReport.disputeFound !== true) {
+        throw new ValidationError({ code: "no-dispute-reported" }, "fieldReport");
+      }
       const [count, mediator, actorUser] = await Promise.all([
         tx.dispute.count(),
         tx.user.findFirst({ where: { role: "mediator", status: "active" } }),

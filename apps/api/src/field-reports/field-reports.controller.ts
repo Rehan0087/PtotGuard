@@ -211,8 +211,8 @@ export class FieldReportsController {
     if (mutation && mutation.parcelId !== parcel.id) {
       throw new ValidationError({ code: "mutation-parcel-mismatch" }, "mutationId");
     }
-    if (mutation && mutation.status !== "under-primary-verification") {
-      throw new ValidationError({ code: "wrong-status", expected: ["under-primary-verification"] }, "mutationId");
+    if (mutation && mutation.status !== "field-investigation") {
+      throw new ValidationError({ code: "wrong-status", expected: ["field-investigation"] }, "mutationId");
     }
 
     const [candidate] = rankCandidates(
@@ -726,7 +726,13 @@ export class FieldReportsController {
       const summary = analyzeGpsTrack(points, survey.startedAt.toISOString(), now.toISOString());
       const reportChanged = await tx.fieldReport.updateMany({
         where: { id, assignedAgentId: actorId, status: "in-progress" },
-        data: { status: "completed", submittedAt: now, notes: body.notes },
+        data: {
+          status: "completed",
+          submittedAt: now,
+          notes: body.notes,
+          disputeFound: body.disputeFound ?? false,
+          disputeDescription: body.disputeFound ? body.disputeDescription?.trim() : null,
+        },
       });
       if (reportChanged.count !== 1) {
         throw new ConflictError("This case changed; reload and try again");
@@ -798,61 +804,6 @@ export class FieldReportsController {
         }
       }
 
-      if (updatedReport.mutationId) {
-        const parentMutation = await tx.mutation.findUnique({
-          where: { id: updatedReport.mutationId },
-        });
-        if (parentMutation && parentMutation.status === "field-investigation") {
-          await tx.mutation.update({
-            where: { id: parentMutation.id },
-            data: { status: "field-verification-complete" },
-          });
-          await this.audit.append(tx, {
-            entityType: "mutation",
-            entityId: parentMutation.id,
-            action: "field-verification-complete",
-            actorId,
-            payload: {
-              previousStatus: parentMutation.status,
-              newStatus: "field-verification-complete",
-              fieldReportId: updatedReport.id,
-              note: body.notes,
-            },
-          });
-
-          if (body.disputeFound && !parentMutation.disputeId) {
-            const [count, mediator, agent] = await Promise.all([
-              tx.dispute.count(),
-              tx.user.findFirst({ where: { role: "mediator", status: "active" } }),
-              tx.user.findUnique({ where: { id: actorId } }),
-            ]);
-            const dispute = await tx.dispute.create({
-              data: {
-                id: `ds-${randomUUID()}`,
-                caseNumber: `DSP-${now.getUTCFullYear()}-${String(500 + count).padStart(5, "0")}`,
-                parcelId: parentMutation.parcelId,
-                parcelDagNo: parentMutation.parcelDagNo,
-                type: "boundary",
-                status: "in-mediation",
-                priority: "high",
-                filedById: actorId,
-                filedByName: agent?.name ?? "Field agent",
-                filedAt: now,
-                description: body.disputeDescription?.trim() || body.notes,
-                parties: [{ name: parentMutation.fromOwnerName, role: "claimant" }, { name: parentMutation.toOwnerName, role: "respondent" }],
-                assignedAgentId: actorId,
-                assignedMediatorId: mediator?.id,
-                evidenceDocumentIds: parentMutation.documentIds,
-              },
-            });
-            await tx.mutation.update({
-              where: { id: parentMutation.id },
-              data: { disputeId: dispute.id },
-            });
-          }
-        }
-      }
-
       await this.audit.append(tx, {
         entityType: "field-survey",
         entityId: updatedSurvey.id,
@@ -884,55 +835,66 @@ export class FieldReportsController {
   }
 
   /**
-   * Notes and the optional travel marker. Session start and completion use
-   * dedicated transactional actions and cannot be reached from this patch.
+   * The field agent files evidence; the responsible land officer accepts it.
+   * Only this action advances the parent mutation to the decision stage.
    */
-  @Patch(":id/flag-dispute")
+  @Post(":id/review")
+  @HttpCode(200)
   @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles("field-agent")
-  async flagDispute(
-    @Param("id") id: string,
-    @Body() body: { description?: string },
-    @Req() req: Request,
-  ) {
+  @Roles("land-office")
+  async review(@Param("id") id: string, @Req() req: Request) {
     const actorId = currentUserId(req);
-    const description = body.description?.trim();
-    if (!description) throw new ValidationError({ code: "dispute-description-required" }, "description");
     return this.prisma.$transaction(async (tx) => {
-      const report = await tx.fieldReport.findFirst({ where: { id, assignedAgentId: actorId } });
+      const report = await tx.fieldReport.findUnique({ where: { id } });
       if (!report || !report.mutationId) throw new NotFoundError("Mutation field report not found");
+      if (report.status !== "completed") {
+        throw new ValidationError({ code: "field-report-not-completed" }, "status");
+      }
+      if (report.reviewedAt) throw new ConflictError("This field investigation was already accepted");
+
       const mutation = await tx.mutation.findUnique({ where: { id: report.mutationId } });
       if (!mutation) throw new NotFoundError("Mutation not found");
-      if (mutation.disputeId) return report;
-      const [count, mediator, agent] = await Promise.all([
-        tx.dispute.count(),
-        tx.user.findFirst({ where: { role: "mediator", status: "active" } }),
-        tx.user.findUnique({ where: { id: actorId } }),
-      ]);
+      if (mutation.assignedOfficerId && mutation.assignedOfficerId !== actorId) {
+        throw new ConflictError("This mutation is assigned to another land officer");
+      }
+      if (mutation.status !== "field-investigation") {
+        throw new ValidationError({ code: "wrong-status", expected: ["field-investigation"] }, "mutationId");
+      }
+
       const now = new Date();
-      const dispute = await tx.dispute.create({
-        data: {
-          id: `ds-${randomUUID()}`,
-          caseNumber: `DSP-${now.getUTCFullYear()}-${String(500 + count).padStart(5, "0")}`,
-          parcelId: mutation.parcelId,
-          parcelDagNo: mutation.parcelDagNo,
-          type: "boundary", status: "in-mediation", priority: "high",
-          filedById: actorId, filedByName: agent?.name ?? "Field agent", filedAt: now,
-          description,
-          parties: [{ name: mutation.fromOwnerName, role: "claimant" }, { name: mutation.toOwnerName, role: "respondent" }],
-          assignedAgentId: actorId, assignedMediatorId: mediator?.id,
-          evidenceDocumentIds: mutation.documentIds,
+      const reviewed = await tx.fieldReport.updateMany({
+        where: { id, status: "completed", reviewedAt: null },
+        data: { reviewedAt: now, reviewedById: actorId },
+      });
+      if (reviewed.count !== 1) throw new ConflictError("This field investigation changed; reload and try again");
+      const advanced = await tx.mutation.updateMany({
+        where: { id: mutation.id, status: "field-investigation", updatedAt: mutation.updatedAt },
+        data: { status: "field-verification-complete", assignedOfficerId: actorId },
+      });
+      if (advanced.count !== 1) throw new ConflictError("This mutation changed; reload and try again");
+
+      await this.audit.append(tx, {
+        entityType: "field-report", entityId: id, action: "review-accepted", actorId,
+        payload: { mutationId: mutation.id, reviewedAt: now.toISOString() },
+      });
+      await this.audit.append(tx, {
+        entityType: "mutation", entityId: mutation.id, action: "field-verification-complete", actorId,
+        payload: {
+          previousStatus: "field-investigation", newStatus: "field-verification-complete",
+          fieldReportId: id, note: report.notes ?? undefined,
         },
       });
-      await tx.mutation.update({ where: { id: mutation.id }, data: { disputeId: dispute.id } });
-      await this.audit.append(tx, {
-        entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId,
-        payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: description },
-      });
-      return report;
+
+      const updated = await tx.fieldReport.findUnique({ where: { id } });
+      if (!updated) throw new NotFoundError("Field report not found");
+      return updated;
     });
   }
 
+  /**
+   * Notes and the optional travel marker. Session start and completion use
+   * dedicated transactional actions and cannot be reached from this patch.
+   */
   @Patch(":id")
   @UseGuards(AccessTokenGuard, RolesGuard)
   @Roles("field-agent")

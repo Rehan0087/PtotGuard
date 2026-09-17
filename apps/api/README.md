@@ -154,6 +154,12 @@ transition inside the same transaction as its audit entry. The conditional
 update prevents two requests from claiming the same assignment; subsequent
 or racing requests receive `409 Conflict`.
 
+For mutation work, the agent's completed report remains pending at
+`field-investigation`. `POST /field-reports/:id/review` is land-office-only;
+it stores `reviewedAt`/`reviewedById` and atomically advances the linked
+mutation to `field-verification-complete`. A reported dispute must then be
+recorded by the officer before the mutation can be approved or rejected.
+
 `passwordHash` remains globally omitted by Prisma and is selected only by
 the login query for verification, so it cannot leak through normal user reads.
 

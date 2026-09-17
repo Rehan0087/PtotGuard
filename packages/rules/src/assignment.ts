@@ -148,7 +148,8 @@ export function disputesNeedingSurvey(
 }
 
 /**
- * Mutations enter the assignment board during primary verification. Any
+ * Mutations enter the assignment board after primary verification, when the
+ * mutation has moved to field investigation. Any
  * non-cancelled visit covers the file; cancelling it puts the file back in
  * the queue so the officer can choose another agent.
  */
@@ -163,7 +164,7 @@ export function mutationsNeedingAgent(
   );
   return mutations.filter(
     (mutation) =>
-      mutation.status === "under-primary-verification" && !covered.has(mutation.id),
+      mutation.status === "field-investigation" && !covered.has(mutation.id),
   );
 }
 

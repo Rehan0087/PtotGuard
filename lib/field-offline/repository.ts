@@ -244,6 +244,7 @@ export class FieldOfflineRepository {
     notes: string,
     completedAt = this.now(),
     summary?: OfflineFieldSurvey["summary"],
+    finding?: { disputeFound: boolean; disputeDescription?: string },
   ): Promise<void> {
     const database = await this.open();
     const transaction = database.transaction(["surveys", "operations"], "readwrite");
@@ -266,6 +267,10 @@ export class FieldOfflineRepository {
     transaction.objectStore("operations").add(
       this.operation(updated, "COMPLETE_SURVEY", {
         notes,
+        disputeFound: finding?.disputeFound ?? false,
+        ...(finding?.disputeFound && finding.disputeDescription
+          ? { disputeDescription: finding.disputeDescription }
+          : {}),
       }),
     );
     await transactionDone(transaction);

@@ -654,7 +654,7 @@ export function useFieldReports(params: ListParams = {}) {
   });
 }
 
-/** The land office booking a field visit for a dispute or primary-verification mutation. */
+/** The land office booking a field visit for a dispute or field-investigation mutation. */
 export function useAssignFieldSurvey() {
   const qc = useQueryClient();
   return useMutation({
@@ -761,6 +761,21 @@ export function useUpdateFieldReport(id: string) {
   });
 }
 
+/** A land officer accepts a filed investigation and unlocks the mutation decision. */
+export function useReviewFieldInvestigation(mutationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (fieldReportId: string) =>
+      api.post<FieldReport>(`/field-reports/${fieldReportId}/review`),
+    onSuccess: (_report, fieldReportId) => {
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["field-report", fieldReportId] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      invalidateMutationWorkflow(qc, mutationId);
+    },
+  });
+}
+
 export function useLandTaxCollection() {
   const role = useRole();
   return useQuery({
@@ -797,20 +812,6 @@ export function useCollectLandTax() {
       qc.invalidateQueries({ queryKey: ["land-tax-collection"] });
       qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
       qc.invalidateQueries({ queryKey: ["service-applications"] });
-    },
-  });
-}
-
-export function useFlagFieldReportDispute(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (description: string) =>
-      api.patch<FieldReport>(`/field-reports/${id}/flag-dispute`, { description }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["field-report", id] });
-      qc.invalidateQueries({ queryKey: ["mutations"] });
-      qc.invalidateQueries({ queryKey: ["disputes"] });
-      invalidateRecordViews(qc);
     },
   });
 }

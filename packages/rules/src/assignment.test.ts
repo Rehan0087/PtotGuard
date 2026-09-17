@@ -196,28 +196,28 @@ describe("open visits", () => {
 });
 
 describe("mutationsNeedingAgent", () => {
-  it("shows a mutation during primary verification", () => {
-    expect(mutationsNeedingAgent([mutation("m-1")], [])).toHaveLength(1);
+  it("shows a mutation after primary verification, during field investigation", () => {
+    expect(mutationsNeedingAgent([mutation("m-1", "field-investigation")], [])).toHaveLength(1);
   });
 
-  it.each(["submitted", "field-investigation", "field-verification-complete", "approved"] as const)(
+  it.each(["submitted", "under-primary-verification", "field-verification-complete", "approved"] as const)(
     "does not show a mutation in %s",
     (status) => expect(mutationsNeedingAgent([mutation("m-1", status)], [])).toEqual([]),
   );
 
   it("removes a mutation after a visit is assigned", () => {
     const assigned = visit("fr-1", "a-1", { mutationId: "m-1" });
-    expect(mutationsNeedingAgent([mutation("m-1")], [assigned])).toEqual([]);
+    expect(mutationsNeedingAgent([mutation("m-1", "field-investigation")], [assigned])).toEqual([]);
   });
 
   it("puts a mutation back after its visit is cancelled", () => {
     const cancelled = visit("fr-1", "a-1", { mutationId: "m-1", status: "cancelled" });
-    expect(mutationsNeedingAgent([mutation("m-1")], [cancelled])).toHaveLength(1);
+    expect(mutationsNeedingAgent([mutation("m-1", "field-investigation")], [cancelled])).toHaveLength(1);
   });
 
   it("does not confuse a dispute visit on the same parcel with mutation work", () => {
     const disputeVisit = visit("fr-1", "a-1", { disputeId: "ds-1", parcelId: "p-1" });
-    expect(mutationsNeedingAgent([mutation("m-1")], [disputeVisit])).toHaveLength(1);
+    expect(mutationsNeedingAgent([mutation("m-1", "field-investigation")], [disputeVisit])).toHaveLength(1);
   });
 });
 

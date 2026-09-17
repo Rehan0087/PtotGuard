@@ -111,15 +111,6 @@ const VERIFICATION_KEYS: (keyof MutationVerificationChecklist)[] = [
   "khajnaReceiptVerified",
 ];
 
-const ACTIVE_STATUSES: MutationStatus[] = [
-  "submitted",
-  "under-primary-verification",
-  "field-investigation",
-  "field-verification-complete",
-  "approved",
-  "awaiting-dcr-payment",
-];
-
 function daysToWindowClose(mutation: Mutation, now: Date): number | null {
   const endsAt = mutation.objectionWindowEndsAt
     ? new Date(mutation.objectionWindowEndsAt)
@@ -244,7 +235,9 @@ export function mutationActionGate(
 
   const canStartVerification = mutation.status === "submitted";
   const canCompleteVerification = mutation.status === "under-primary-verification";
-  const canReject = ACTIVE_STATUSES.includes(mutation.status);
+  // A final decision follows an accepted field investigation. Preliminary
+  // problems are returned to the workflow rather than skipping the survey.
+  const canReject = mutation.status === "field-verification-complete";
 
   if (mutation.status !== "field-verification-complete") {
     return {

@@ -53,4 +53,10 @@ export interface FieldReport {
   sketchMapFileName?: string;
   notes?: string;
   submittedAt?: ISODateString;
+  /** The agent's finding; the land officer decides what to do with it. */
+  disputeFound?: boolean;
+  disputeDescription?: string;
+  /** Officer acceptance is separate from the agent filing the report. */
+  reviewedAt?: ISODateString;
+  reviewedById?: ID;
 }
