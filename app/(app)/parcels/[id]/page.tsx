@@ -282,9 +282,13 @@ export default function ParcelDetailPage() {
                       <FileText className="size-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">
+                      <Link 
+                        href={`/documents/${parcel.id}/${d.fileName}`}
+                        target="_blank"
+                        className="truncate text-sm font-medium text-foreground hover:underline hover:text-primary transition-colors block"
+                      >
                         {d.fileName}
-                      </div>
+                      </Link>
                       <div className="text-xs text-muted-foreground">
                         {t.domain.documentType[d.type]}
                       </div>

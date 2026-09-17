@@ -212,7 +212,7 @@ export class MutationsController {
           documentIds: body.documentIds ?? [],
           deedNumber: body.deedNumber,
           deedDate: body.deedDate ? new Date(body.deedDate) : undefined,
-          metadata: body.metadata ?? null,
+          metadata: (body.metadata as Prisma.InputJsonValue) ?? undefined,
           fee: policy ? { amount: policy.mutationFeeBdt, currency: "BDT" } : undefined,
           paymentMethod: body.paymentMethod,
           // Simulated — no gateway is called. See PaymentMethod's own note.

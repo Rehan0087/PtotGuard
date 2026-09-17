@@ -4,7 +4,7 @@
   "private": true,
   "description": "PlotGuard Core API — the real backend behind the frozen spec the frontend already codes against.",
   "scripts": {
-    "dev": "prisma generate && nest start --watch",
+    "dev": "pnpm --filter @plotguard/rules build && prisma generate && nest start --watch",
     "build": "prisma generate && nest build",
     "start": "node dist/main.js",
     "test": "vitest run",

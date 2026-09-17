@@ -119,7 +119,24 @@ export const CURRENT_USER_BY_ROLE: Record<string, string> = {
 
 export function currentUserId(req: Request): string {
   // Protected endpoints always arrive here with a verified token identity.
-  const authenticated = (req as AuthenticatedRequest).user;
+  let authenticated = (req as AuthenticatedRequest).user;
+  
+  // For unguarded endpoints, try to verify the token anyway if present,
+  // so the caller gets their own data instead of the demo mock fallback.
+  if (!authenticated) {
+    const authorization = req.header("authorization");
+    const match = authorization?.match(/^Bearer\s+(.+)$/i);
+    if (match) {
+      try {
+        const payload = verifyAuthToken(match[1], "access");
+        authenticated = { id: payload.sub, role: payload.role as Role };
+        (req as AuthenticatedRequest).user = authenticated;
+      } catch {
+        // Fall through
+      }
+    }
+  }
+
   if (authenticated) return authenticated.id;
   const role = req.header("x-plotguard-role") ?? "citizen";
   return CURRENT_USER_BY_ROLE[role] ?? CURRENT_USER_BY_ROLE.citizen;
