@@ -40,6 +40,7 @@ import type {
   AuditVerifyResult,
   Policy,
   MutationVerificationChecklist,
+  MediationOutcome,
   LandRecordDetail,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
@@ -222,14 +223,23 @@ export function useMutations(params: ListParams = {}) {
     queryKey: ["mutations", role, params],
     queryFn: () => api.get<Paginated<LandMutation>>(`/mutations${qs(params)}`),
     placeholderData: keepPreviousData,
+    // Field reports are filed from another portal/session. Keep the land-office
+    // queue current so completed investigations appear without a manual reload.
+    refetchInterval: role === "land-office" ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
 export function useMutationById(id: string | undefined) {
+  const role = useRole();
   return useQuery({
-    queryKey: ["mutation", id],
+    queryKey: ["mutation", id, role],
     queryFn: () => api.get<MutationDetail>(`/mutations/${id}`),
     enabled: Boolean(id),
+    refetchInterval: role === "land-office" && id ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
@@ -800,6 +810,9 @@ export function useLandOfficerDashboard() {
     queryKey: ["land-office-dashboard", role],
     queryFn: () => api.get<LandOfficerDashboard>("/land-office/dashboard"),
     enabled: role === "land-office",
+    refetchInterval: role === "land-office" ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
@@ -837,7 +850,8 @@ export function useHearing(id: string | undefined) {
 export function useHearingRuling(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (ruling: string) => api.patch<Hearing>(`/hearings/${id}/ruling`, { ruling }),
+    mutationFn: (body: { ruling: string; outcome: MediationOutcome }) =>
+      api.patch<Hearing>(`/hearings/${id}/ruling`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hearing", id] });
       qc.invalidateQueries({ queryKey: ["hearings"] });

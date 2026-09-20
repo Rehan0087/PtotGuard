@@ -281,7 +281,7 @@ export class HearingsController {
       const now = new Date();
       const updated = await tx.hearing.update({
         where: { id },
-        data: { ruling: body.ruling, status: "ruled", ruledAt: now },
+        data: { ruling: body.ruling, outcome: body.outcome, status: "ruled", ruledAt: now },
       });
 
       await this.audit.append(tx, {
@@ -289,7 +289,7 @@ export class HearingsController {
         entityId: updated.id,
         action: "ruling",
         actorId,
-        payload: { caseNumber: updated.caseNumber, ruling: body.ruling },
+        payload: { caseNumber: updated.caseNumber, ruling: body.ruling, outcome: body.outcome },
       });
 
       // A ruling is what closes the dispute the hearing was convened over —
@@ -300,7 +300,11 @@ export class HearingsController {
         await tx.dispute.update({
           where: { id: dispute.id },
           // The ruling text is the resolution — record content, stored as typed.
-          data: { status: "resolved", resolution: body.ruling, updatedAt: now },
+          data: {
+            status: body.outcome === "resolved" ? "resolved" : "rejected",
+            resolution: body.ruling,
+            updatedAt: now,
+          },
         });
         await tx.disputeEvent.create({
           data: {
@@ -308,7 +312,7 @@ export class HearingsController {
             disputeId: dispute.id,
             at: now,
             type: "resolved",
-            title: "Ruling issued",
+            title: body.outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
             content: { code: "ruled" },
             description: body.ruling,
             actorId,
@@ -329,8 +333,10 @@ export class HearingsController {
               userId,
               at: now,
               severity: "info",
-              title: "Ruling issued",
-              body: `A ruling has been issued on case ${dispute.caseNumber}.`,
+              title: body.outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
+              body: body.outcome === "resolved"
+                ? `Case ${dispute.caseNumber} was resolved. The mutation can return for approval.`
+                : `Case ${dispute.caseNumber} could not be resolved. The mutation must return for rejection.`,
               content: { code: "dispute-ruled", caseNumber: dispute.caseNumber },
               read: false,
               href: `/disputes/${dispute.id}`,

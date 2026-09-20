@@ -80,7 +80,10 @@ export class LandOfficeDashboardController {
         .map((report) => report.mutationId),
     );
     const needsAgent = activeMutations.filter(
-      (item) => item.status === "field-investigation" && !liveMutationVisits.has(item.id),
+      (item) =>
+        ((item.status === "under-primary-verification" && Boolean(item.verifiedAt)) ||
+          item.status === "field-investigation") &&
+        !liveMutationVisits.has(item.id),
     );
     const activeFieldReports = fieldReports.filter((item) => !CLOSED_FIELD_REPORTS.includes(item.status));
     const openServices = services.filter((item) => !CLOSED_SERVICES.includes(item.status));
@@ -101,7 +104,9 @@ export class LandOfficeDashboardController {
       summary: {
         recordCount: parcels.length,
         activeMutationCount: activeMutations.length,
-        primaryVerificationCount: activeMutations.filter((item) => item.status === "under-primary-verification").length,
+        primaryVerificationCount: activeMutations.filter(
+          (item) => item.status === "under-primary-verification" && !item.verifiedAt,
+        ).length,
         openDisputeCount: openDisputes.length,
         documentsToReviewCount: reviewDocuments.length,
         fraudFlagCount: flaggedDocuments.length,

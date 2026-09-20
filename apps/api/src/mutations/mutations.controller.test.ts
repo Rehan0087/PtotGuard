@@ -186,12 +186,12 @@ describe("mutation workflow writes", () => {
     delete (checklist as { notes?: string }).notes;
     expect(f.tx.mutation.update).toHaveBeenCalledWith({
       where: expect.objectContaining({ id: "m-1", status: "under-primary-verification", updatedAt: f.mutation.updatedAt }),
-      data: expect.objectContaining({ status: "field-investigation", assignedOfficerId: "usr-officer", verifiedById: "usr-officer", verifiedAt: now,
+      data: expect.objectContaining({ status: "under-primary-verification", assignedOfficerId: "usr-officer", verifiedById: "usr-officer", verifiedAt: now,
         verificationChecklist: checklist, verificationNotes: "Records verified", objectionStartDate: now,
         objectionWindowEndsAt: new Date("2026-09-27T10:00:00.000Z") }),
     });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ action: "status-change", actorId: "usr-officer",
-      payload: expect.objectContaining({ previousStatus: "under-primary-verification", newStatus: "field-investigation", note: "Records verified" }) }));
+      payload: expect.objectContaining({ previousStatus: "under-primary-verification", newStatus: "under-primary-verification", note: "Records verified" }) }));
   });
 
   it.each([

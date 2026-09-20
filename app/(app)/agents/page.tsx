@@ -426,7 +426,6 @@ export default function AgentsPage() {
   const s = useStatusMeta();
   const resolveJurisdictionName = useJurisdictionName();
   const { data: mutationsData, isLoading: mutationsLoading } = useMutations({
-    status: "field-investigation",
     pageSize: 100,
   });
   const { data: reportsData, isLoading: reportsLoading } = useFieldReports({ pageSize: 100 });

@@ -112,13 +112,14 @@ function makeSchema(t: Dictionary) {
     });
 }
 
-type FormValues = z.infer<ReturnType<typeof makeSchema>>;
+type FormInput = z.input<ReturnType<typeof makeSchema>>;
+type FormValues = z.output<ReturnType<typeof makeSchema>>;
 
 const STEP_KEYS = ["parcel", "transfer", "payment", "review"] as const;
 
 /** Fields to validate per step — type-specific fields validated at step 1. */
-function stepFields(type: MutationType): (keyof FormValues)[][] {
-  const transferFields: (keyof FormValues)[] = ["type"];
+function stepFields(type: MutationType): (keyof FormInput)[][] {
+  const transferFields: (keyof FormInput)[] = ["type"];
   if (TYPES_WITH_RECIPIENT.includes(type)) transferFields.push("toOwnerId");
   if (type === "correction") transferFields.push("correctionReason");
   if (type === "inheritance") transferFields.push("heirRelationship");
@@ -145,9 +146,8 @@ export default function NewMutationPage() {
     handleSubmit,
     trigger,
     setValue,
-    getValues,
     formState: { errors },
-  } = useForm<FormValues>({
+  } = useForm<FormInput, unknown, FormValues>({
     resolver: standardSchemaResolver(schema),
     defaultValues: {
       parcelId: "",

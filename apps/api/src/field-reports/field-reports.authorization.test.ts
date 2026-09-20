@@ -94,7 +94,13 @@ describe("field report assignment authorization", () => {
   let auditEntries: Array<Record<string, unknown>>;
   let gpsPoints: GpsPointFixture[];
   let syncReceipts: Array<Record<string, unknown>>;
-  let mutation: { id: string; status: string; assignedOfficerId: string; updatedAt: Date };
+  let mutation: {
+    id: string;
+    mutationNumber: string;
+    status: string;
+    assignedOfficerId: string;
+    updatedAt: Date;
+  };
 
   beforeEach(async () => {
     process.env.AUTH_TOKEN_SECRET = "test-secret-that-is-long-enough";
@@ -130,6 +136,7 @@ describe("field report assignment authorization", () => {
     syncReceipts = [];
     mutation = {
       id: "m-1",
+      mutationNumber: "MUT-2026-00001",
       status: "field-investigation",
       assignedOfficerId: "usr-officer",
       updatedAt: new Date("2026-09-10T08:00:00Z"),
@@ -781,6 +788,43 @@ describe("field report assignment authorization", () => {
       action: "complete",
       actorId: "usr-agent",
     });
+  });
+
+  it("advances a no-dispute mutation when the field agent files the report", async () => {
+    report.status = "accepted";
+    report.mutationId = mutation.id;
+    const token = bearer("usr-agent", "field-agent");
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .expect(201);
+    report.gpsCaptures = [{ id: "g-1" }, { id: "g-2" }];
+
+    const response = await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", token)
+      .send({ notes: "Boundaries match the deed.", disputeFound: false })
+      .expect(200);
+
+    expect(response.body.report).toMatchObject({
+      status: "completed",
+      disputeFound: false,
+    });
+    expect(mutation.status).toBe("field-verification-complete");
+    expect(auditEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        entityType: "mutation",
+        entityId: mutation.id,
+        action: "field-verification-complete",
+        actorId: "usr-agent",
+      }),
+    ]));
+    expect(notifications).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        userId: "usr-officer",
+        body: expect.stringContaining("field verification complete"),
+      }),
+    ]));
   });
 
   it("allows only one concurrent survey completion", async () => {

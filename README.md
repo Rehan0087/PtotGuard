@@ -412,16 +412,22 @@ Namjari uses one status sequence in the citizen, Land Office, Field Agent, and r
 `submitted` -> `under-primary-verification` -> `field-investigation` ->
 `field-verification-complete` -> `awaiting-dcr-payment` -> `complete` (or `rejected`).
 Primary verification records deed, Khatian, Khajna-receipt, party, and document checks plus
-officer comments. Completing that step moves the file to `field-investigation`, where the officer
-assigns a field agent. The agent's report includes GPS/photo evidence, a sketch-map upload, and a
-dispute/no-dispute finding. Filing the report does not advance the mutation: the land officer must
-accept it first. If a dispute was reported, the officer records the linked case description before
-making the final decision. Final approval requires an order sheet and digital-signature
-confirmation, generates a Mutation Khatian number, and opens DCR payment.
+officer comments. It cannot start until OCR finishes without a fraud flag, and it cannot finish
+until every supporting document has been verified by an officer. The file stays in
+`under-primary-verification` until the officer assigns a field agent; that assignment moves it to
+`field-investigation`. The agent's report includes GPS/photo evidence, a sketch-map upload, and a
+dispute/no-dispute finding. Filing a no-dispute report advances the mutation immediately to
+`field-verification-complete`; a disputed report waits for the land officer to accept it and record
+the linked case description before handing the file to a mediator. Final approval requires an order sheet and digital-signature
+confirmation, generates a Mutation Khatian number, and opens DCR payment. DCR payment completes
+the mutation and the ownership ledger update remains part of the approved transaction.
 
-Disputes run in parallel: the field agent reports the finding and the officer creates the linked mediator case.
-The mutation and parcel record show `disputed`, while the assigned officer's workflow remains
-available. The API, mock handlers, and shared rules enforce the same transitions.
+The mutation and parcel record show `disputed` while the linked mediator case is open. Final
+mutation actions are locked until the mediator records sittings, hears every party, issues a
+ruling, and explicitly records whether mediation resolved the dispute. A resolved outcome returns
+the file to the land officer for approval only; an unresolved outcome returns it for rejection
+only. The field agent, responsible land officer, mediator, real API, preview API, and shared rules
+all enforce the same handoffs and notify the next responsible role.
 
 ### Record status projection
 
@@ -430,7 +436,8 @@ label. The same projection is used by the list, record detail, parcel views, pub
 Land Information Bank:
 
 1. A document currently flagged by OCR/fraud verification makes the record `flagged`.
-2. Otherwise, an active mutation linked to a dispute makes it `disputed`.
+2. Otherwise, an active mutation linked to a dispute makes it `disputed`, including after the
+   mediator's outcome and until the land officer approves or rejects the mutation.
 3. Otherwise, any non-terminal mutation makes it `under-mutation`, even when the plot has a
    separate open dispute.
 4. With no active mutation, an open dispute makes the record `disputed`; resolved, rejected,
@@ -489,13 +496,13 @@ the filter for the visit list.
 - **A suspended account can't be given work**, full stop.
 - **`rankCandidates()` puts the cheapest trip first.** An agent with an open visit already booked
   on that parcel leads the list — one trip covers both jobs. After that it sorts by load.
-- **`mutationsNeedingAgent()`** fills the board from `field-investigation` mutations with
+- **`mutationsNeedingAgent()`** fills the board from verified `under-primary-verification` mutations (plus legacy `field-investigation` rows) with
   no non-cancelled field report. A cancelled visit puts the mutation back for reassignment.
 - **`PURPOSE_FOR_MUTATION`** pre-selects the survey the mutation type normally calls for. The
   officer can change it.
 
 Booking posts to `POST /field-reports` with the mutation, agent, and date. Both the live API and
-mock API accept mutation assignments only after primary verification, during `field-investigation`, and reject duplicate
+mock API accept mutation assignments only after primary verification, move the mutation into `field-investigation`, and reject duplicate
 non-cancelled visits. The preview persists the resulting report and audit event across refreshes.
 
 ### Carrying out the survey
@@ -505,11 +512,15 @@ standing on the land. It moves the visit along its status ladder (assigned → a
 route → on site), collects GPS points and photos, and takes the findings that the case will
 actually read. `/visits/[id]` remains as a protected compatibility route.
 
-Filing a report stores the agent's dispute/no-dispute finding but does not advance the mutation.
-The assigned land officer must explicitly accept the completed investigation; that transactional
-review records the officer and time, then advances the mutation to `field-verification-complete`.
-If the agent reported a dispute, the officer must record its description before approving or
-rejecting the mutation. Final decisions are refused until this sequence is complete.
+Filing a no-dispute report stores the agent's evidence and atomically advances the linked mutation
+from `field-investigation` to `field-verification-complete`. It therefore appears immediately in
+the land-office mutation queue, where the assigned officer can approve or reject it without a
+second report-acceptance step. The mutation list, open mutation detail, and land-office dashboard
+re-fetch the database when the officer returns to the portal and poll while open, so a field-agent
+handoff cannot remain hidden behind a stale browser cache. If the agent reported a dispute, the mutation stays with the land
+officer for explicit review; the officer must record its description and hand the linked case to
+mediation. Approval and rejection are both refused while mediation is open. A resolved ruling
+enables approval; an unresolved ruling enables rejection.
 
 `field-capture.ts` (`filingReview`) is the pure rule, and it is a rule about *evidence*:
 

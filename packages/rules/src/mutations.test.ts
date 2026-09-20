@@ -2,6 +2,7 @@
 import {
   approvalGate,
   mutationActionGate,
+  mutationDocumentGate,
   mutationObjectionSummary,
   mutationVerificationReferences,
   verificationGate,
@@ -367,6 +368,49 @@ describe("mutationActionGate", () => {
     });
   });
 
+  it("waits for field assignment after primary verification is recorded", () => {
+    expect(
+      mutationActionGate(
+        mutation({
+          status: "under-primary-verification",
+          assignedOfficerId: "usr-officer",
+          verifiedAt: NOW.toISOString(),
+        }),
+        "usr-officer",
+        NOW,
+      ),
+    ).toMatchObject({
+      canCompleteVerification: false,
+      hold: { code: "awaiting-field-assignment" },
+    });
+  });
+
+  it("locks a disputed mutation until mediation is decided", () => {
+    expect(
+      mutationActionGate(mutation({ disputeId: "ds-1" }), "usr-officer", NOW, "in-mediation"),
+    ).toMatchObject({
+      canApprove: false,
+      canReject: false,
+      hold: { code: "mediation-pending" },
+    });
+  });
+
+  it("allows only approval after mediation resolves the dispute", () => {
+    expect(
+      mutationActionGate(mutation({ disputeId: "ds-1" }), "usr-officer", NOW, "resolved"),
+    ).toMatchObject({ canApprove: true, canReject: false, hold: null });
+  });
+
+  it("allows only rejection when mediation cannot resolve the dispute", () => {
+    expect(
+      mutationActionGate(mutation({ disputeId: "ds-1" }), "usr-officer", NOW, "rejected"),
+    ).toMatchObject({
+      canApprove: false,
+      canReject: true,
+      hold: { code: "mediation-unresolved" },
+    });
+  });
+
   it.each(["approved", "rejected"] as const)(
     "offers no workflow action on a terminal %s mutation",
     (status) => {
@@ -379,6 +423,32 @@ describe("mutationActionGate", () => {
       });
     },
   );
+});
+
+describe("mutationDocumentGate", () => {
+  const document = {
+    id: "doc-1",
+    ocrStatus: "extracted",
+    verificationStatus: "unverified",
+    fraudScore: 0.04,
+  };
+
+  it("holds primary verification while OCR is still running", () => {
+    expect(mutationDocumentGate([{ ...document, ocrStatus: "processing" }], "ocr", 0.7))
+      .toEqual({ ok: false, reason: { code: "ocr-pending", documentIds: ["doc-1"] } });
+  });
+
+  it("routes suspicious documents to fraud review", () => {
+    expect(mutationDocumentGate([{ ...document, fraudScore: 0.9 }], "ocr", 0.7))
+      .toEqual({ ok: false, reason: { code: "fraud-review-required", documentIds: ["doc-1"] } });
+  });
+
+  it("requires officer verification before primary verification completes", () => {
+    expect(mutationDocumentGate([document], "officer", 0.7))
+      .toEqual({ ok: false, reason: { code: "documents-not-verified", documentIds: ["doc-1"] } });
+    expect(mutationDocumentGate([{ ...document, verificationStatus: "verified" }], "officer", 0.7))
+      .toEqual({ ok: true });
+  });
 });
 
 describe("verificationGate", () => {
