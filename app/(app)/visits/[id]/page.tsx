@@ -54,6 +54,7 @@ export default function CapturePage() {
   const acceptCase = useAcceptFieldReport();
   const updateReport = useUpdateFieldReport(id);
   const [caption, setCaption] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [notes, setNotes] = useState<string | null>(null);
   const [disputeFound, setDisputeFound] = useState(false);
   const [disputeDescription, setDisputeDescription] = useState("");
@@ -89,19 +90,27 @@ export default function CapturePage() {
     try { await walk.resume(); }
     catch (failure) { toast.error(locationMessage(failure)); }
   };
+  const readFile = (selected: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(selected);
+  });
   const addPhoto = async () => {
-    await addMedia.mutateAsync({ photo: { url: "", caption: caption.trim() || undefined } });
+    if (!photoFile) return;
+    const url = await readFile(photoFile);
+    await addMedia.mutateAsync({
+      photo: { url, caption: caption.trim() || photoFile.name },
+    });
     setCaption("");
+    setPhotoFile(null);
+    toast.success(t.pages.capture.photoAdded);
   };
   const addSketchMap = async (selected: File | undefined) => {
     if (!selected) return;
-    const url = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(selected);
-    });
+    const url = await readFile(selected);
     await addMedia.mutateAsync({ sketchMap: { url, fileName: selected.name } });
+    toast.success(t.pages.capture.sketchMapAdded);
   };
   const file = async () => {
     try {
@@ -148,7 +157,7 @@ export default function CapturePage() {
       <Card className="gap-4 px-4">
         <div className="flex items-center justify-between gap-2"><h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground"><Camera className="size-4 text-marker" />{t.pages.capture.photos}</h2><span className="tabular text-xs text-muted-foreground">{review.photosNeed > 0 ? t.pages.capture.required(review.photosHave, review.photosNeed) : f.number(review.photosHave)}</span></div>
         {report.photos.length === 0 ? <p className="text-xs text-muted-foreground">{t.pages.capture.noPhotos}</p> : <ul className="space-y-1.5">{report.photos.map((photo) => <li key={photo.id} className="flex items-center gap-2.5 rounded-md bg-secondary/40 px-3 py-2 text-xs"><span className="grid size-8 shrink-0 place-items-center rounded bg-muted text-muted-foreground"><ImageIcon className="size-4" /></span><span className="min-w-0"><span className="block truncate text-foreground">{photo.caption ?? t.pages.capture.photoPlaceholder}</span><span className="block text-muted-foreground">{f.dateTime(photo.capturedAt)}</span></span></li>)}</ul>}
-        {!closed ? <div className="space-y-2"><Label htmlFor="caption" className="text-xs">{t.pages.capture.photoCaption}</Label><Input id="caption" value={caption} onChange={(event) => setCaption(event.target.value)} placeholder={t.pages.capture.photoCaptionHint} /><Button size="sm" variant="secondary" className="w-fit" disabled={!active || addMedia.isPending || !walk.online} onClick={() => void addPhoto()}><Camera className="size-3.5" />{t.pages.capture.addPhoto}</Button></div> : null}
+        {!closed ? <div className="space-y-2"><Label htmlFor="land-photo" className="text-xs">{t.pages.capture.photoFile}</Label><Input id="land-photo" type="file" accept="image/*" onChange={(event) => setPhotoFile(event.target.files?.[0] ?? null)} /><Label htmlFor="caption" className="text-xs">{t.pages.capture.photoCaption}</Label><Input id="caption" value={caption} onChange={(event) => setCaption(event.target.value)} placeholder={t.pages.capture.photoCaptionHint} /><Button size="sm" variant="secondary" className="w-fit" disabled={!active || !photoFile || addMedia.isPending || !walk.online} onClick={() => void addPhoto()}><Camera className="size-3.5" />{t.pages.capture.addPhoto}</Button></div> : null}
       </Card>
     </div>
 

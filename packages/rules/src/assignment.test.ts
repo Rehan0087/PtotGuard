@@ -196,14 +196,20 @@ describe("open visits", () => {
 });
 
 describe("mutationsNeedingAgent", () => {
-  it("shows a mutation after primary verification, during field investigation", () => {
-    expect(mutationsNeedingAgent([mutation("m-1", "field-investigation")], [])).toHaveLength(1);
+  it("shows a mutation after primary verification, before field assignment", () => {
+    expect(mutationsNeedingAgent([
+      { ...mutation("m-1", "under-primary-verification"), verifiedAt: "2026-06-02T00:00:00Z" },
+    ], [])).toHaveLength(1);
   });
 
-  it.each(["submitted", "under-primary-verification", "field-verification-complete", "approved"] as const)(
+  it.each(["submitted", "field-verification-complete", "approved"] as const)(
     "does not show a mutation in %s",
     (status) => expect(mutationsNeedingAgent([mutation("m-1", status)], [])).toEqual([]),
   );
+
+  it("does not show an under-primary-verification mutation before verification completes", () => {
+    expect(mutationsNeedingAgent([mutation("m-1", "under-primary-verification")], [])).toEqual([]);
+  });
 
   it("removes a mutation after a visit is assigned", () => {
     const assigned = visit("fr-1", "a-1", { mutationId: "m-1" });

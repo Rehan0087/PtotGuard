@@ -127,10 +127,11 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
     objectionSummary,
     timeline,
     fieldReport,
+    dispute,
   } = detail;
   const presentation = mutationDetailPresentation(detail);
   const actorId = session.data?.user.id;
-  const action = actorId ? mutationActionState(mutation, actorId) : null;
+  const action = actorId ? mutationActionState(mutation, actorId, new Date(), dispute?.status) : null;
   const requiresDisputeEntry = fieldReport?.disputeFound === true && !mutation.disputeId;
   const eligibleAgents = rankCandidates(
     parcel ?? undefined,
@@ -219,7 +220,10 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                   </Button>
                 ) : null}
               </div>
-            ) : role === "land-office" && mutation.status === "field-investigation" ? (
+            ) : role === "land-office" && (
+              mutation.status === "field-investigation" ||
+              (mutation.status === "under-primary-verification" && Boolean(mutation.verifiedAt))
+            ) ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select value={agentId} onValueChange={(value) => setAgentId(value ?? "")}>
                   <SelectTrigger><SelectValue placeholder={t.pages.mutations.selectFieldAgent} /></SelectTrigger>
@@ -250,7 +254,8 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                   {t.pages.mutations.assignFieldAgent}
                 </Button>
               </div>
-            ) : mutation.status === "submitted" || mutation.status === "under-primary-verification" ? (
+            ) : mutation.status === "submitted" ||
+              (mutation.status === "under-primary-verification" && !mutation.verifiedAt) ? (
               <p className="text-sm text-muted-foreground">{t.pages.mutations.fieldInvestigationPending}</p>
             ) : null}
           </DetailSection>
@@ -427,8 +432,15 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
           <DetailSection title={t.pages.mutations.objections}>
             <div className="space-y-3">
               {mutation.disputeId ? (
-                <StatusMetaBadge meta={s.registry.disputed} />
-              ) : role === "land-office" && mutation.status === "field-verification-complete" && fieldReport?.reviewedAt && fieldReport.disputeFound ? (
+                <div className="space-y-2">
+                  <StatusMetaBadge meta={s.registry.disputed} />
+                  {dispute ? (
+                    <p className="text-sm text-muted-foreground">
+                      {t.pages.mutations.mediationCase(dispute.caseNumber, s.dispute[dispute.status].label)}
+                    </p>
+                  ) : null}
+                </div>
+              ) : role === "land-office" && mutation.status === "field-verification-complete" && fieldReport?.disputeFound ? (
                 <div className="space-y-2 rounded-lg border border-border p-3">
                   <Textarea
                     value={disputeDescription}
@@ -501,6 +513,15 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
               ) : null}
               {role === "land-office" && action?.hold?.code === "no-recipient" ? (
                 <p className="text-sm text-muted-foreground">{t.pages.mutations.hold.noRecipient}</p>
+              ) : null}
+              {role === "land-office" && action?.hold?.code === "awaiting-field-assignment" ? (
+                <p className="text-sm text-muted-foreground">{t.pages.mutations.hold.awaitingFieldAssignment}</p>
+              ) : null}
+              {role === "land-office" && action?.hold?.code === "mediation-pending" ? (
+                <p className="text-sm text-muted-foreground">{t.pages.mutations.hold.mediationPending}</p>
+              ) : null}
+              {role === "land-office" && action?.hold?.code === "mediation-unresolved" ? (
+                <p className="text-sm text-destructive">{t.pages.mutations.hold.mediationUnresolved}</p>
               ) : null}
               {role === "land-office" && action?.primary === "approve" && !requiresDisputeEntry ? (
                 <Button type="button" onClick={() => setDecision("approve")}>

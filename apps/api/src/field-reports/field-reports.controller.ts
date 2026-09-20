@@ -211,8 +211,15 @@ export class FieldReportsController {
     if (mutation && mutation.parcelId !== parcel.id) {
       throw new ValidationError({ code: "mutation-parcel-mismatch" }, "mutationId");
     }
-    if (mutation && mutation.status !== "field-investigation") {
-      throw new ValidationError({ code: "wrong-status", expected: ["field-investigation"] }, "mutationId");
+    if (
+      mutation &&
+      mutation.status !== "field-investigation" &&
+      !(mutation.status === "under-primary-verification" && mutation.verifiedAt)
+    ) {
+      throw new ValidationError(
+        { code: "wrong-status", expected: ["verified-primary-investigation"] },
+        "mutationId",
+      );
     }
 
     const [candidate] = rankCandidates(
@@ -232,6 +239,15 @@ export class FieldReportsController {
           select: { id: true },
         });
         if (existing) throw new ConflictError("This mutation already has a field visit.");
+        if (mutation.status === "under-primary-verification") {
+          const advanced = await tx.mutation.updateMany({
+            where: { id: mutation.id, status: "under-primary-verification", updatedAt: mutation.updatedAt },
+            data: { status: "field-investigation" },
+          });
+          if (advanced.count !== 1) {
+            throw new ConflictError("This mutation changed; reload and try again");
+          }
+        }
       }
       const created = await tx.fieldReport.create({
         data: {
@@ -270,12 +286,25 @@ export class FieldReportsController {
           actorId,
           payload: {
             previousStatus: mutation.status,
-            newStatus: mutation.status,
+            newStatus: "field-investigation",
             fieldReportId: created.id,
             assignedAgentId: agent.id,
           },
         });
       }
+
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: agent.id,
+          at: now,
+          severity: "info",
+          title: "New field investigation assigned",
+          body: `You have been assigned a ${body.purpose.replace(/-/g, " ")} for dag ${created.parcelDagNo}.`,
+          read: false,
+          href: `/field/${created.id}`,
+        },
+      });
 
       // Booking a survey against an open dispute moves the case along and
       // shows up on its tracking timeline, same as the real workflow.
@@ -801,6 +830,54 @@ export class FieldReportsController {
               },
             });
           }
+        }
+      }
+
+      if (updatedReport.mutationId) {
+        const mutation = await tx.mutation.findUnique({ where: { id: updatedReport.mutationId } });
+        if (mutation && updatedReport.disputeFound !== true) {
+          if (mutation.status !== "field-investigation") {
+            throw new ConflictError("The linked mutation is not awaiting field investigation");
+          }
+          const advanced = await tx.mutation.updateMany({
+            where: {
+              id: mutation.id,
+              status: "field-investigation",
+              updatedAt: mutation.updatedAt,
+            },
+            data: { status: "field-verification-complete" },
+          });
+          if (advanced.count !== 1) {
+            throw new ConflictError("This mutation changed; reload and try again");
+          }
+          await this.audit.append(tx, {
+            entityType: "mutation",
+            entityId: mutation.id,
+            action: "field-verification-complete",
+            actorId,
+            payload: {
+              previousStatus: "field-investigation",
+              newStatus: "field-verification-complete",
+              fieldReportId: updatedReport.id,
+              note: updatedReport.notes ?? undefined,
+            },
+          });
+        }
+        if (mutation?.assignedOfficerId && mutation.assignedOfficerId !== actorId) {
+          await tx.appNotification.create({
+            data: {
+              id: `n-${randomUUID()}`,
+              userId: mutation.assignedOfficerId,
+              at: now,
+              severity: updatedReport.disputeFound ? "warning" : "info",
+              title: "Field investigation submitted",
+              body: updatedReport.disputeFound
+                ? `The field agent reported a dispute for mutation ${mutation.mutationNumber}.`
+                : `Mutation ${mutation.mutationNumber} is field verification complete and ready for a final decision.`,
+              read: false,
+              href: `/mutations?mutation=${mutation.id}`,
+            },
+          });
         }
       }
 

@@ -14,6 +14,7 @@ import type {
   MutationType,
   MutationVerificationChecklist,
   MutationObjectionSummary,
+  DisputeStatus,
 } from "./types";
 
 const DAY_MS = 86_400_000;
@@ -39,7 +40,70 @@ export type MutationWorkflowHold =
   | { code: "assigned-to-other-officer" }
   | { code: "objection-window"; days: number }
   | { code: "objections"; count: number }
-  | { code: "no-recipient" };
+  | { code: "no-recipient" }
+  | { code: "awaiting-field-assignment" }
+  | { code: "mediation-pending" }
+  | { code: "mediation-unresolved" };
+
+export interface MutationDocumentState {
+  id: ID;
+  // Prisma stores these domain unions as strings; the comparisons below are
+  // deliberately tolerant of that database-facing representation.
+  ocrStatus: string;
+  verificationStatus: string;
+  fraudScore?: number | null;
+}
+
+export type MutationDocumentFailure =
+  | { code: "ocr-pending"; documentIds: ID[] }
+  | { code: "ocr-failed"; documentIds: ID[] }
+  | { code: "fraud-review-required"; documentIds: ID[] }
+  | { code: "documents-not-verified"; documentIds: ID[] };
+
+/**
+ * OCR/fraud clearance is the door into primary verification. Officer
+ * verification is the door out of it. Keeping both checks here prevents the
+ * real API and preview API from drifting apart.
+ */
+export function mutationDocumentGate(
+  documents: MutationDocumentState[],
+  phase: "ocr" | "officer",
+  fraudThreshold = 1,
+): { ok: true } | { ok: false; reason: MutationDocumentFailure } {
+  const pending = documents.filter((document) =>
+    document.ocrStatus === "pending" || document.ocrStatus === "processing");
+  if (pending.length) {
+    return { ok: false, reason: { code: "ocr-pending", documentIds: pending.map(({ id }) => id) } };
+  }
+
+  const failed = documents.filter((document) => document.ocrStatus === "failed");
+  if (failed.length) {
+    return { ok: false, reason: { code: "ocr-failed", documentIds: failed.map(({ id }) => id) } };
+  }
+
+  const suspicious = documents.filter((document) =>
+    document.verificationStatus === "flagged" ||
+    document.verificationStatus === "rejected" ||
+    (typeof document.fraudScore === "number" && document.fraudScore >= fraudThreshold));
+  if (suspicious.length) {
+    return {
+      ok: false,
+      reason: { code: "fraud-review-required", documentIds: suspicious.map(({ id }) => id) },
+    };
+  }
+
+  if (phase === "officer") {
+    const unverified = documents.filter((document) => document.verificationStatus !== "verified");
+    if (unverified.length) {
+      return {
+        ok: false,
+        reason: { code: "documents-not-verified", documentIds: unverified.map(({ id }) => id) },
+      };
+    }
+  }
+
+  return { ok: true };
+}
 
 /** @deprecated Use MutationWorkflowHold through mutationActionGate instead. */
 export type MutationHold = Extract<
@@ -208,6 +272,7 @@ export function mutationActionGate(
   mutation: Mutation,
   actorId: ID,
   now: Date = new Date(),
+  mediationStatus?: DisputeStatus | null,
 ): MutationActionGate {
   if (mutation.status === "approved" || mutation.status === "rejected" || mutation.status === "complete") {
     return {
@@ -234,10 +299,11 @@ export function mutationActionGate(
   }
 
   const canStartVerification = mutation.status === "submitted";
-  const canCompleteVerification = mutation.status === "under-primary-verification";
+  const canCompleteVerification =
+    mutation.status === "under-primary-verification" && !mutation.verifiedAt;
   // A final decision follows an accepted field investigation. Preliminary
   // problems are returned to the workflow rather than skipping the survey.
-  const canReject = mutation.status === "field-verification-complete";
+  let canReject = mutation.status === "field-verification-complete";
 
   if (mutation.status !== "field-verification-complete") {
     return {
@@ -245,9 +311,37 @@ export function mutationActionGate(
       canCompleteVerification,
       canApprove: false,
       canReject,
-      hold: { code: "wrong-status", expected: ["field-verification-complete"] },
+      hold: mutation.status === "under-primary-verification" && mutation.verifiedAt
+        ? { code: "awaiting-field-assignment" }
+        : { code: "wrong-status", expected: ["field-verification-complete"] },
       daysToWindowClose: remainingDays,
     };
+  }
+
+  if (mutation.disputeId) {
+    if (mediationStatus !== "resolved" && mediationStatus !== "rejected") {
+      return {
+        canStartVerification,
+        canCompleteVerification,
+        canApprove: false,
+        canReject: false,
+        hold: { code: "mediation-pending" },
+        daysToWindowClose: remainingDays,
+      };
+    }
+    if (mediationStatus === "rejected") {
+      return {
+        canStartVerification,
+        canCompleteVerification,
+        canApprove: false,
+        canReject: true,
+        hold: { code: "mediation-unresolved" },
+        daysToWindowClose: remainingDays,
+      };
+    }
+    // A mediator resolved the dispute. The mutation may be approved, but a
+    // land officer cannot contradict that outcome by rejecting it.
+    canReject = false;
   }
 
   if (!mutation.toOwnerId) {

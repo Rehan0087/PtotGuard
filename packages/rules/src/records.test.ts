@@ -24,8 +24,8 @@ describe("recordRegistryStatus", () => {
     expect(recordRegistryStatus([{ status: "field-investigation", disputeId: "ds-1" }], 1)).toBe("disputed");
   });
 
-  it("returns to under mutation after the linked dispute is closed", () => {
-    expect(recordRegistryStatus([{ status: "field-investigation", disputeId: "ds-1" }], 0)).toBe("under-mutation");
+  it("stays disputed after mediation until the linked mutation is closed", () => {
+    expect(recordRegistryStatus([{ status: "field-investigation", disputeId: "ds-1" }], 0)).toBe("disputed");
   });
 
   it("uses any active mutation when a parcel has both active and terminal history", () => {
