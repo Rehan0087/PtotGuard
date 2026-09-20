@@ -17,4 +17,5 @@ export * from "./auth";
 export * from "./inheritance";
 export * from "./audit";
 export * from "./policy";
+export * from "./grievance";
 export * from "./api";
