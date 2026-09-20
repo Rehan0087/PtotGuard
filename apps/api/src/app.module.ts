@@ -27,6 +27,7 @@ import { AuthModule } from "./auth/auth.module";
 import { AdminDashboardModule } from "./admin-dashboard/admin-dashboard.module";
 import { LandOfficeDashboardModule } from "./land-office-dashboard/land-office-dashboard.module";
 import { OcrModule } from "./ocr/ocr.module";
+import { GrievancesModule } from "./grievances/grievances.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
@@ -59,6 +60,7 @@ import { OcrModule } from "./ocr/ocr.module";
     AdminDashboardModule,
     LandOfficeDashboardModule,
     OcrModule,
+    GrievancesModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -42,6 +42,9 @@ import type {
   MutationVerificationChecklist,
   MediationOutcome,
   LandRecordDetail,
+  Grievance,
+  GrievanceDetail,
+  GrievanceStatus,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
 import type { FieldProfileUpdate } from "@/lib/field-profile";
@@ -1060,6 +1063,69 @@ export function useUpdatePolicies() {
       api.patch<Policy>("/policies", updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["policies"] });
+    },
+  });
+}
+
+// --- Grievances -----------------------------------------------------------
+
+export function useGrievances(params?: ListParams) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["grievances", role, params],
+    queryFn: () => api.get<Grievance[]>(`/grievances${qs(params)}`),
+  });
+}
+
+export function useGrievance(id: string) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["grievances", id, role],
+    queryFn: () => api.get<GrievanceDetail>(`/grievances/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useFileGrievance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) => api.post<Grievance>("/grievances", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["grievances"] }),
+  });
+}
+
+export function useUpdateGrievanceStatus(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { status: GrievanceStatus }) =>
+      api.patch<Grievance>(`/grievances/${id}/status`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grievances"] });
+      qc.invalidateQueries({ queryKey: ["grievances", id] });
+    },
+  });
+}
+
+export function useResolveGrievance(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { resolutionNote: string; dismissed?: boolean }) =>
+      api.patch<Grievance>(`/grievances/${id}/resolve`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grievances"] });
+      qc.invalidateQueries({ queryKey: ["grievances", id] });
+    },
+  });
+}
+
+export function useRateGrievance(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { rating: number }) =>
+      api.patch<Grievance>(`/grievances/${id}/rate`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grievances"] });
+      qc.invalidateQueries({ queryKey: ["grievances", id] });
     },
   });
 }
