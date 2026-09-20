@@ -95,6 +95,10 @@ model User {
   fieldSurveySessions          FieldSurveySession[]
   fieldSurveySyncReceipts      FieldSurveySyncReceipt[]
   hearingsAsMediator           Hearing[]
+  grievancesFiled              Grievance[]               @relation("GrievanceFiler")
+  grievancesAsOfficer          Grievance[]               @relation("GrievanceOfficer")
+  grievancesEscalated          Grievance[]               @relation("GrievanceEscalated")
+  grievanceEvents              GrievanceEvent[]
   notifications                AppNotification[]
   auditActions                 AuditEvent[]
 
@@ -585,6 +589,64 @@ model Hearing {
   @@index([disputeId])
   @@index([mediatorId])
   @@map("hearings")
+}
+
+// --- Grievances (complaint / grievance redressal) -------------------------
+// Citizen complaints *about* the land office (technical issues, delays,
+// staff conduct, corruption) — distinct from Dispute (citizen-vs-citizen
+// land conflicts). Staff-conduct / corruption complaints bypass the
+// implicated officer's queue and are routed to a supervisor or admin.
+
+model Grievance {
+  id                String          @id
+  caseNumber        String          @unique
+  /// GrievanceCategory: "technical" | "delay" | "staff-conduct" | "corruption"
+  category          String
+  /// GrievanceStatus: "submitted" | "under-review" | "investigating"
+  ///   | "resolved" | "dismissed" | "escalated"
+  status            String          @default("submitted")
+  description       String
+  filedById         String
+  filedBy           User            @relation("GrievanceFiler", fields: [filedById], references: [id])
+  filedByName       String
+  /// Set to null for staff-conduct/corruption so the accused officer's queue is bypassed.
+  assignedOfficerId String?
+  assignedOfficer   User?           @relation("GrievanceOfficer", fields: [assignedOfficerId], references: [id])
+  /// For conduct/corruption: routed to the supervisor instead.
+  escalatedToId     String?
+  escalatedTo       User?           @relation("GrievanceEscalated", fields: [escalatedToId], references: [id])
+  resolutionNote    String?
+  /// 1-5 citizen satisfaction rating, filled when status = "resolved" or "dismissed".
+  satisfactionRating Int?
+  slaDeadline       DateTime?
+  escalatedAt       DateTime?
+  resolvedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  events GrievanceEvent[]
+
+  @@index([filedById])
+  @@index([status])
+  @@index([assignedOfficerId])
+  @@map("grievances")
+}
+
+model GrievanceEvent {
+  id          String    @id
+  grievanceId String
+  grievance   Grievance @relation(fields: [grievanceId], references: [id])
+  at          DateTime  @default(now())
+  /// GrievanceEventType: "filed" | "assigned" | "status-change" | "resolved" | "dismissed" | "escalated" | "rated"
+  type        String
+  title       String
+  description String?
+  actorId     String?
+  actor       User?     @relation(fields: [actorId], references: [id])
+  actorName   String?
+
+  @@index([grievanceId])
+  @@map("grievance_events")
 }
 
 // --- Notifications ------------------------------------------------------

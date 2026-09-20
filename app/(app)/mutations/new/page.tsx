@@ -24,6 +24,8 @@ import {
   UserRound,
   X,
   Info,
+  FileText,
+  Upload,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -31,6 +33,7 @@ import { EmptyState } from "@/components/empty-state";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { ParcelBoundary } from "@/components/parcel-boundary";
+import { UploadDocumentDialog } from "@/components/upload-document-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,6 +48,7 @@ import {
   useSession,
   usePolicies,
   useSearchCitizens,
+  useDocuments,
 } from "@/hooks/queries";
 import type { MutationType, PaymentMethod } from "@/lib/types";
 
@@ -77,6 +81,7 @@ function makeSchema(t: Dictionary) {
       toOwnerId: z.string().optional().default(""),
       deedNumber: z.string().max(60).optional().default(""),
       deedDate: z.string().optional().default(""),
+      documentIds: z.array(z.string()).optional().default([]),
       paymentMethod: z.enum(["bkash", "nagad", "card"]),
       correctionReason: z.string().optional().default(""),
       heirRelationship: z.string().optional().default(""),
@@ -132,6 +137,7 @@ export default function NewMutationPage() {
   const { data: policy } = usePolicies();
   const createMutation = useCreateMutation();
   const { data: session } = useSession();
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const {
     control,
@@ -149,6 +155,7 @@ export default function NewMutationPage() {
       toOwnerId: "",
       deedNumber: "",
       deedDate: "",
+      documentIds: [],
       paymentMethod: "bkash",
       correctionReason: "",
       heirRelationship: "",
@@ -162,10 +169,14 @@ export default function NewMutationPage() {
   const toOwnerId = useWatch({ control, name: "toOwnerId" });
   const deedNumber = useWatch({ control, name: "deedNumber" });
   const deedDate = useWatch({ control, name: "deedDate" });
+  const documentIds = useWatch({ control, name: "documentIds" }) || [];
   const paymentMethod = useWatch({ control, name: "paymentMethod" });
   const correctionReason = useWatch({ control, name: "correctionReason" });
   const heirRelationship = useWatch({ control, name: "heirRelationship" });
   const partitionNote = useWatch({ control, name: "partitionNote" });
+
+  const docsQ = useDocuments({ parcelId: parcelId || "none", pageSize: 100 });
+  const documents = docsQ.data?.items ?? [];
 
   // Display-only — the form only ever submits toOwnerId, but the picked
   // name is what the review step and a "change" chip need to show.
@@ -200,6 +211,7 @@ export default function NewMutationPage() {
         ...(isCorrection ? {} : { toOwnerId: values.toOwnerId }),
         deedNumber: values.deedNumber || undefined,
         deedDate: values.deedDate || undefined,
+        documentIds: values.documentIds,
         paymentMethod: values.paymentMethod as never,
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       } as never,
@@ -488,6 +500,70 @@ export default function NewMutationPage() {
                 </div>
               </div>
             ) : null}
+
+            {/* ── DOCUMENTS ── */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-foreground">
+                  Supporting Documents <span className="text-muted-foreground">({t.common.optional})</span>
+                </label>
+                <Button type="button" variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
+                  <Upload className="mr-1.5 size-4" />
+                  Upload New
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {docsQ.isLoading ? (
+                  <Skeleton className="h-14 w-full rounded-lg" />
+                ) : documents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No documents found for this parcel. Upload a document to attach it.
+                  </p>
+                ) : (
+                  <div className="grid gap-2">
+                    {documents.map((doc) => {
+                      const isSelected = documentIds.includes(doc.id);
+                      return (
+                        <label
+                          key={doc.id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-3 rounded-lg border bg-card p-3 transition-colors",
+                            isSelected ? "border-primary ring-1 ring-primary" : "border-border hover:bg-muted/50",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...documentIds, doc.id]
+                                : documentIds.filter((id) => id !== doc.id);
+                              setValue("documentIds", next, { shouldValidate: true });
+                            }}
+                          />
+                          <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-md text-primary", isSelected ? "bg-primary/10" : "bg-secondary")}>
+                            <FileText className="size-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium text-foreground">{doc.fileName}</div>
+                            <div className="text-xs text-muted-foreground">{t.domain.documentType[doc.type]}</div>
+                          </div>
+                          <span
+                            className={cn(
+                              "flex size-5 shrink-0 items-center justify-center rounded-sm border",
+                              isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border",
+                            )}
+                          >
+                            {isSelected ? <Check className="size-3.5" /> : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
         ) : null}
 
@@ -590,6 +666,12 @@ export default function NewMutationPage() {
                 </Row>
               ) : null}
 
+              <Row label="Documents">
+                {documentIds.length > 0
+                  ? `${documentIds.length} document(s) attached`
+                  : t.pages.newMutation.notSpecified}
+              </Row>
+
               <Row label={t.pages.newMutation.rowPayment}>
                 {t.pages.newMutation.paymentMethods[paymentMethod]}
                 {fee ? ` · ${f.money(fee)}` : ""}
@@ -624,6 +706,8 @@ export default function NewMutationPage() {
           )}
         </div>
       </div>
+
+      <UploadDocumentDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </div>
   );
 }

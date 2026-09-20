@@ -156,6 +156,7 @@ export const en = {
     searchRecords: "Search records",
     myDocuments: "My documents",
     disputes: "Disputes",
+    grievances: "Complaints & Grievances",
     inheritance: "Inheritance",
     records: "Records",
     mutations: "Mutations",
@@ -537,6 +538,26 @@ export const en = {
       emptyTitle: "No disputes filed",
       emptyBody:
         "If a boundary, ownership, or inheritance issue comes up, file it here to start a case.",
+    },
+
+    grievances: {
+      description: "Submit complaints about technical errors, delays, staff conduct, or corruption.",
+      file: "File a complaint",
+      emptyTitle: "No complaints filed",
+      emptyBody: "If you experience any issues or misconduct with land office services, report it here.",
+      category: {
+        technical: "Technical Error",
+        delay: "Unreasonable Delay",
+        staffConduct: "Staff Conduct",
+        corruption: "Corruption / Bribery",
+      },
+      categoryBlurb: {
+        technical: "App errors, missing records, bugs",
+        delay: "Applications exceeding SLA deadlines",
+        staffConduct: "Misbehavior or negligence by staff",
+        corruption: "Demand for bribes or illicit acts",
+      },
+      ratingDescription: "How satisfied are you with the resolution?",
     },
 
     leaseSettlement: {

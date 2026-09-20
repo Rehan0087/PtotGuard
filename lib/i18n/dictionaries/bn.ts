@@ -136,6 +136,7 @@ export const bn: Dictionary = {
     searchRecords: "রেকর্ড খুঁজুন",
     myDocuments: "আমার দলিলপত্র",
     disputes: "বিরোধ",
+    grievances: "অভিযোগ ও প্রতিকার",
     inheritance: "উত্তরাধিকার",
     records: "রেকর্ড",
     mutations: "নামজারি",
@@ -507,6 +508,26 @@ export const bn: Dictionary = {
       emptyTitle: "কোনো বিরোধ দাখিল করা হয়নি",
       emptyBody:
         "সীমানা, মালিকানা বা উত্তরাধিকার নিয়ে সমস্যা হলে এখানে দাখিল করে মামলা শুরু করুন।",
+    },
+
+    grievances: {
+      description: "প্রযুক্তিগত ত্রুটি, বিলম্ব, কর্মীদের আচরণ বা দুর্নীতির বিষয়ে অভিযোগ জমা দিন।",
+      file: "অভিযোগ দাখিল করুন",
+      emptyTitle: "কোনো অভিযোগ দাখিল করা হয়নি",
+      emptyBody: "ভূমি অফিস সেবায় কোনো সমস্যা বা অসদাচরণ দেখা দিলে এখানে অভিযোগ করুন।",
+      category: {
+        technical: "প্রযুক্তিগত ত্রুটি",
+        delay: "অযৌক্তিক বিলম্ব",
+        staffConduct: "কর্মীদের আচরণ",
+        corruption: "দুর্নীতি / ঘুষ দাবি",
+      },
+      categoryBlurb: {
+        technical: "অ্যাপে ত্রুটি, রেকর্ড না থাকা, বাগ",
+        delay: "নির্ধারিত সময়ের চেয়ে বেশি সময় লাগা",
+        staffConduct: "কর্মীদের অসদাচরণ বা অবহেলা",
+        corruption: "ঘুষ দাবি বা অবৈধ কাজ",
+      },
+      ratingDescription: "আপনি সমাধানে কতটা সন্তুষ্ট?",
     },
 
     leaseSettlement: {

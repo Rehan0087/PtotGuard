@@ -208,6 +208,15 @@ export class MutationsController {
       const count = await tx.mutation.count();
       const mutationNumber = `MUT-2026-${String(1300 + count).padStart(5, "0")}`;
 
+      const feeMapping: Record<string, number> = {
+        sale: 5400,
+        inheritance: 2000,
+        gift: 3000,
+        correction: 1500,
+        partition: 4500,
+      };
+      const calculatedFee = feeMapping[body.type] || policy?.mutationFeeBdt || 5400;
+
       const created = await tx.mutation.create({
         data: {
           id: `m-${randomUUID()}`,
@@ -216,6 +225,7 @@ export class MutationsController {
           parcelDagNo: parcel.dagNo,
           type: body.type,
           status: "submitted",
+          assignedOfficerId: "usr-officer", // Assigned to Nasrin Akter
           // The registry's own fact, not the applicant's claim — a citizen
           // does not get to assert who the current owner is.
           fromOwnerName: parcel.owner.name,
@@ -228,7 +238,7 @@ export class MutationsController {
           deedNumber: body.deedNumber,
           deedDate: body.deedDate ? new Date(body.deedDate) : undefined,
           metadata: (body.metadata as Prisma.InputJsonValue) ?? undefined,
-          fee: policy ? { amount: policy.mutationFeeBdt, currency: "BDT" } : undefined,
+          fee: { amount: calculatedFee, currency: "BDT" },
           paymentMethod: body.paymentMethod,
           // Simulated — no gateway is called. See PaymentMethod's own note.
           transactionId: `TXN-${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -248,17 +258,33 @@ export class MutationsController {
         },
       });
 
+      const mutationTypeTitle = body.type.charAt(0).toUpperCase() + body.type.slice(1);
+      
       await tx.appNotification.create({
         data: {
           id: `n-${randomUUID()}`,
           userId: actorId,
           at: new Date(),
           severity: "info",
-          title: "Namjari in verification",
-          body: `Inheritance mutation ${created.mutationNumber} for dag ${created.parcelDagNo} is being verified.`,
+          title: `${mutationTypeTitle} Namjari in verification`,
+          body: `Your ${body.type} mutation ${created.mutationNumber} for dag ${created.parcelDagNo} is being verified.`,
           content: { code: "mutation-verification", mutationNumber: created.mutationNumber, dagNo: created.parcelDagNo },
           read: false,
-          href: `/inheritance`, // Since inheritance is where they track it based on the mock
+          href: `/${body.type}`, // Dynamic link based on mutation type
+        },
+      });
+
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: "usr-officer", // Nasrin Akter
+          at: new Date(),
+          severity: "warning",
+          title: "New Mutation Assigned",
+          body: `A new ${body.type} mutation ${created.mutationNumber} has been assigned to you.`,
+          content: { code: "mutation-assigned", mutationNumber: created.mutationNumber, dagNo: created.parcelDagNo },
+          read: false,
+          href: `/mutations`, 
         },
       });
 
