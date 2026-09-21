@@ -19,6 +19,7 @@ import type {
   HearingStatus,
   UserStatus,
   ServiceApplicationStatus,
+  GrievanceStatus,
 } from "@/lib/types";
 
 export interface StatusMeta {
@@ -111,4 +112,13 @@ export const serviceApplicationStatusTone: Record<ServiceApplicationStatus, Stat
   approved: "verified",
   rejected: "flagged",
   withdrawn: "draft",
+};
+
+export const grievanceStatusTone: Record<GrievanceStatus, StatusTone> = {
+  submitted: "pending",
+  "under-review": "review",
+  investigating: "review",
+  escalated: "flagged",
+  resolved: "verified",
+  dismissed: "flagged",
 };

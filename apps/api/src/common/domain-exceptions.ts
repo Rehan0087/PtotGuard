@@ -65,3 +65,12 @@ export class ConflictError extends DomainError {
     );
   }
 }
+
+export class ForbiddenError extends DomainError {
+  constructor(message = "Forbidden", reason?: unknown) {
+    super(
+      { error: "forbidden", message, ...(reason ? { reason } : {}) } satisfies ErrorBody,
+      HttpStatus.FORBIDDEN,
+    );
+  }
+}

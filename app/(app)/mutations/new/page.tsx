@@ -112,7 +112,7 @@ function makeSchema(t: Dictionary) {
     });
 }
 
-type FormValues = z.infer<ReturnType<typeof makeSchema>>;
+type FormValues = z.input<ReturnType<typeof makeSchema>>;
 
 const STEP_KEYS = ["parcel", "transfer", "payment", "review"] as const;
 

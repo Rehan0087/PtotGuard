@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
+import { useStatusMeta } from "@/lib/i18n/status";
 import { useGrievances } from "@/hooks/queries";
 import { useT } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const CATEGORY_ICONS: Record<GrievanceCategory, React.ElementType> = {
 function GrievanceCard({ grievance }: { grievance: Grievance }) {
   const t = useT();
   const f = useFmt();
+  const s = useStatusMeta();
   const Icon = CATEGORY_ICONS[grievance.category];
 
   // Map camelCase to dictionary keys
@@ -42,7 +44,7 @@ function GrievanceCard({ grievance }: { grievance: Grievance }) {
         <div className="flex-1 space-y-1">
           <div className="flex items-center gap-2">
             <h3 className="font-medium">{categoryLabel}</h3>
-            <IdChip id={grievance.caseNumber} />
+            <IdChip>{grievance.caseNumber}</IdChip>
           </div>
           <p className="line-clamp-1 text-sm text-muted-foreground">
             {grievance.description}
@@ -50,8 +52,8 @@ function GrievanceCard({ grievance }: { grievance: Grievance }) {
         </div>
 
         <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 text-sm text-muted-foreground">
-          <StatusMetaBadge status={grievance.status} />
-          <time dateTime={grievance.createdAt}>{f.relativeTime(grievance.createdAt)}</time>
+          <StatusMetaBadge meta={s.grievance[grievance.status]} />
+          <time dateTime={grievance.createdAt}>{f.fromNow(grievance.createdAt)}</time>
         </div>
       </Card>
     </Link>

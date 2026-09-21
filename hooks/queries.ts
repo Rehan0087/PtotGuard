@@ -1022,7 +1022,7 @@ export function useGrievances(params?: ListParams) {
   const role = useRole();
   return useQuery({
     queryKey: ["grievances", role, params],
-    queryFn: () => api.get<Grievance[]>(`/grievances${qs(params)}`),
+    queryFn: () => api.get<Grievance[]>(`/grievances${qs(params || {})}`),
   });
 }
 

@@ -191,6 +191,14 @@ export const bn: Dictionary = {
       rejected: "প্রত্যাখ্যাত",
       withdrawn: "প্রত্যাহার করা হয়েছে",
     },
+    grievance: {
+      submitted: "দাখিলকৃত",
+      "under-review": "পর্যালোচনাধীন",
+      investigating: "তদন্তাধীন",
+      escalated: "ঊর্ধ্বতন পর্যায়ে প্রেরিত",
+      resolved: "নিষ্পত্তিকৃত",
+      dismissed: "বাতিলকৃত",
+    },
     dispute: {
       submitted: "দাখিলকৃত",
       "under-review": "পর্যালোচনাধীন",

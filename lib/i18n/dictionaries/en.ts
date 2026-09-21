@@ -212,6 +212,14 @@ export const en = {
       rejected: "Rejected",
       withdrawn: "Withdrawn",
     },
+    grievance: {
+      submitted: "Submitted",
+      "under-review": "Under review",
+      investigating: "Investigating",
+      escalated: "Escalated",
+      resolved: "Resolved",
+      dismissed: "Dismissed",
+    },
     dispute: {
       submitted: "Submitted",
       "under-review": "Under review",
