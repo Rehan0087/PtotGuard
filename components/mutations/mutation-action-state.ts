@@ -1,4 +1,9 @@
-import { mutationActionGate, type Mutation, type MutationWorkflowHold } from "@plotguard/rules";
+import {
+  mutationActionGate,
+  type DisputeStatus,
+  type Mutation,
+  type MutationWorkflowHold,
+} from "@plotguard/rules";
 
 export interface MutationActionState {
   primary: "start-verification" | "complete-verification" | "approve" | null;
@@ -12,8 +17,9 @@ export function mutationActionState(
   mutation: Mutation,
   actorId: string,
   now: Date = new Date(),
+  mediationStatus?: DisputeStatus | null,
 ): MutationActionState {
-  const gate = mutationActionGate(mutation, actorId, now);
+  const gate = mutationActionGate(mutation, actorId, now, mediationStatus);
   const terminal = mutation.status === "complete" || mutation.status === "rejected"
     ? mutation.status
     : null;

@@ -154,6 +154,13 @@ transition inside the same transaction as its audit entry. The conditional
 update prevents two requests from claiming the same assignment; subsequent
 or racing requests receive `409 Conflict`.
 
+For mutation work, filing a no-dispute report atomically advances the linked
+mutation from `field-investigation` to `field-verification-complete`, so it is
+immediately ready for the land officer's approve/reject decision. A report that
+finds a dispute remains at `field-investigation`; `POST /field-reports/:id/review`
+is land-office-only and moves that case forward so the officer can refer it to
+mediation. A reported dispute must be recorded before a decision can proceed.
+
 `passwordHash` remains globally omitted by Prisma and is selected only by
 the login query for verification, so it cannot leak through normal user reads.
 

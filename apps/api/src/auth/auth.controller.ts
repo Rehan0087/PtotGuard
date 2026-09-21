@@ -36,8 +36,20 @@ export class AuthController {
       where: { email: body.email.trim().toLowerCase() },
       omit: { passwordHash: false },
     });
-    if (!user || user.status !== "active" || !verifyPassword(body.password, user.passwordHash)) {
+    // An invitation is taken up by using it: the first sign-in that works is
+    // what turns it into an account. Suspended refuses exactly as before, and
+    // an invitation nobody issued a password for has no hash to match.
+    if (
+      !user ||
+      user.status === "suspended" ||
+      !verifyPassword(body.password, user.passwordHash)
+    ) {
       throw new UnauthorizedException("Invalid email or password");
+    }
+
+    if (user.status === "invited") {
+      await this.prisma.user.update({ where: { id: user.id }, data: { status: "active" } });
+      user.status = "active";
     }
     const { passwordHash: _passwordHash, ...safeUser } = user;
     void _passwordHash;

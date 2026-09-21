@@ -1,10 +1,23 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import type { Prisma } from "@prisma/client";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
   mutationActionGate,
+  mutationDocumentGate,
   mutationObjectionSummary,
   mutationVerificationReferences,
   verificationGate,
@@ -14,6 +27,9 @@ import {
   type MutationStatus,
   type ParcelRestriction,
 } from "@plotguard/rules";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -94,7 +110,7 @@ export class MutationsController {
           select: { id: true, name: true, title: true },
         })
       : null;
-    const [parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy, jurisdiction, events, fieldReport] = await Promise.all([
+    const [parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy, jurisdiction, events, fieldReport, dispute] = await Promise.all([
       findParcelView(this.prisma, mutation.parcelId),
       this.prisma.landDocument.findMany({ where: { id: { in: mutation.documentIds } } }),
       summary(mutation.requestedById),
@@ -112,10 +128,13 @@ export class MutationsController {
         orderBy: { createdAt: "asc" },
       }),
       this.prisma.fieldReport.findFirst({ where: { mutationId: id }, orderBy: { assignedAt: "desc" } }),
+      mutation.disputeId
+        ? this.prisma.dispute.findUnique({ where: { id: mutation.disputeId } })
+        : Promise.resolve(null),
     ]);
     return {
       mutation: { ...mutation, fieldReportId: fieldReport?.id }, parcel, documents, applicant, assignedOfficer, verificationStartedBy, verifiedBy,
-      fieldReport,
+      fieldReport, dispute,
       jurisdiction,
       objectionSummary: mutationObjectionSummary(mutation as unknown as Mutation),
       timeline: events.map((event) => {
@@ -277,10 +296,30 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/start-verification")
   async startVerification(@Param("id") id: string, @Req() req: Request) {
     return this.runAction(id, req, async (tx, { mutation, actor }, now) => {
       this.assertTransition(mutation, actor, now, "canStartVerification", ["submitted"]);
+      if (mutation.documentIds.length === 0) {
+        throw new ValidationError({ code: "supporting-documents-required" }, "documentIds");
+      }
+      const [documents, policy] = await Promise.all([
+        tx.landDocument.findMany({ where: { id: { in: mutation.documentIds } } }),
+        tx.policy.findUnique({ where: { id: "singleton" } }),
+      ]);
+      const missing = mutation.documentIds.filter((documentId) =>
+        !documents.some((document) => document.id === documentId));
+      if (missing.length) {
+        throw new ValidationError({ code: "mutation-documents-missing", documentIds: missing }, "documentIds");
+      }
+      const documentReview = mutationDocumentGate(
+        documents,
+        "ocr",
+        policy?.fraudScoreThreshold ?? 1,
+      );
+      if (!documentReview.ok) throw new ValidationError(documentReview.reason, "documentIds");
       const updated = await tx.mutation.update({
         where: {
           id,
@@ -301,6 +340,8 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/complete-verification")
   async completeVerification(
     @Param("id") id: string,
@@ -337,6 +378,8 @@ export class MutationsController {
       if (!policy || !Number.isInteger(policy.objectionWindowDays) || policy.objectionWindowDays < 0) {
         throw new ValidationError({ code: "objection-policy-unavailable" }, "verification");
       }
+      const documentReview = mutationDocumentGate(documents, "officer", policy.fraudScoreThreshold);
+      if (!documentReview.ok) throw new ValidationError(documentReview.reason, "documentIds");
       const updated = await tx.mutation.update({
         where: {
           id,
@@ -345,7 +388,7 @@ export class MutationsController {
           updatedAt: mutation.updatedAt,
         },
         data: {
-          status: "field-investigation", assignedOfficerId: actor.id,
+          status: "under-primary-verification", assignedOfficerId: actor.id,
           verifiedAt: now, verifiedById: actor.id, verificationNotes: notes, verificationChecklist: checklist,
           objectionStartDate: now, objectionWindowEndsAt: new Date(now.getTime() + policy.objectionWindowDays * 86_400_000),
         },
@@ -358,6 +401,8 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/decision")
   async decide(
     @Param("id") id: string,
@@ -369,8 +414,21 @@ export class MutationsController {
         throw new ValidationError({ code: "invalid-decision" }, "decision");
       }
       const approving = body.decision === "approve";
+      const dispute = mutation.disputeId
+        ? await tx.dispute.findUnique({ where: { id: mutation.disputeId } })
+        : null;
       this.assertTransition(mutation, actor, now, approving ? "canApprove" : "canReject",
-        approving ? ["field-verification-complete"] : ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete"]);
+        ["field-verification-complete"], dispute?.status);
+      const filedFieldReport = await tx.fieldReport.findFirst({
+        where: { mutationId: mutation.id, status: "completed" },
+        orderBy: { submittedAt: "desc" },
+      });
+      if (!filedFieldReport) {
+        throw new ValidationError({ code: "field-investigation-not-filed" }, "fieldReport");
+      }
+      if (filedFieldReport.disputeFound === true && !mutation.disputeId) {
+        throw new ValidationError({ code: "dispute-details-required" }, "dispute");
+      }
       const reason = typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
       const note = typeof body.approvalNote === "string" ? body.approvalNote.trim() : undefined;
       const orderSheet = typeof body.orderSheet === "string" ? body.orderSheet.trim() : "";
@@ -489,6 +547,8 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/flag-dispute")
   async flagDispute(
     @Param("id") id: string,
@@ -499,6 +559,19 @@ export class MutationsController {
       const description = body.description?.trim();
       if (!description) throw new ValidationError({ code: "dispute-description-required" }, "description");
       if (mutation.disputeId) throw new ConflictError("A dispute is already linked to this mutation.");
+      if (mutation.status !== "field-verification-complete") {
+        throw new ValidationError({ code: "wrong-status", expected: ["field-verification-complete"] }, "status");
+      }
+      const filedFieldReport = await tx.fieldReport.findFirst({
+        where: { mutationId: mutation.id, status: "completed" },
+        orderBy: { submittedAt: "desc" },
+      });
+      if (!filedFieldReport) {
+        throw new ValidationError({ code: "field-investigation-not-filed" }, "fieldReport");
+      }
+      if (filedFieldReport.disputeFound !== true) {
+        throw new ValidationError({ code: "no-dispute-reported" }, "fieldReport");
+      }
       const [count, mediator, actorUser] = await Promise.all([
         tx.dispute.count(),
         tx.user.findFirst({ where: { role: "mediator", status: "active" } }),
@@ -524,6 +597,34 @@ export class MutationsController {
         },
       });
       const updated = await tx.mutation.update({ where: { id }, data: { disputeId: dispute.id } });
+      await tx.disputeEvent.create({
+        data: {
+          id: `de-${randomUUID()}`,
+          disputeId: dispute.id,
+          at: now,
+          type: "assigned",
+          title: "Referred to mediation",
+          content: mediator ? { code: "assigned", to: mediator.name } : { code: "status-change", status: "in-mediation" },
+          description,
+          actorId: actor.id,
+          actorName: actorUser?.name,
+        },
+      });
+      if (mediator) {
+        await tx.appNotification.create({
+          data: {
+            id: `n-${randomUUID()}`,
+            userId: mediator.id,
+            at: now,
+            severity: "warning",
+            title: "Mutation dispute assigned",
+            body: `Mutation ${mutation.mutationNumber} requires mediation before a final decision.`,
+            content: { code: "dispute-assigned", caseNumber: dispute.caseNumber },
+            read: false,
+            href: "/cases",
+          },
+        });
+      }
       await this.audit.append(tx, {
         entityType: "mutation", entityId: id, action: "dispute-filed", actorId: actor.id,
         payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: description },
@@ -536,8 +637,14 @@ export class MutationsController {
     mutation: ActionContext["mutation"], actor: MutationActor, now: Date,
     action: "canStartVerification" | "canCompleteVerification" | "canApprove" | "canReject",
     expected: MutationStatus[],
+    mediationStatus?: string | null,
   ) {
-    const gate = mutationActionGate(mutation as unknown as Mutation, actor.id, now);
+    const gate = mutationActionGate(
+      mutation as unknown as Mutation,
+      actor.id,
+      now,
+      mediationStatus as Parameters<typeof mutationActionGate>[3],
+    );
     if (gate.hold?.code === "already-decided") throw new ConflictError("This mutation has already been decided.");
     if (!gate[action]) {
       const transitionAlreadyApplied =

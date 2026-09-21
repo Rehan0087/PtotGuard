@@ -21,6 +21,7 @@ import type {
   Hearing,
   AppNotification,
   User,
+  Role,
   Jurisdiction,
   AuthMe,
   ParcelDetail,
@@ -30,6 +31,7 @@ import type {
   LandTaxHolding,
   LandTaxCollection,
   LandOfficerDashboard,
+  AdminDashboard,
   FieldReportDetail,
   HearingDetail,
   InheritanceInput,
@@ -38,6 +40,7 @@ import type {
   AuditVerifyResult,
   Policy,
   MutationVerificationChecklist,
+  MediationOutcome,
   LandRecordDetail,
   Grievance,
   GrievanceDetail,
@@ -223,14 +226,23 @@ export function useMutations(params: ListParams = {}) {
     queryKey: ["mutations", role, params],
     queryFn: () => api.get<Paginated<LandMutation>>(`/mutations${qs(params)}`),
     placeholderData: keepPreviousData,
+    // Field reports are filed from another portal/session. Keep the land-office
+    // queue current so completed investigations appear without a manual reload.
+    refetchInterval: role === "land-office" ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
 export function useMutationById(id: string | undefined) {
+  const role = useRole();
   return useQuery({
-    queryKey: ["mutation", id],
+    queryKey: ["mutation", id, role],
     queryFn: () => api.get<MutationDetail>(`/mutations/${id}`),
     enabled: Boolean(id),
+    refetchInterval: role === "land-office" && id ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
@@ -655,7 +667,7 @@ export function useFieldReports(params: ListParams = {}) {
   });
 }
 
-/** The land office booking a field visit for a dispute or primary-verification mutation. */
+/** The land office booking a field visit for a dispute or field-investigation mutation. */
 export function useAssignFieldSurvey() {
   const qc = useQueryClient();
   return useMutation({
@@ -762,11 +774,36 @@ export function useUpdateFieldReport(id: string) {
   });
 }
 
+/** A land officer accepts a filed investigation and unlocks the mutation decision. */
+export function useReviewFieldInvestigation(mutationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (fieldReportId: string) =>
+      api.post<FieldReport>(`/field-reports/${fieldReportId}/review`),
+    onSuccess: (_report, fieldReportId) => {
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["field-report", fieldReportId] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      invalidateMutationWorkflow(qc, mutationId);
+    },
+  });
+}
+
 export function useLandTaxCollection() {
   const role = useRole();
   return useQuery({
     queryKey: ["land-tax-collection", role],
     queryFn: () => api.get<LandTaxCollection>("/land-tax/collection"),
+  });
+}
+
+/** The administrator's landing view. Counts and the last few ledger entries. */
+export function useAdminDashboard() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["admin-dashboard", role],
+    queryFn: () => api.get<AdminDashboard>("/admin/dashboard"),
+    enabled: role === "admin",
   });
 }
 
@@ -776,6 +813,9 @@ export function useLandOfficerDashboard() {
     queryKey: ["land-office-dashboard", role],
     queryFn: () => api.get<LandOfficerDashboard>("/land-office/dashboard"),
     enabled: role === "land-office",
+    refetchInterval: role === "land-office" ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
@@ -788,20 +828,6 @@ export function useCollectLandTax() {
       qc.invalidateQueries({ queryKey: ["land-tax-collection"] });
       qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
       qc.invalidateQueries({ queryKey: ["service-applications"] });
-    },
-  });
-}
-
-export function useFlagFieldReportDispute(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (description: string) =>
-      api.patch<FieldReport>(`/field-reports/${id}/flag-dispute`, { description }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["field-report", id] });
-      qc.invalidateQueries({ queryKey: ["mutations"] });
-      qc.invalidateQueries({ queryKey: ["disputes"] });
-      invalidateRecordViews(qc);
     },
   });
 }
@@ -827,7 +853,8 @@ export function useHearing(id: string | undefined) {
 export function useHearingRuling(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (ruling: string) => api.patch<Hearing>(`/hearings/${id}/ruling`, { ruling }),
+    mutationFn: (body: { ruling: string; outcome: MediationOutcome }) =>
+      api.patch<Hearing>(`/hearings/${id}/ruling`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hearing", id] });
       qc.invalidateQueries({ queryKey: ["hearings"] });
@@ -986,12 +1013,36 @@ export function useUsers(params: ListParams = {}) {
   });
 }
 
+/** Creating an account. The temporary password comes back once and is never stored readable. */
+export function useInviteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      email: string;
+      role: Role;
+      jurisdictionId: string;
+      title?: string;
+    }) => api.post<{ user: User; temporaryPassword: string }>("/users", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
+/** A new temporary password for somebody locked out — shown once, same as an invitation. */
+export function useResetUserPassword(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ temporaryPassword: string }>(`/users/${id}/password-reset`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
 /** Suspend/reactivate, or reassign jurisdiction — the two account actions
  * that need no real auth system behind them. */
 export function useUpdateUser(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { status?: "active" | "suspended"; jurisdictionId?: string }) =>
+    mutationFn: (body: { status?: "active" | "suspended"; jurisdictionId?: string; role?: Role }) =>
       api.patch<User>(`/users/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });

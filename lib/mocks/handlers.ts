@@ -34,12 +34,15 @@ import {
   executionGate,
   hearingTransition,
   isHearingOpen,
+  passwordResetGate,
+  roleChangeGate,
   extractionReview,
   filingReview,
   analyzeGpsTrack,
   normaliseUlpin,
   maskNationalId,
   mutationActionGate,
+  mutationDocumentGate,
   mutationObjectionSummary,
   mutationVerificationReferences,
   rankCandidates,
@@ -178,8 +181,9 @@ function transitionError(
   now: Date,
   action: "canStartVerification" | "canCompleteVerification" | "canApprove" | "canReject",
   expected: MutationStatus[],
+  mediationStatus?: DisputeStatus | null,
 ) {
-  const gate = mutationActionGate(mutation, actor.id, now);
+  const gate = mutationActionGate(mutation, actor.id, now, mediationStatus);
   if (gate.hold?.code === "already-decided") {
     return conflict("This mutation has already been decided.");
   }
@@ -336,6 +340,17 @@ function notFound(message = "Not found") {
 
 function unauthorized(message = "Authentication required") {
   return HttpResponse.json({ error: "unauthorized", message }, { status: 401 });
+}
+
+/**
+ * Mirrors @Roles() on the real controller: the same refusal, in the same
+ * shape, so a screen that works against the fixture API works against the
+ * real one and a screen that is refused is refused by both.
+ */
+function requireRole(request: Request, ...roles: User["role"][]) {
+  return roles.includes(currentUser(request).role)
+    ? null
+    : forbidden("This portal is restricted to the assigned role");
 }
 
 function forbidden(message = "This portal is restricted to the assigned role") {
@@ -500,9 +515,13 @@ export const handlers = [
     const normalizedEmail = body.email?.trim().toLowerCase();
     const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail)
       ?? (account ? db.users.find((candidate) => candidate.id === db.CURRENT_USER_BY_ROLE[account.role]) : undefined);
-    if (!user || user.status !== "active" || body.password !== DEMO_PASSWORD) {
+    // Mirrors auth.controller.ts: suspended refuses, an invitation is taken
+    // up by using it. The password itself stays the fixture one here — the
+    // mock has never checked a real hash.
+    if (!user || user.status === "suspended" || body.password !== DEMO_PASSWORD) {
       return unauthorized("Invalid email or password");
     }
+    if (user.status === "invited") user.status = "active";
     return HttpResponse.json({
       user,
       tokens: {
@@ -604,6 +623,8 @@ export const handlers = [
 
   http.post(`${API}/jurisdictions`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const body = (await request.json()) as Partial<Jurisdiction>;
     const draft = {
       name: (body.name ?? "").trim(),
@@ -633,6 +654,8 @@ export const handlers = [
 
   http.patch(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const target = db.jurisdictions.find((j) => j.id === params.id);
     if (!target) return notFound("Jurisdiction not found");
 
@@ -671,6 +694,8 @@ export const handlers = [
 
   http.delete(`${API}/jurisdictions/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const index = db.jurisdictions.findIndex((j) => j.id === params.id);
     if (index === -1) return notFound("Jurisdiction not found");
 
@@ -962,8 +987,10 @@ export const handlers = [
   }),
 
   // Documents --------------------------------------------------------------
-  http.post(`${API}/documents/:id/reprocess`, async ({ params }) => {
+  http.post(`${API}/documents/:id/reprocess`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     doc.ocrStatus = "processing";
@@ -981,6 +1008,8 @@ export const handlers = [
    */
   http.patch(`${API}/documents/:id/decision`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     const { decision } = (await request.json()) as {
@@ -1033,6 +1062,8 @@ export const handlers = [
   // fields a human keyed in.
   http.patch(`${API}/documents/:id/fields`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
     const { fields } = (await request.json()) as { fields: Record<string, string> };
@@ -1185,6 +1216,16 @@ export const handlers = [
     const now = new Date();
     const gateError = transitionError(mutation, actor, now, "canStartVerification", ["submitted"]);
     if (gateError) return gateError;
+    if (mutation.documentIds.length === 0) {
+      return unprocessable({ documentIds: { code: "supporting-documents-required" } });
+    }
+    const documents = db.documents.filter((document) => mutation.documentIds.includes(document.id));
+    const missing = mutation.documentIds.filter((id) => !documents.some((document) => document.id === id));
+    if (missing.length) {
+      return unprocessable({ documentIds: { code: "mutation-documents-missing", documentIds: missing } });
+    }
+    const documentReview = mutationDocumentGate(documents, "ocr", db.policies.fraudScoreThreshold);
+    if (!documentReview.ok) return unprocessable({ documentIds: documentReview.reason });
     const previousStatus = mutation.status;
     const at = now.toISOString();
     Object.assign(mutation, {
@@ -1236,11 +1277,13 @@ export const handlers = [
     if (!Number.isInteger(db.policies.objectionWindowDays) || db.policies.objectionWindowDays < 0) {
       return unprocessable({ verification: { code: "objection-policy-unavailable" } });
     }
+    const documentReview = mutationDocumentGate(documents, "officer", db.policies.fraudScoreThreshold);
+    if (!documentReview.ok) return unprocessable({ documentIds: documentReview.reason });
 
     const previousStatus = mutation.status;
     const at = now.toISOString();
     Object.assign(mutation, {
-      status: "field-investigation" as const,
+      status: "under-primary-verification" as const,
       assignedOfficerId: actor.id,
       verifiedAt: at,
       verifiedById: actor.id,
@@ -1275,14 +1318,27 @@ export const handlers = [
     if (accessError) return accessError;
     const approving = body.decision === "approve";
     const now = new Date();
+    const dispute = mutation.disputeId
+      ? db.disputes.find((candidate) => candidate.id === mutation.disputeId)
+      : undefined;
     const gateError = transitionError(
       mutation,
       actor,
       now,
       approving ? "canApprove" : "canReject",
-      approving ? ["field-verification-complete"] : ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete"],
+      ["field-verification-complete"],
+      dispute?.status,
     );
     if (gateError) return gateError;
+    const filedFieldReport = db.fieldReports
+      .filter((report) => report.mutationId === mutation.id && report.status === "completed")
+      .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? ""))[0];
+    if (!filedFieldReport) {
+      return unprocessable({ fieldReport: { code: "field-investigation-not-filed" } });
+    }
+    if (filedFieldReport.disputeFound === true && !mutation.disputeId) {
+      return unprocessable({ dispute: { code: "dispute-details-required" } });
+    }
     const reason = body.rejectionReason?.trim() ?? "";
     const note = body.approvalNote?.trim();
 
@@ -1386,6 +1442,18 @@ export const handlers = [
     const body = (await request.json()) as { description?: string };
     if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
     if (mutation.disputeId) return conflict("A dispute is already linked to this mutation.");
+    if (mutation.status !== "field-verification-complete") {
+      return unprocessable({ status: { code: "wrong-status", expected: ["field-verification-complete"] } });
+    }
+    const filedFieldReport = db.fieldReports
+      .filter((report) => report.mutationId === mutation.id && report.status === "completed")
+      .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? ""))[0];
+    if (!filedFieldReport) {
+      return unprocessable({ fieldReport: { code: "field-investigation-not-filed" } });
+    }
+    if (filedFieldReport.disputeFound !== true) {
+      return unprocessable({ fieldReport: { code: "no-dispute-reported" } });
+    }
     const now = new Date().toISOString();
     const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
     const dispute = {
@@ -1409,6 +1477,32 @@ export const handlers = [
     db.disputes.unshift(dispute);
     mutation.disputeId = dispute.id;
     mutation.updatedAt = now;
+    db.disputeEvents.push({
+      id: `de-${Date.now()}`,
+      disputeId: dispute.id,
+      at: now,
+      type: "assigned",
+      title: "Referred to mediation",
+      content: mediator
+        ? { code: "assigned", to: mediator.name }
+        : { code: "status-change", status: "in-mediation" },
+      description: body.description.trim(),
+      actorId: actor.id,
+      actorName: actor.name,
+    });
+    if (mediator) {
+      db.notifications.unshift({
+        id: `n-${Date.now()}-${mediator.id}`,
+        userId: mediator.id,
+        at: now,
+        severity: "warning",
+        title: "Mutation dispute assigned",
+        body: `Mutation ${mutation.mutationNumber} requires mediation before a final decision.`,
+        content: { code: "dispute-assigned", caseNumber: dispute.caseNumber },
+        read: false,
+        href: "/cases",
+      });
+    }
     await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: actor.id, actorName: actor.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
     return HttpResponse.json(mutation);
   }),
@@ -1440,6 +1534,9 @@ export const handlers = [
     const asString = (value: unknown): string | undefined => typeof value === "string" ? value : undefined;
     return HttpResponse.json({
       mutation: { ...mutation, fieldReportId: db.fieldReports.find((report) => report.mutationId === mutation.id)?.id },
+      dispute: mutation.disputeId
+        ? db.disputes.find((candidate) => candidate.id === mutation.disputeId) ?? null
+        : null,
       fieldReport: db.fieldReports.find((report) => report.mutationId === mutation.id) ?? null,
       parcel: mutationParcel(mutation) ?? null,
       documents: db.documents.filter((document) => mutation.documentIds.includes(document.id)),
@@ -1530,10 +1627,15 @@ export const handlers = [
     const flaggedDocuments = documents.filter((item) => item.verificationStatus === "flagged");
     const activeFieldReports = fieldReports.filter((item) => !["completed", "cancelled"].includes(item.status));
     const liveMutationVisits = new Set(
-      activeFieldReports.flatMap((item) => item.mutationId ? [item.mutationId] : []),
+      fieldReports
+        .filter((item) => item.status !== "cancelled")
+        .flatMap((item) => item.mutationId ? [item.mutationId] : []),
     );
     const needsAgent = activeMutations.filter(
-      (item) => item.status === "under-primary-verification" && !liveMutationVisits.has(item.id),
+      (item) =>
+        ((item.status === "under-primary-verification" && Boolean(item.verifiedAt)) ||
+          item.status === "field-investigation") &&
+        !liveMutationVisits.has(item.id),
     );
     const openServices = services.filter((item) => !["approved", "rejected", "withdrawn"].includes(item.status));
     const serviceCounts = openServices.reduce<Record<string, number>>((counts, item) => {
@@ -1556,7 +1658,9 @@ export const handlers = [
       summary: {
         recordCount: parcels.length,
         activeMutationCount: activeMutations.length,
-        primaryVerificationCount: activeMutations.filter((item) => item.status === "under-primary-verification").length,
+        primaryVerificationCount: activeMutations.filter(
+          (item) => item.status === "under-primary-verification" && !item.verifiedAt,
+        ).length,
         openDisputeCount: openDisputes.length,
         documentsToReviewCount: reviewDocuments.length,
         fraudFlagCount: flaggedDocuments.length,
@@ -2016,6 +2120,8 @@ export const handlers = [
 
   http.patch(`${API}/revenue-cases/:id/schedule-hearing`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (!application.paidAt) {
@@ -2129,6 +2235,8 @@ export const handlers = [
   // under-review. Mirrors acquisition.controller.ts.
   http.post(`${API}/acquisition/notice`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as {
       parcelId: string;
@@ -2530,6 +2638,8 @@ export const handlers = [
 
   http.patch(`${API}/service-applications/:id/decision`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (application.status === "draft") {
@@ -2618,6 +2728,8 @@ export const handlers = [
    */
   http.patch(`${API}/disputes/:id/execute`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const dispute = db.disputes.find((d) => d.id === params.id);
     if (!dispute) return notFound("Dispute not found");
 
@@ -3066,10 +3178,41 @@ export const handlers = [
         report.status = "completed";
         report.submittedAt = now;
         report.notes = notes;
+        report.disputeFound = body.disputeFound ?? false;
+        report.disputeDescription = body.disputeFound
+          ? body.disputeDescription?.trim()
+          : undefined;
         survey.status = "completed";
         survey.completedAt = now;
         survey.version += 1;
         survey.summary = analyzeGpsTrack(points, survey.startedAt, now);
+
+        const mutation = report.mutationId
+          ? db.mutations.find((candidate) => candidate.id === report.mutationId)
+          : undefined;
+        if (mutation && report.disputeFound !== true) {
+          if (mutation.status !== "field-investigation") {
+            throw new MockSyncConflict("gps-point-conflict", {
+              message: "The linked mutation is not awaiting field investigation",
+            });
+          }
+          mutation.status = "field-verification-complete";
+          mutation.updatedAt = now;
+          await appendAudit({
+            entityType: "mutation",
+            entityId: mutation.id,
+            action: "field-verification-complete",
+            actorId: me.id,
+            actorName: me.name,
+            payload: {
+              previousStatus: "field-investigation",
+              newStatus: "field-verification-complete",
+              fieldReportId: report.id,
+              note: report.notes ?? "",
+            },
+            createdAt: now,
+          });
+        }
 
         const dispute = report.disputeId
       ? db.disputes.find((candidate) => candidate.id === report.disputeId)
@@ -3090,36 +3233,21 @@ export const handlers = [
       });
         }
 
-        const mutation = report.mutationId
-          ? db.mutations.find((candidate) => candidate.id === report.mutationId)
-          : undefined;
-        if (mutation && mutation.status === "field-investigation") {
-          mutation.status = "field-verification-complete";
-          mutation.updatedAt = now;
-          if (body.disputeFound && !mutation.disputeId) {
-            const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
-            const linkedDispute = {
-              id: `ds-${Date.now()}`,
-              caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
-              parcelId: mutation.parcelId,
-              parcelDagNo: mutation.parcelDagNo,
-              type: "boundary" as const,
-              status: "in-mediation" as const,
-              priority: "high" as const,
-              filedById: me.id,
-              filedByName: me.name,
-              filedAt: now,
-              updatedAt: now,
-              description: body.disputeDescription?.trim() || notes,
-              parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
-              assignedAgentId: me.id,
-              assignedMediatorId: mediator?.id,
-              evidenceDocumentIds: mutation.documentIds,
-            };
-            db.disputes.unshift(linkedDispute);
-            mutation.disputeId = linkedDispute.id;
+        if (report.mutationId) {
+          if (mutation?.assignedOfficerId && mutation.assignedOfficerId !== me.id) {
+            db.notifications.unshift({
+              id: `n-${Date.now()}-${mutation.assignedOfficerId}`,
+              userId: mutation.assignedOfficerId,
+              at: now,
+              severity: report.disputeFound ? "warning" : "info",
+              title: "Field investigation submitted",
+              body: report.disputeFound
+                ? `The field agent reported a dispute for mutation ${mutation.mutationNumber}.`
+                : `Mutation ${mutation.mutationNumber} is field verification complete and ready for a final decision.`,
+              read: false,
+              href: `/mutations?mutation=${mutation.id}`,
+            });
           }
-          await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "field-verification-complete", actorId: me.id, actorName: me.name, payload: { previousStatus: "field-investigation", newStatus: "field-verification-complete", fieldReportId: report.id, note: notes }, createdAt: now });
         }
 
         await appendAudit({
@@ -3157,33 +3285,42 @@ export const handlers = [
     }
   }),
 
-  http.patch(`${API}/field-reports/:id/flag-dispute`, async ({ params, request }) => {
+  http.post(`${API}/field-reports/:id/review`, async ({ params, request }) => {
     await latency();
-    const me = authenticatedUser(request);
-    if (!me) return unauthorized();
-    if (me.role !== "field-agent") return forbidden();
-    const report = db.fieldReports.find((item) => item.id === params.id && item.assignedAgentId === me.id);
+    const officer = authenticatedUser(request);
+    if (!officer) return unauthorized();
+    if (!isActiveLandOffice(officer)) return forbidden();
+    const report = db.fieldReports.find((item) => item.id === params.id);
     if (!report?.mutationId) return notFound("Mutation field report not found");
+    if (report.status !== "completed") {
+      return unprocessable({ status: { code: "field-report-not-completed" } });
+    }
+    if (report.reviewedAt) return conflict("This field investigation was already accepted");
     const mutation = db.mutations.find((item) => item.id === report.mutationId);
     if (!mutation) return notFound("Mutation not found");
-    if (mutation.disputeId) return HttpResponse.json(report);
-    const body = (await request.json()) as { description?: string };
-    if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
+    if (mutation.assignedOfficerId && mutation.assignedOfficerId !== officer.id) {
+      return conflict("This mutation is assigned to another land officer");
+    }
+    if (mutation.status !== "field-investigation") {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["field-investigation"] } });
+    }
     const now = new Date().toISOString();
-    const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
-    const dispute = {
-      id: `ds-${Date.now()}`, caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
-      parcelId: mutation.parcelId, parcelDagNo: mutation.parcelDagNo,
-      type: "boundary" as const, status: "in-mediation" as const, priority: "high" as const,
-      filedById: me.id, filedByName: me.name, filedAt: now, updatedAt: now,
-      description: body.description.trim(),
-      parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
-      assignedAgentId: me.id, assignedMediatorId: mediator?.id, evidenceDocumentIds: mutation.documentIds,
-    };
-    db.disputes.unshift(dispute);
-    mutation.disputeId = dispute.id;
+    report.reviewedAt = now;
+    report.reviewedById = officer.id;
+    mutation.status = "field-verification-complete";
+    mutation.assignedOfficerId = officer.id;
     mutation.updatedAt = now;
-    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: me.id, actorName: me.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
+    await appendAudit({
+      entityType: "field-report", entityId: report.id, action: "review-accepted",
+      actorId: officer.id, actorName: officer.name,
+      payload: { mutationId: mutation.id, reviewedAt: now }, createdAt: now,
+    });
+    await appendAudit({
+      entityType: "mutation", entityId: mutation.id, action: "field-verification-complete",
+      actorId: officer.id, actorName: officer.name,
+      payload: { previousStatus: "field-investigation", newStatus: "field-verification-complete", fieldReportId: report.id, note: report.notes ?? "" },
+      createdAt: now,
+    });
     return HttpResponse.json(report);
   }),
 
@@ -3293,8 +3430,12 @@ export const handlers = [
     if (mutation && mutation.parcelId !== parcel.id) {
       return unprocessable({ mutationId: { code: "mutation-parcel-mismatch" } });
     }
-    if (mutation && mutation.status !== "under-primary-verification") {
-      return unprocessable({ mutationId: { code: "wrong-status", expected: ["under-primary-verification"] } });
+    if (
+      mutation &&
+      mutation.status !== "field-investigation" &&
+      !(mutation.status === "under-primary-verification" && mutation.verifiedAt)
+    ) {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["verified-primary-investigation"] } });
     }
     if (mutation && db.fieldReports.some((report) => report.mutationId === mutation.id && report.status !== "cancelled")) {
       return conflict("This mutation already has a field visit.");
@@ -3330,6 +3471,9 @@ export const handlers = [
     db.fieldReports.unshift(report);
 
     if (mutation) {
+      const previousStatus = mutation.status;
+      mutation.status = "field-investigation";
+      mutation.updatedAt = now;
       await appendAudit({
         entityType: "mutation",
         entityId: mutation.id,
@@ -3337,14 +3481,25 @@ export const handlers = [
         actorId: me.id,
         actorName: me.name,
         payload: {
-          previousStatus: mutation.status,
-          newStatus: mutation.status,
+          previousStatus,
+          newStatus: "field-investigation",
           fieldReportId: report.id,
           assignedAgentId: agent.id,
         },
         createdAt: now,
       });
     }
+
+    db.notifications.unshift({
+      id: `n-${Date.now()}-${agent.id}`,
+      userId: agent.id,
+      at: now,
+      severity: "info",
+      title: "New field investigation assigned",
+      body: `You have been assigned a ${purpose.replace(/-/g, " ")} for dag ${report.parcelDagNo}.`,
+      read: false,
+      href: `/field/${report.id}`,
+    });
 
     // Booking a survey against an open dispute moves the case along and shows
     // up on its tracking timeline, same as the real workflow.
@@ -3387,9 +3542,17 @@ export const handlers = [
   // Hearings ---------------------------------------------------------------
   http.patch(`${API}/hearings/:id/ruling`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
-    const { ruling } = (await request.json()) as { ruling: string };
+    const { ruling, outcome } = (await request.json()) as {
+      ruling: string;
+      outcome: "resolved" | "unresolved";
+    };
+    if (outcome !== "resolved" && outcome !== "unresolved") {
+      return badRequest("A mediation outcome is required");
+    }
 
     // The same gate the client shows (lib/hearings.ts), so a hand-rolled
     // request can't enter a ruling against a party who was never heard.
@@ -3398,6 +3561,7 @@ export const handlers = [
 
     const now = new Date().toISOString();
     hearing.ruling = ruling;
+    hearing.outcome = outcome;
     hearing.status = "ruled";
     hearing.ruledAt = now;
 
@@ -3408,7 +3572,7 @@ export const handlers = [
       action: "ruling",
       actorId: actor.id,
       actorName: actor.name,
-      payload: { caseNumber: hearing.caseNumber, ruling },
+      payload: { caseNumber: hearing.caseNumber, ruling, outcome },
       createdAt: now,
     });
 
@@ -3417,7 +3581,7 @@ export const handlers = [
     // hearing hanging off it.
     const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
     if (dispute && !isClosed(dispute.status)) {
-      dispute.status = "resolved";
+      dispute.status = outcome === "resolved" ? "resolved" : "rejected";
       // The ruling text is the resolution — record content, stored as typed.
       dispute.resolution = ruling;
       dispute.updatedAt = now;
@@ -3426,7 +3590,7 @@ export const handlers = [
         disputeId: dispute.id,
         at: now,
         type: "resolved",
-        title: "Ruling issued",
+        title: outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
         content: { code: "ruled" },
         description: ruling,
         actorId: actor.id,
@@ -3442,8 +3606,10 @@ export const handlers = [
           userId,
           at: now,
           severity: "info",
-          title: "Ruling issued",
-          body: `A ruling has been issued on case ${dispute.caseNumber}.`,
+          title: outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
+          body: outcome === "resolved"
+            ? `Case ${dispute.caseNumber} was resolved. The mutation can return for approval.`
+            : `Case ${dispute.caseNumber} could not be resolved. The mutation must return for rejection.`,
           content: { code: "dispute-ruled", caseNumber: dispute.caseNumber },
           read: false,
           href: `/disputes/${dispute.id}`,
@@ -3614,6 +3780,8 @@ export const handlers = [
 
   http.post(`${API}/hearings/:id/sessions`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
 
@@ -3690,6 +3858,8 @@ export const handlers = [
   // hearing is over that record. Mirrors hearings.controller.ts's convene().
   http.post(`${API}/hearings`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
     const body = (await request.json()) as { disputeId: string; hearingDate: string };
     const me = currentUser(request);
 
@@ -3772,14 +3942,60 @@ export const handlers = [
   }),
 
   // Audit ------------------------------------------------------------------
-  http.get(`${API}/audit/verify`, async () => {
+  http.get(`${API}/audit/verify`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     return HttpResponse.json(await verifyAuditChain());
   }),
 
-  // The entity types actually present, so the filter offers real options.
-  http.get(`${API}/audit/entity-types`, async () => {
+  /** Mirrors AdminDashboardController — counts, not queues, and no chain walk. */
+  http.get(`${API}/admin/dashboard`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") {
+      return forbidden("Administrator access required.");
+    }
+    const CLOSED_SERVICES = ["approved", "rejected", "withdrawn"];
+    const TERMINAL_MUTATIONS = ["complete", "rejected"];
+    const CLOSED_DISPUTES = ["resolved", "rejected", "withdrawn"];
+    const CLOSED_FIELD_REPORTS = ["completed", "cancelled"];
+    const OPEN_HEARINGS = ["scheduled", "in-hearing", "deliberation"];
+    const ROLE_LIST = ["citizen", "land-office", "field-agent", "mediator", "admin"] as const;
+
+    const chain = await getAuditChain();
+    const newest = [...chain].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const byStatus = (status: string) => db.users.filter((u) => u.status === status).length;
+
+    return HttpResponse.json({
+      queues: {
+        serviceApplications: db.serviceApplications.filter((a) => !CLOSED_SERVICES.includes(a.status)).length,
+        mutations: db.mutations.filter((m) => !TERMINAL_MUTATIONS.includes(m.status)).length,
+        disputes: db.disputes.filter((d) => !CLOSED_DISPUTES.includes(d.status)).length,
+        hearings: db.hearings.filter((h) => OPEN_HEARINGS.includes(h.status)).length,
+        fieldReports: db.fieldReports.filter((r) => !CLOSED_FIELD_REPORTS.includes(r.status)).length,
+        documentsToVerify: db.documents.filter((d) => d.verificationStatus === "unverified").length,
+      },
+      accounts: {
+        total: db.users.length,
+        active: byStatus("active"),
+        suspended: byStatus("suspended"),
+        invited: byStatus("invited"),
+        byRole: Object.fromEntries(
+          ROLE_LIST.map((role) => [role, db.users.filter((u) => u.role === role).length]),
+        ),
+      },
+      ledger: {
+        events: chain.length,
+        ...(newest[0] ? { lastAt: newest[0].createdAt } : {}),
+      },
+      jurisdictionCount: db.jurisdictions.length,
+      recentAudit: newest.slice(0, 5),
+    });
+  }),
+
+  // The entity types actually present, so the filter offers real options.
+  http.get(`${API}/audit/entity-types`, async ({ request }) => {
+    await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     const chain = await getAuditChain();
     return HttpResponse.json([...new Set(chain.map((e) => e.entityType))].sort());
   }),
@@ -3787,6 +4003,7 @@ export const handlers = [
   // Full ledger (admin), filtered and paged — mirrors AuditController.list().
   http.get(`${API}/audit`, async ({ request }) => {
     await latency();
+    if (currentUser(request).role !== "admin") return forbidden("Administrator access required.");
     const url = new URL(request.url);
     const chain = await getAuditChain();
     const p = (key: string) => url.searchParams.get(key)?.trim() || undefined;
@@ -3876,6 +4093,82 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
+  /** Mirrors UsersController.invite(). */
+  http.post(`${API}/users`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
+
+    const body = (await request.json()) as Partial<{
+      name: string;
+      email: string;
+      role: User["role"];
+      jurisdictionId: string;
+      title: string;
+    }>;
+    const email = body.email?.trim().toLowerCase();
+    if (!body.name?.trim() || !email || !body.role || !body.jurisdictionId) {
+      return badRequest("Missing required fields");
+    }
+    if (db.users.some((u) => u.email.toLowerCase() === email)) {
+      return conflict("An account with that email already exists.");
+    }
+    if (!db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
+      return notFound("Jurisdiction not found");
+    }
+
+    const user: User = {
+      id: `usr-${Math.random().toString(36).slice(2, 10)}`,
+      name: body.name.trim(),
+      email,
+      role: body.role,
+      jurisdictionId: body.jurisdictionId,
+      ...(body.title?.trim() ? { title: body.title.trim() } : {}),
+      status: "invited",
+      createdAt: new Date().toISOString(),
+    } as User;
+    db.users.push(user);
+
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "create",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: user.name, email: user.email, role: user.role },
+    });
+
+    // The fixture API authenticates on the demo password, so the issued one
+    // is cosmetic here — the shape matches, which is what parity means.
+    return HttpResponse.json(
+      { user, temporaryPassword: Math.random().toString(36).slice(2, 10) },
+      { status: 201 },
+    );
+  }),
+
+  /** Mirrors UsersController.resetPassword(). */
+  http.post(`${API}/users/:id/password-reset`, async ({ params, request }) => {
+    await latency();
+    const user = db.users.find((u) => u.id === params.id);
+    if (!user) return notFound("User not found");
+
+    const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
+
+    const review = passwordResetGate({ status: user.status });
+    if (!review.canReset) return unprocessable({ status: review.blockers[0] });
+    await appendAudit({
+      entityType: "user",
+      entityId: user.id,
+      action: "update",
+      actorId: me.id,
+      actorName: me.name,
+      payload: { name: user.name, passwordReset: "true" },
+    });
+
+    return HttpResponse.json({ temporaryPassword: Math.random().toString(36).slice(2, 10) });
+  }),
+
   /** Mirrors UsersController.update() — see its own note on scope. */
   http.patch(`${API}/users/:id`, async ({ params, request }) => {
     await latency();
@@ -3885,11 +4178,17 @@ export const handlers = [
     const body = (await request.json()) as Partial<{
       status: "active" | "suspended";
       jurisdictionId: string;
+      role: User["role"];
     }>;
 
     const me = currentUser(request);
+    if (me.role !== "admin") return forbidden("Administrator access required.");
     if (body.status === "suspended" && user.id === me.id) {
       return conflict("You cannot suspend your own account.");
+    }
+    if (body.role) {
+      const review = roleChangeGate(me.id, { id: user.id, role: user.role }, body.role);
+      if (!review.canChange) return unprocessable({ role: review.blockers[0] });
     }
     if (body.jurisdictionId && !db.jurisdictions.some((j) => j.id === body.jurisdictionId)) {
       return notFound("Jurisdiction not found");
@@ -3897,6 +4196,7 @@ export const handlers = [
 
     if (body.status) user.status = body.status;
     if (body.jurisdictionId) user.jurisdictionId = body.jurisdictionId;
+    if (body.role) user.role = body.role;
 
     await appendAudit({
       entityType: "user",
@@ -3908,6 +4208,7 @@ export const handlers = [
         name: user.name,
         ...(body.status ? { status: user.status } : {}),
         ...(body.jurisdictionId ? { jurisdictionId: user.jurisdictionId } : {}),
+        ...(body.role ? { role: user.role } : {}),
       },
     });
 
@@ -3921,6 +4222,8 @@ export const handlers = [
 
   http.patch(`${API}/policies`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "admin");
+    if (denied) return denied;
     const updates = (await request.json()) as Partial<Policy>;
     // Recorded as before/after: a fee or a threshold changing is exactly the
     // kind of thing someone later needs to date precisely.

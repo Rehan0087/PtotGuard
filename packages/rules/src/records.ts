@@ -30,7 +30,9 @@ export function recordRegistryStatus(
   if (hasFlaggedDocument) return "flagged";
   const activeMutations = mutations.filter(({ status }) =>
     ACTIVE_MUTATION_STATUSES.includes(status as (typeof ACTIVE_MUTATION_STATUSES)[number]));
-  if (openDisputeCount > 0 && activeMutations.some(({ disputeId }) => Boolean(disputeId))) {
+  // A linked field dispute remains the mutation's visible state through the
+  // mediator outcome and until the land officer closes the mutation itself.
+  if (activeMutations.some(({ disputeId }) => Boolean(disputeId))) {
     return "disputed";
   }
   if (activeMutations.length > 0) return "under-mutation";

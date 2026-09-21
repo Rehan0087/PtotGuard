@@ -1,5 +1,8 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { pageParams, paginated } from "../common/pagination";
 import { verifyChain } from "./audit-hash";
@@ -37,7 +40,15 @@ function auditWhere(query: Record<string, unknown>): Prisma.AuditEventWhereInput
   };
 }
 
+/**
+ * The whole ledger, and it is the administrator's: every entry names who
+ * did what to which record, which is exactly the trail that should not be
+ * readable by whoever asks. The land-office record view builds its own
+ * per-parcel history through parcels.controller and does not come here.
+ */
 @Controller("audit")
+@UseGuards(AccessTokenGuard, RolesGuard)
+@Roles("admin")
 export class AuditController {
   constructor(private readonly prisma: PrismaService) {}
 

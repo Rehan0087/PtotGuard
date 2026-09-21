@@ -1,7 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import type { Request } from "express";
 import { extractionReview, type LandDocument, type Parcel } from "@plotguard/rules";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { NotFoundError, ValidationError } from "../common/domain-exceptions";
@@ -132,6 +146,8 @@ export class DocumentsController {
    * can always refuse or escalate a scan regardless of what it managed to
    * read.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/decision")
   async decide(@Param("id") id: string, @Body() body: DocumentDecisionDto, @Req() req: Request) {
     const doc = await this.prisma.landDocument.findUnique({ where: { id } });
@@ -223,6 +239,8 @@ export class DocumentsController {
    * a value is always allowed, extractionReview() is what decides whether
    * the result is enough to accept.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/fields")
   async updateFields(@Param("id") id: string, @Body() body: UpdateDocumentFieldsDto) {
     const doc = await this.prisma.landDocument.findUnique({ where: { id } });
@@ -240,6 +258,8 @@ export class DocumentsController {
   }
 
   /** Re-queues a scan for the worker, same as a fresh upload. */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Post(":id/reprocess")
   async reprocess(@Param("id") id: string) {
     const doc = await this.prisma.landDocument.findUnique({ where: { id } });

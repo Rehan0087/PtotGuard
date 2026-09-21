@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Req,
+  UseGuards,
 } from "@nestjs/common";
 import type { Request } from "express";
 import {
@@ -21,6 +22,9 @@ import {
   type Parcel,
   type User,
 } from "@plotguard/rules";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { changedFields } from "../audit/changed-fields";
@@ -65,6 +69,8 @@ export class JurisdictionsController {
    * (reviewDraft()), so a hand-rolled request can't create a mouza with no
    * parent or a code another node already holds.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("admin")
   @Post()
   @HttpCode(201)
   async create(@Body() body: JurisdictionDraftDto, @Req() req: Request) {
@@ -98,6 +104,8 @@ export class JurisdictionsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("admin")
   @Patch(":id")
   async update(
     @Param("id") id: string,
@@ -159,6 +167,8 @@ export class JurisdictionsController {
    * every user and parcel: deletionGate() checks the whole subtree, not just
    * this row, the same way the client does before showing the button at all.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("admin")
   @Delete(":id")
   @HttpCode(204)
   async remove(@Param("id") id: string, @Req() req: Request) {

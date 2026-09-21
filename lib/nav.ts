@@ -90,8 +90,9 @@ export const NAV: Record<Role, PortalNav> = {
   },
   admin: {
     portalKey: "administration",
-    home: "/users",
+    home: "/dashboard",
     items: [
+      { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
       { labelKey: "users", href: "/users", icon: UserCog },
       { labelKey: "auditLedger", href: "/audit", icon: ShieldCheck },
       { labelKey: "jurisdictions", href: "/jurisdictions", icon: Building2 },

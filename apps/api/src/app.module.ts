@@ -24,6 +24,7 @@ import { HearingsModule } from "./hearings/hearings.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
+import { AdminDashboardModule } from "./admin-dashboard/admin-dashboard.module";
 import { LandOfficeDashboardModule } from "./land-office-dashboard/land-office-dashboard.module";
 import { OcrModule } from "./ocr/ocr.module";
 import { GrievancesModule } from "./grievances/grievances.module";
@@ -56,6 +57,7 @@ import { GrievancesModule } from "./grievances/grievances.module";
     NotificationsModule,
     AuditModule,
     AuthModule,
+    AdminDashboardModule,
     LandOfficeDashboardModule,
     OcrModule,
     GrievancesModule,

@@ -495,6 +495,10 @@ model FieldReport {
   sketchMapFileName String?
   notes           String?
   submittedAt     DateTime?
+  disputeFound    Boolean?
+  disputeDescription String?
+  reviewedAt      DateTime?
+  reviewedById    String?
   survey          FieldSurveySession?
   syncReceipts    FieldSurveySyncReceipt[]
 
@@ -584,6 +588,8 @@ model Hearing {
   /// HearingSession[] — appended by POST .../sessions, never addressed singly.
   sessions    Json      @default("[]")
   ruling      String?
+  /// MediationOutcome: "resolved" | "unresolved"
+  outcome     String?
   ruledAt     DateTime?
 
   @@index([disputeId])
