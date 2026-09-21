@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Seed dataset for the mock API. Realistic and interconnected so every portal
  * looks populated in demos. Setting: **Cumilla District, Bangladesh** — dag/khatian
  * numbers, upazila/mouza hierarchy, BDT values, Faraiz/Hindu inheritance context.
@@ -238,6 +238,14 @@ export const parcelRestrictions: ParcelRestriction[] = [
   { id: "res-2", parcelId: "p-176", type: "injunction", authority: "Cumilla Joint District Judge Court", referenceNo: "Title Suit 214/2026", note: "Dealings restrained pending disposal of the forged-deed suit.", fromDate: "2026-07-02T00:00:00Z", toDate: null },
   { id: "res-3", parcelId: "p-205", type: "acquisition", authority: "Deputy Commissioner, Cumilla", referenceNo: "LA Case 39/2026", note: "Section 4 notice served for the Debidwar–Barura road widening.", fromDate: "2026-06-20T00:00:00Z", toDate: null },
   { id: "res-4", parcelId: "p-311", type: "mortgage", authority: "Janata Bank, Cumilla", referenceNo: "JB/MTG/2019/1188", note: "Discharged on repayment.", fromDate: "2019-11-02T00:00:00Z", toDate: "2025-01-30T00:00:00Z" },
+];
+
+export const khasLandPlots: any[] = [
+  { id: "klp-1", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "110", landUse: "agricultural", areaDecimals: 50, centroidLat: 23.550, centroidLng: 90.990, boundaryGeoJson: square({ lat: 23.550, lng: 90.990 }), status: "available" },
+  { id: "klp-2", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "115", landUse: "non-agricultural", areaDecimals: 12, centroidLat: 23.552, centroidLng: 90.992, boundaryGeoJson: square({ lat: 23.552, lng: 90.992 }), status: "available" },
+  { id: "klp-3", mouza: "Payalgacha", upazila: "Barura", district: "Cumilla", dagNo: "220", landUse: "agricultural", areaDecimals: 120, centroidLat: 23.360, centroidLng: 91.030, boundaryGeoJson: square({ lat: 23.360, lng: 91.030 }), status: "available" },
+  { id: "klp-4", mouza: "Payalgacha", upazila: "Barura", district: "Cumilla", dagNo: "225", landUse: "non-agricultural", areaDecimals: 8, centroidLat: 23.362, centroidLng: 91.032, boundaryGeoJson: square({ lat: 23.362, lng: 91.032 }), status: "reserved" },
+  { id: "klp-5", mouza: "Debidwar", upazila: "Debidwar", district: "Cumilla", dagNo: "45", landUse: "non-agricultural", areaDecimals: 5, centroidLat: 23.555, centroidLng: 90.985, boundaryGeoJson: square({ lat: 23.555, lng: 90.985 }), status: "leased" },
 ];
 
 export const ownershipRecords: OwnershipRecord[] = [

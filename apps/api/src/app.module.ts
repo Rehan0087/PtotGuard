@@ -28,6 +28,7 @@ import { AdminDashboardModule } from "./admin-dashboard/admin-dashboard.module";
 import { LandOfficeDashboardModule } from "./land-office-dashboard/land-office-dashboard.module";
 import { OcrModule } from "./ocr/ocr.module";
 import { GrievancesModule } from "./grievances/grievances.module";
+import { KhasLandPlotsModule } from "./khas-land-plots/khas-land-plots.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
@@ -61,7 +62,9 @@ import { GrievancesModule } from "./grievances/grievances.module";
     LandOfficeDashboardModule,
     OcrModule,
     GrievancesModule,
+    KhasLandPlotsModule,
   ],
+
   controllers: [HealthController],
   providers: [
     // Registered here rather than in main.ts so it is also active in tests that

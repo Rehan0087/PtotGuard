@@ -38,8 +38,10 @@ import {
   useApplyLeaseSettlement,
   useServiceApplications,
   useServiceApplicationDecision,
+  useKhasLandPlots,
 } from "@/hooks/queries";
-import type { PaymentMethod, ServiceApplication } from "@/lib/types";
+import type { PaymentMethod, ServiceApplication, KhasLandPlot } from "@/lib/types";
+import { KhasLandMap } from "@/components/khas-land-map";
 
 type LandUse = "agricultural" | "non-agricultural";
 
@@ -86,7 +88,7 @@ export default function LeaseSettlementPage() {
 
 // --- Citizen -----------------------------------------------------------------
 
-function ApplyForm({ onDone }: { onDone: () => void }) {
+function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlot?: KhasLandPlot }) {
   const t = useT();
   const f = useFmt();
   const schema = useMemo(() => makeSchema(t), [t]);
@@ -102,9 +104,9 @@ function ApplyForm({ onDone }: { onDone: () => void }) {
   } = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
     defaultValues: {
-      landUse: "agricultural",
-      locationDescription: "",
-      areaDecimals: "",
+      landUse: prefilledPlot ? (prefilledPlot.landUse === "agricultural" ? "agricultural" : "non-agricultural") : "agricultural",
+      locationDescription: prefilledPlot ? `${prefilledPlot.mouza}, ${prefilledPlot.upazila} (Dag No: ${prefilledPlot.dagNo})` : "",
+      areaDecimals: prefilledPlot ? String(prefilledPlot.areaDecimals) : "",
       termYears: "",
       purpose: "",
       paymentMethod: "bkash",
@@ -134,6 +136,7 @@ function ApplyForm({ onDone }: { onDone: () => void }) {
         termYears: Number(values.termYears),
         purpose: values.purpose,
         paymentMethod: values.paymentMethod,
+        khasPlotId: prefilledPlot?.id,
       },
       {
         onSuccess: (application) => {
@@ -337,6 +340,81 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
   );
 }
 
+function NewApplicationFlow({ onDone }: { onDone: () => void }) {
+  const t = useT();
+  const { data } = useKhasLandPlots({ status: "available" });
+  const [selectedPlot, setSelectedPlot] = useState<KhasLandPlot | undefined>();
+  const [showForm, setShowForm] = useState(false);
+  const plots = data?.items ?? [];
+
+  if (showForm) {
+    return (
+      <div className="space-y-4">
+        {selectedPlot ? (
+          <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+            <div className="text-sm">
+              <span className="font-medium">Selected Plot:</span> {selectedPlot.dagNo} ({selectedPlot.mouza}, {selectedPlot.upazila}) — {selectedPlot.areaDecimals} decimals
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>
+              Back to Map
+            </Button>
+          </div>
+        ) : null}
+        <ApplyForm onDone={onDone} prefilledPlot={selectedPlot} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4 space-y-4">
+        <div className="text-sm text-muted-foreground font-medium flex justify-between items-center">
+          <span>Select an available plot from the map or list, or skip to apply manually:</span>
+          <Button variant="secondary" size="sm" onClick={() => {
+            setSelectedPlot(undefined);
+            setShowForm(true);
+          }}>
+            Skip Map Selection
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <KhasLandMap plots={plots} selectedId={selectedPlot?.id} onSelect={setSelectedPlot} className="h-96" />
+          </div>
+          
+          <div className="flex flex-col gap-2 overflow-y-auto max-h-96 pr-1">
+            <div className="text-sm font-medium mb-1">Available Plots</div>
+            {plots.map((plot) => (
+              <div 
+                key={plot.id} 
+                onClick={() => setSelectedPlot(plot)}
+                className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedPlot?.id === plot.id ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}
+              >
+                <div className="font-medium text-sm">Dag No: {plot.dagNo}</div>
+                <div className="text-xs text-muted-foreground">{plot.mouza}, {plot.upazila}</div>
+                <div className="text-xs text-muted-foreground mt-1 capitalize">{plot.areaDecimals} decimals • {plot.landUse}</div>
+                
+                {selectedPlot?.id === plot.id && (
+                  <Button size="sm" className="w-full mt-3" onClick={() => setShowForm(true)}>
+                    Apply for this Plot
+                  </Button>
+                )}
+              </div>
+            ))}
+            
+            {plots.length === 0 && (
+              <div className="text-sm text-muted-foreground italic p-4 text-center border rounded-lg border-dashed">
+                No plots currently available.
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function CitizenLeaseSettlement() {
   const t = useT();
   const [applying, setApplying] = useState(false);
@@ -362,7 +440,7 @@ function CitizenLeaseSettlement() {
         )}
       </PageHeader>
 
-      {applying ? <ApplyForm onDone={() => setApplying(false)} /> : null}
+      {applying ? <NewApplicationFlow onDone={() => setApplying(false)} /> : null}
 
       {isLoading ? (
         <div className="space-y-3">
@@ -376,7 +454,12 @@ function CitizenLeaseSettlement() {
             icon={Sprout}
             title={t.pages.leaseSettlement.emptyTitle}
             description={t.pages.leaseSettlement.emptyBody}
-          />
+          >
+            <Button onClick={() => setApplying(true)}>
+              <Plus className="size-4 mr-2" />
+              {t.pages.leaseSettlement.newRequest}
+            </Button>
+          </EmptyState>
         )
       ) : (
         <div className="space-y-3">

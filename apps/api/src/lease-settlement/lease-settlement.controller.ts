@@ -47,6 +47,17 @@ export class LeaseSettlementController {
       const applicationNo = `LSE-2026-${String(1000 + count).padStart(6, "0")}`;
       const now = new Date();
 
+      if (body.khasPlotId) {
+        const plot = await tx.khasLandPlot.findUnique({ where: { id: body.khasPlotId } });
+        if (!plot) throw new NotFoundError("Khas land plot not found");
+        if (plot.status !== "available") throw new Error("Plot is not available for lease");
+
+        await tx.khasLandPlot.update({
+          where: { id: body.khasPlotId },
+          data: { status: "reserved" },
+        });
+      }
+
       const created = await tx.serviceApplication.create({
         data: {
           id: `sa-${randomUUID()}`,
@@ -54,6 +65,7 @@ export class LeaseSettlementController {
           serviceType: "lease-settlement",
           status: "submitted",
           parcelId: null,
+          khasPlotId: body.khasPlotId ?? null,
           applicantId: me,
           details: {
             landUse: body.landUse,

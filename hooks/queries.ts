@@ -45,6 +45,7 @@ import type {
   Grievance,
   GrievanceDetail,
   GrievanceStatus,
+  KhasLandPlot,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
 import type { FieldProfileUpdate } from "@/lib/field-profile";
@@ -485,6 +486,7 @@ export function useApplyLeaseSettlement() {
       termYears: number;
       purpose: string;
       paymentMethod: string;
+      khasPlotId?: string;
     }) => {
       const { paymentMethod, ...applyBody } = body;
       const created = await api.post<ServiceApplication>("/lease-settlement/apply", applyBody);
@@ -1127,5 +1129,14 @@ export function useRateGrievance(id: string) {
       qc.invalidateQueries({ queryKey: ["grievances"] });
       qc.invalidateQueries({ queryKey: ["grievances", id] });
     },
+  });
+}
+
+// --- Khas Land -----------------------------------------------------------
+
+export function useKhasLandPlots(params: { landUse?: string; status?: string } = {}) {
+  return useQuery({
+    queryKey: ["khas-land-plots", params],
+    queryFn: () => api.get<Paginated<KhasLandPlot>>(`/khas-land-plots${qs(params)}`),
   });
 }

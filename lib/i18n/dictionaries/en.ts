@@ -580,6 +580,10 @@ export const en = {
       appliedBody: (appNo: string) => `Your application ${appNo} is under review.`,
       failedTitle: "Application failed",
       failedBody: "There was an error submitting your request. Please try again.",
+      newRequest: "New Application",
+      emptyTitle: "No applications yet",
+      emptyBody: "You have not submitted any lease or settlement requests.",
+      myRequestsLabel: "My Applications",
       landUse: {
         agricultural: "Agricultural",
         nonAgricultural: "Non-agricultural",

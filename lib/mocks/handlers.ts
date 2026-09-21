@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MSW request handlers — a mock of the frozen PlotGuard Core API. Response shapes
  * match the planned NestJS backend exactly, so swapping MSW for the live API is a
  * config change (see lib/api-client.ts), not a rewrite. Paths after the /api base
@@ -2173,7 +2173,15 @@ export const handlers = [
       termYears: number;
       purpose: string;
       documentIds?: string[];
+      khasPlotId?: string;
     };
+
+    if (body.khasPlotId) {
+      const plot = db.khasLandPlots.find((p) => p.id === body.khasPlotId);
+      if (plot) {
+        plot.status = "reserved";
+      }
+    }
 
     const now = new Date().toISOString();
     const count = db.serviceApplications.filter((a) => a.serviceType === "lease-settlement").length;
@@ -2190,6 +2198,7 @@ export const handlers = [
         termYears: body.termYears,
         purpose: body.purpose,
       },
+      khasPlotId: body.khasPlotId,
       documentIds: body.documentIds ?? [],
       feeAmount:
         body.landUse === "agricultural"
@@ -2934,6 +2943,25 @@ export const handlers = [
     });
 
     return HttpResponse.json(dispute, { status: 201 });
+  }),
+
+  http.get(`${API}/khas-land-plots`, async ({ request }) => {
+    await latency();
+    const url = new URL(request.url);
+    const landUse = url.searchParams.get("landUse");
+    const status = url.searchParams.get("status") || "available";
+
+    let plots = db.khasLandPlots.filter(p => p.status === status);
+    if (landUse) {
+      plots = plots.filter(p => p.landUse === landUse);
+    }
+
+    return HttpResponse.json<Paginated<any>>({
+      items: plots,
+      total: plots.length,
+      page: 1,
+      pageSize: Math.max(1, plots.length),
+    });
   }),
 
   // Field reports ----------------------------------------------------------
