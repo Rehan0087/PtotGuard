@@ -40,10 +40,12 @@ import type {
   AuditVerifyResult,
   Policy,
   MutationVerificationChecklist,
+  MediationOutcome,
   LandRecordDetail,
   Grievance,
   GrievanceDetail,
   GrievanceStatus,
+  KhasLandPlot,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
 import type { FieldProfileUpdate } from "@/lib/field-profile";
@@ -225,14 +227,23 @@ export function useMutations(params: ListParams = {}) {
     queryKey: ["mutations", role, params],
     queryFn: () => api.get<Paginated<LandMutation>>(`/mutations${qs(params)}`),
     placeholderData: keepPreviousData,
+    // Field reports are filed from another portal/session. Keep the land-office
+    // queue current so completed investigations appear without a manual reload.
+    refetchInterval: role === "land-office" ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
 export function useMutationById(id: string | undefined) {
+  const role = useRole();
   return useQuery({
-    queryKey: ["mutation", id],
+    queryKey: ["mutation", id, role],
     queryFn: () => api.get<MutationDetail>(`/mutations/${id}`),
     enabled: Boolean(id),
+    refetchInterval: role === "land-office" && id ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
@@ -475,6 +486,7 @@ export function useApplyLeaseSettlement() {
       termYears: number;
       purpose: string;
       paymentMethod: string;
+      khasPlotId?: string;
     }) => {
       const { paymentMethod, ...applyBody } = body;
       const created = await api.post<ServiceApplication>("/lease-settlement/apply", applyBody);
@@ -657,7 +669,7 @@ export function useFieldReports(params: ListParams = {}) {
   });
 }
 
-/** The land office booking a field visit for a dispute or primary-verification mutation. */
+/** The land office booking a field visit for a dispute or field-investigation mutation. */
 export function useAssignFieldSurvey() {
   const qc = useQueryClient();
   return useMutation({
@@ -764,6 +776,21 @@ export function useUpdateFieldReport(id: string) {
   });
 }
 
+/** A land officer accepts a filed investigation and unlocks the mutation decision. */
+export function useReviewFieldInvestigation(mutationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (fieldReportId: string) =>
+      api.post<FieldReport>(`/field-reports/${fieldReportId}/review`),
+    onSuccess: (_report, fieldReportId) => {
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["field-report", fieldReportId] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      invalidateMutationWorkflow(qc, mutationId);
+    },
+  });
+}
+
 export function useLandTaxCollection() {
   const role = useRole();
   return useQuery({
@@ -788,6 +815,9 @@ export function useLandOfficerDashboard() {
     queryKey: ["land-office-dashboard", role],
     queryFn: () => api.get<LandOfficerDashboard>("/land-office/dashboard"),
     enabled: role === "land-office",
+    refetchInterval: role === "land-office" ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
@@ -800,20 +830,6 @@ export function useCollectLandTax() {
       qc.invalidateQueries({ queryKey: ["land-tax-collection"] });
       qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
       qc.invalidateQueries({ queryKey: ["service-applications"] });
-    },
-  });
-}
-
-export function useFlagFieldReportDispute(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (description: string) =>
-      api.patch<FieldReport>(`/field-reports/${id}/flag-dispute`, { description }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["field-report", id] });
-      qc.invalidateQueries({ queryKey: ["mutations"] });
-      qc.invalidateQueries({ queryKey: ["disputes"] });
-      invalidateRecordViews(qc);
     },
   });
 }
@@ -839,7 +855,8 @@ export function useHearing(id: string | undefined) {
 export function useHearingRuling(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (ruling: string) => api.patch<Hearing>(`/hearings/${id}/ruling`, { ruling }),
+    mutationFn: (body: { ruling: string; outcome: MediationOutcome }) =>
+      api.patch<Hearing>(`/hearings/${id}/ruling`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hearing", id] });
       qc.invalidateQueries({ queryKey: ["hearings"] });
@@ -1058,7 +1075,7 @@ export function useGrievances(params?: ListParams) {
   const role = useRole();
   return useQuery({
     queryKey: ["grievances", role, params],
-    queryFn: () => api.get<Grievance[]>(`/grievances${qs(params)}`),
+    queryFn: () => api.get<Grievance[]>(`/grievances${qs(params || {})}`),
   });
 }
 
@@ -1112,5 +1129,14 @@ export function useRateGrievance(id: string) {
       qc.invalidateQueries({ queryKey: ["grievances"] });
       qc.invalidateQueries({ queryKey: ["grievances", id] });
     },
+  });
+}
+
+// --- Khas Land -----------------------------------------------------------
+
+export function useKhasLandPlots(params: { landUse?: string; status?: string } = {}) {
+  return useQuery({
+    queryKey: ["khas-land-plots", params],
+    queryFn: () => api.get<Paginated<KhasLandPlot>>(`/khas-land-plots${qs(params)}`),
   });
 }

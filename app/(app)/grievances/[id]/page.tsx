@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
+import { useStatusMeta } from "@/lib/i18n/status";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/lib/i18n/provider";
 import { useFmt } from "@/lib/i18n/format";
@@ -35,6 +36,7 @@ export default function GrievanceDetailPage({
   const t = useT();
   const f = useFmt();
   const role = useRole();
+  const s = useStatusMeta();
   const { data, isLoading } = useGrievance(id);
   const rateGrievance = useRateGrievance(id);
   const resolveGrievance = useResolveGrievance(id);
@@ -73,7 +75,7 @@ export default function GrievanceDetailPage({
         <div className="flex-1 space-y-4">
           <PageHeader eyebrow={categoryLabel} title={grievance.caseNumber} />
           <div className="flex flex-wrap items-center gap-3">
-            <StatusMetaBadge status={grievance.status} />
+            <StatusMetaBadge meta={s.grievance[grievance.status]} />
             <div className="text-sm text-muted-foreground">
               Filed {f.date(grievance.createdAt)}
             </div>

@@ -40,7 +40,7 @@ export interface BoundaryWalkState {
   locationError?: GeolocationFailureCode;
   start: () => Promise<void>;
   resume: () => Promise<void>;
-  complete: (notes: string) => Promise<void>;
+  complete: (notes: string, finding?: { disputeFound: boolean; disputeDescription?: string }) => Promise<void>;
   syncNow: () => Promise<void>;
   retrySync: () => Promise<void>;
 }
@@ -216,7 +216,7 @@ export function useBoundaryWalk(
   }, [assignedAgentId, beginWatch, fieldReportId, key, refresh, remote, repository, syncNow]);
 
   const complete = useCallback(
-    async (notes: string) => {
+    async (notes: string, finding?: { disputeFound: boolean; disputeDescription?: string }) => {
       if (!repository || !key) throw new Error("Offline survey not found");
       stopWatch.current?.();
       setTracking(false);
@@ -230,7 +230,7 @@ export function useBoundaryWalk(
         survey.startedAt,
         completedAt,
       );
-      await repository.queueCompletion(key, notes, completedAt, summary);
+      await repository.queueCompletion(key, notes, completedAt, summary, finding);
       await refresh();
       await syncNow();
     },

@@ -84,8 +84,23 @@ export class GrievancesController {
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
-      const count = await tx.grievance.count();
-      const caseNumber = `GRV-2026-${String(1000 + count).padStart(5, "0")}`;
+      const last = await tx.grievance.findFirst({
+        orderBy: { caseNumber: "desc" },
+      });
+      
+      let nextSeq = 1000;
+      if (last && last.caseNumber.startsWith("GRV-2026-")) {
+        const match = last.caseNumber.match(/GRV-2026-(\d+)/);
+        if (match && match[1]) {
+          nextSeq = parseInt(match[1], 10) + 1;
+        }
+      }
+      if (nextSeq === 1000) {
+        const count = await tx.grievance.count();
+        nextSeq = 1000 + count;
+      }
+      
+      const caseNumber = `GRV-2026-${String(nextSeq).padStart(5, "0")}`;
 
       const slaDeadline = new Date(now);
       slaDeadline.setDate(slaDeadline.getDate() + 7);

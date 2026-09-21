@@ -65,6 +65,7 @@ function fixture(status = "submitted") {
     policy: { findUnique: vi.fn().mockResolvedValue({ id: "singleton", objectionWindowDays: 15, mutationFeeBdt: 500 }) },
     ownershipRecord: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), create: vi.fn().mockResolvedValue({}) },
     landDocument: { findMany: vi.fn().mockResolvedValue([document]) },
+    fieldReport: { findFirst: vi.fn().mockResolvedValue({ id: "fr-1", status: "completed", reviewedAt: now, disputeFound: false }) },
     appNotification: { create: vi.fn().mockResolvedValue({}) },
   };
   const prisma = {
@@ -185,12 +186,12 @@ describe("mutation workflow writes", () => {
     delete (checklist as { notes?: string }).notes;
     expect(f.tx.mutation.update).toHaveBeenCalledWith({
       where: expect.objectContaining({ id: "m-1", status: "under-primary-verification", updatedAt: f.mutation.updatedAt }),
-      data: expect.objectContaining({ status: "field-investigation", assignedOfficerId: "usr-officer", verifiedById: "usr-officer", verifiedAt: now,
+      data: expect.objectContaining({ status: "under-primary-verification", assignedOfficerId: "usr-officer", verifiedById: "usr-officer", verifiedAt: now,
         verificationChecklist: checklist, verificationNotes: "Records verified", objectionStartDate: now,
         objectionWindowEndsAt: new Date("2026-09-27T10:00:00.000Z") }),
     });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ action: "status-change", actorId: "usr-officer",
-      payload: expect.objectContaining({ previousStatus: "under-primary-verification", newStatus: "field-investigation", note: "Records verified" }) }));
+      payload: expect.objectContaining({ previousStatus: "under-primary-verification", newStatus: "under-primary-verification", note: "Records verified" }) }));
   });
 
   it.each([
@@ -307,7 +308,8 @@ describe("mutation workflow writes", () => {
     await expect(f.controller.decide("m-1", approveBody, request())).rejects.toThrow();
     noWrites(f);
   });
-  it.each(["submitted", "under-primary-verification", "field-investigation"])("rejects %s with actor, timestamp, and trimmed reason", async (status) => {
+  it("rejects after the field investigation is accepted, with actor, timestamp, and trimmed reason", async () => {
+    const status = "field-verification-complete";
     const f = fixture(status);
     await f.controller.decide("m-1", { decision: "reject", rejectionReason: "  Deed mismatch  " }, request());
     expect(f.tx.mutation.update).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "m-1", status }),
@@ -316,6 +318,12 @@ describe("mutation workflow writes", () => {
       payload: expect.objectContaining({ previousStatus: status, newStatus: "rejected", reason: "Deed mismatch" }) }));
     expect(f.tx.parcel.update).not.toHaveBeenCalled();
     expect(f.tx.ownershipRecord.create).not.toHaveBeenCalled();
+  });
+  it.each(["submitted", "under-primary-verification", "field-investigation"])("refuses final rejection before field review from %s", async (status) => {
+    const f = fixture(status);
+    await expect(f.controller.decide("m-1", { decision: "reject", rejectionReason: "Deed mismatch" }, request()))
+      .rejects.toBeInstanceOf(ValidationError);
+    noWrites(f);
   });
   it.each([undefined, "", "   "])("refuses rejection without a reason: %s", async (rejectionReason) => {
     const f = fixture();

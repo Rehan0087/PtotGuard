@@ -418,6 +418,8 @@ model ServiceApplication {
   /// Not every service is parcel-bound (e.g. an information-bank browse request).
   parcelId          String?
   parcel            Parcel?   @relation(fields: [parcelId], references: [id])
+  khasPlotId        String?
+  khasPlot          KhasLandPlot? @relation(fields: [khasPlotId], references: [id])
   applicantId       String
   applicant         User      @relation("ServiceApplicant", fields: [applicantId], references: [id])
   assignedOfficerId String?
@@ -495,6 +497,10 @@ model FieldReport {
   sketchMapFileName String?
   notes           String?
   submittedAt     DateTime?
+  disputeFound    Boolean?
+  disputeDescription String?
+  reviewedAt      DateTime?
+  reviewedById    String?
   survey          FieldSurveySession?
   syncReceipts    FieldSurveySyncReceipt[]
 
@@ -584,6 +590,8 @@ model Hearing {
   /// HearingSession[] — appended by POST .../sessions, never addressed singly.
   sessions    Json      @default("[]")
   ruling      String?
+  /// MediationOutcome: "resolved" | "unresolved"
+  outcome     String?
   ruledAt     DateTime?
 
   @@index([disputeId])
@@ -667,6 +675,30 @@ model AppNotification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// --- Khas Land Plots ----------------------------------------------------
+
+model KhasLandPlot {
+  id                  String   @id
+  mouza               String
+  upazila             String
+  district            String
+  jlNo                String?       // Jurisdiction list number
+  dagNo               String
+  landUse             String        // "agricultural" | "non-agricultural"
+  areaDecimals        Int
+  centroidLat         Float
+  centroidLng         Float
+  boundaryGeoJson     Json?         // GeoJSON polygon for Leaflet rendering
+  status              String        @default("available")  // "available" | "reserved" | "leased"
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  serviceApplications ServiceApplication[]
+
+  @@map("khas_land_plots")
 }
 
 // --- Policy (system configuration; one row) --------------------------------

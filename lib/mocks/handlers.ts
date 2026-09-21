@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MSW request handlers — a mock of the frozen PlotGuard Core API. Response shapes
  * match the planned NestJS backend exactly, so swapping MSW for the live API is a
  * config change (see lib/api-client.ts), not a rewrite. Paths after the /api base
@@ -42,6 +42,7 @@ import {
   normaliseUlpin,
   maskNationalId,
   mutationActionGate,
+  mutationDocumentGate,
   mutationObjectionSummary,
   mutationVerificationReferences,
   rankCandidates,
@@ -180,8 +181,9 @@ function transitionError(
   now: Date,
   action: "canStartVerification" | "canCompleteVerification" | "canApprove" | "canReject",
   expected: MutationStatus[],
+  mediationStatus?: DisputeStatus | null,
 ) {
-  const gate = mutationActionGate(mutation, actor.id, now);
+  const gate = mutationActionGate(mutation, actor.id, now, mediationStatus);
   if (gate.hold?.code === "already-decided") {
     return conflict("This mutation has already been decided.");
   }
@@ -1214,6 +1216,16 @@ export const handlers = [
     const now = new Date();
     const gateError = transitionError(mutation, actor, now, "canStartVerification", ["submitted"]);
     if (gateError) return gateError;
+    if (mutation.documentIds.length === 0) {
+      return unprocessable({ documentIds: { code: "supporting-documents-required" } });
+    }
+    const documents = db.documents.filter((document) => mutation.documentIds.includes(document.id));
+    const missing = mutation.documentIds.filter((id) => !documents.some((document) => document.id === id));
+    if (missing.length) {
+      return unprocessable({ documentIds: { code: "mutation-documents-missing", documentIds: missing } });
+    }
+    const documentReview = mutationDocumentGate(documents, "ocr", db.policies.fraudScoreThreshold);
+    if (!documentReview.ok) return unprocessable({ documentIds: documentReview.reason });
     const previousStatus = mutation.status;
     const at = now.toISOString();
     Object.assign(mutation, {
@@ -1265,11 +1277,13 @@ export const handlers = [
     if (!Number.isInteger(db.policies.objectionWindowDays) || db.policies.objectionWindowDays < 0) {
       return unprocessable({ verification: { code: "objection-policy-unavailable" } });
     }
+    const documentReview = mutationDocumentGate(documents, "officer", db.policies.fraudScoreThreshold);
+    if (!documentReview.ok) return unprocessable({ documentIds: documentReview.reason });
 
     const previousStatus = mutation.status;
     const at = now.toISOString();
     Object.assign(mutation, {
-      status: "field-investigation" as const,
+      status: "under-primary-verification" as const,
       assignedOfficerId: actor.id,
       verifiedAt: at,
       verifiedById: actor.id,
@@ -1304,14 +1318,27 @@ export const handlers = [
     if (accessError) return accessError;
     const approving = body.decision === "approve";
     const now = new Date();
+    const dispute = mutation.disputeId
+      ? db.disputes.find((candidate) => candidate.id === mutation.disputeId)
+      : undefined;
     const gateError = transitionError(
       mutation,
       actor,
       now,
       approving ? "canApprove" : "canReject",
-      approving ? ["field-verification-complete"] : ["submitted", "under-primary-verification", "field-investigation", "field-verification-complete"],
+      ["field-verification-complete"],
+      dispute?.status,
     );
     if (gateError) return gateError;
+    const filedFieldReport = db.fieldReports
+      .filter((report) => report.mutationId === mutation.id && report.status === "completed")
+      .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? ""))[0];
+    if (!filedFieldReport) {
+      return unprocessable({ fieldReport: { code: "field-investigation-not-filed" } });
+    }
+    if (filedFieldReport.disputeFound === true && !mutation.disputeId) {
+      return unprocessable({ dispute: { code: "dispute-details-required" } });
+    }
     const reason = body.rejectionReason?.trim() ?? "";
     const note = body.approvalNote?.trim();
 
@@ -1415,6 +1442,18 @@ export const handlers = [
     const body = (await request.json()) as { description?: string };
     if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
     if (mutation.disputeId) return conflict("A dispute is already linked to this mutation.");
+    if (mutation.status !== "field-verification-complete") {
+      return unprocessable({ status: { code: "wrong-status", expected: ["field-verification-complete"] } });
+    }
+    const filedFieldReport = db.fieldReports
+      .filter((report) => report.mutationId === mutation.id && report.status === "completed")
+      .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? ""))[0];
+    if (!filedFieldReport) {
+      return unprocessable({ fieldReport: { code: "field-investigation-not-filed" } });
+    }
+    if (filedFieldReport.disputeFound !== true) {
+      return unprocessable({ fieldReport: { code: "no-dispute-reported" } });
+    }
     const now = new Date().toISOString();
     const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
     const dispute = {
@@ -1438,6 +1477,32 @@ export const handlers = [
     db.disputes.unshift(dispute);
     mutation.disputeId = dispute.id;
     mutation.updatedAt = now;
+    db.disputeEvents.push({
+      id: `de-${Date.now()}`,
+      disputeId: dispute.id,
+      at: now,
+      type: "assigned",
+      title: "Referred to mediation",
+      content: mediator
+        ? { code: "assigned", to: mediator.name }
+        : { code: "status-change", status: "in-mediation" },
+      description: body.description.trim(),
+      actorId: actor.id,
+      actorName: actor.name,
+    });
+    if (mediator) {
+      db.notifications.unshift({
+        id: `n-${Date.now()}-${mediator.id}`,
+        userId: mediator.id,
+        at: now,
+        severity: "warning",
+        title: "Mutation dispute assigned",
+        body: `Mutation ${mutation.mutationNumber} requires mediation before a final decision.`,
+        content: { code: "dispute-assigned", caseNumber: dispute.caseNumber },
+        read: false,
+        href: "/cases",
+      });
+    }
     await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: actor.id, actorName: actor.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
     return HttpResponse.json(mutation);
   }),
@@ -1469,6 +1534,9 @@ export const handlers = [
     const asString = (value: unknown): string | undefined => typeof value === "string" ? value : undefined;
     return HttpResponse.json({
       mutation: { ...mutation, fieldReportId: db.fieldReports.find((report) => report.mutationId === mutation.id)?.id },
+      dispute: mutation.disputeId
+        ? db.disputes.find((candidate) => candidate.id === mutation.disputeId) ?? null
+        : null,
       fieldReport: db.fieldReports.find((report) => report.mutationId === mutation.id) ?? null,
       parcel: mutationParcel(mutation) ?? null,
       documents: db.documents.filter((document) => mutation.documentIds.includes(document.id)),
@@ -1559,10 +1627,15 @@ export const handlers = [
     const flaggedDocuments = documents.filter((item) => item.verificationStatus === "flagged");
     const activeFieldReports = fieldReports.filter((item) => !["completed", "cancelled"].includes(item.status));
     const liveMutationVisits = new Set(
-      activeFieldReports.flatMap((item) => item.mutationId ? [item.mutationId] : []),
+      fieldReports
+        .filter((item) => item.status !== "cancelled")
+        .flatMap((item) => item.mutationId ? [item.mutationId] : []),
     );
     const needsAgent = activeMutations.filter(
-      (item) => item.status === "under-primary-verification" && !liveMutationVisits.has(item.id),
+      (item) =>
+        ((item.status === "under-primary-verification" && Boolean(item.verifiedAt)) ||
+          item.status === "field-investigation") &&
+        !liveMutationVisits.has(item.id),
     );
     const openServices = services.filter((item) => !["approved", "rejected", "withdrawn"].includes(item.status));
     const serviceCounts = openServices.reduce<Record<string, number>>((counts, item) => {
@@ -1585,7 +1658,9 @@ export const handlers = [
       summary: {
         recordCount: parcels.length,
         activeMutationCount: activeMutations.length,
-        primaryVerificationCount: activeMutations.filter((item) => item.status === "under-primary-verification").length,
+        primaryVerificationCount: activeMutations.filter(
+          (item) => item.status === "under-primary-verification" && !item.verifiedAt,
+        ).length,
         openDisputeCount: openDisputes.length,
         documentsToReviewCount: reviewDocuments.length,
         fraudFlagCount: flaggedDocuments.length,
@@ -2098,7 +2173,15 @@ export const handlers = [
       termYears: number;
       purpose: string;
       documentIds?: string[];
+      khasPlotId?: string;
     };
+
+    if (body.khasPlotId) {
+      const plot = db.khasLandPlots.find((p) => p.id === body.khasPlotId);
+      if (plot) {
+        plot.status = "reserved";
+      }
+    }
 
     const now = new Date().toISOString();
     const count = db.serviceApplications.filter((a) => a.serviceType === "lease-settlement").length;
@@ -2115,6 +2198,7 @@ export const handlers = [
         termYears: body.termYears,
         purpose: body.purpose,
       },
+      khasPlotId: body.khasPlotId,
       documentIds: body.documentIds ?? [],
       feeAmount:
         body.landUse === "agricultural"
@@ -2861,6 +2945,25 @@ export const handlers = [
     return HttpResponse.json(dispute, { status: 201 });
   }),
 
+  http.get(`${API}/khas-land-plots`, async ({ request }) => {
+    await latency();
+    const url = new URL(request.url);
+    const landUse = url.searchParams.get("landUse");
+    const status = url.searchParams.get("status") || "available";
+
+    let plots = db.khasLandPlots.filter(p => p.status === status);
+    if (landUse) {
+      plots = plots.filter(p => p.landUse === landUse);
+    }
+
+    return HttpResponse.json<Paginated<any>>({
+      items: plots,
+      total: plots.length,
+      page: 1,
+      pageSize: Math.max(1, plots.length),
+    });
+  }),
+
   // Field reports ----------------------------------------------------------
   http.get(`${API}/field-reports/assigned`, async ({ request }) => {
     await latency();
@@ -3103,10 +3206,41 @@ export const handlers = [
         report.status = "completed";
         report.submittedAt = now;
         report.notes = notes;
+        report.disputeFound = body.disputeFound ?? false;
+        report.disputeDescription = body.disputeFound
+          ? body.disputeDescription?.trim()
+          : undefined;
         survey.status = "completed";
         survey.completedAt = now;
         survey.version += 1;
         survey.summary = analyzeGpsTrack(points, survey.startedAt, now);
+
+        const mutation = report.mutationId
+          ? db.mutations.find((candidate) => candidate.id === report.mutationId)
+          : undefined;
+        if (mutation && report.disputeFound !== true) {
+          if (mutation.status !== "field-investigation") {
+            throw new MockSyncConflict("gps-point-conflict", {
+              message: "The linked mutation is not awaiting field investigation",
+            });
+          }
+          mutation.status = "field-verification-complete";
+          mutation.updatedAt = now;
+          await appendAudit({
+            entityType: "mutation",
+            entityId: mutation.id,
+            action: "field-verification-complete",
+            actorId: me.id,
+            actorName: me.name,
+            payload: {
+              previousStatus: "field-investigation",
+              newStatus: "field-verification-complete",
+              fieldReportId: report.id,
+              note: report.notes ?? "",
+            },
+            createdAt: now,
+          });
+        }
 
         const dispute = report.disputeId
       ? db.disputes.find((candidate) => candidate.id === report.disputeId)
@@ -3127,36 +3261,21 @@ export const handlers = [
       });
         }
 
-        const mutation = report.mutationId
-          ? db.mutations.find((candidate) => candidate.id === report.mutationId)
-          : undefined;
-        if (mutation && mutation.status === "field-investigation") {
-          mutation.status = "field-verification-complete";
-          mutation.updatedAt = now;
-          if (body.disputeFound && !mutation.disputeId) {
-            const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
-            const linkedDispute = {
-              id: `ds-${Date.now()}`,
-              caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
-              parcelId: mutation.parcelId,
-              parcelDagNo: mutation.parcelDagNo,
-              type: "boundary" as const,
-              status: "in-mediation" as const,
-              priority: "high" as const,
-              filedById: me.id,
-              filedByName: me.name,
-              filedAt: now,
-              updatedAt: now,
-              description: body.disputeDescription?.trim() || notes,
-              parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
-              assignedAgentId: me.id,
-              assignedMediatorId: mediator?.id,
-              evidenceDocumentIds: mutation.documentIds,
-            };
-            db.disputes.unshift(linkedDispute);
-            mutation.disputeId = linkedDispute.id;
+        if (report.mutationId) {
+          if (mutation?.assignedOfficerId && mutation.assignedOfficerId !== me.id) {
+            db.notifications.unshift({
+              id: `n-${Date.now()}-${mutation.assignedOfficerId}`,
+              userId: mutation.assignedOfficerId,
+              at: now,
+              severity: report.disputeFound ? "warning" : "info",
+              title: "Field investigation submitted",
+              body: report.disputeFound
+                ? `The field agent reported a dispute for mutation ${mutation.mutationNumber}.`
+                : `Mutation ${mutation.mutationNumber} is field verification complete and ready for a final decision.`,
+              read: false,
+              href: `/mutations?mutation=${mutation.id}`,
+            });
           }
-          await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "field-verification-complete", actorId: me.id, actorName: me.name, payload: { previousStatus: "field-investigation", newStatus: "field-verification-complete", fieldReportId: report.id, note: notes }, createdAt: now });
         }
 
         await appendAudit({
@@ -3194,33 +3313,42 @@ export const handlers = [
     }
   }),
 
-  http.patch(`${API}/field-reports/:id/flag-dispute`, async ({ params, request }) => {
+  http.post(`${API}/field-reports/:id/review`, async ({ params, request }) => {
     await latency();
-    const me = authenticatedUser(request);
-    if (!me) return unauthorized();
-    if (me.role !== "field-agent") return forbidden();
-    const report = db.fieldReports.find((item) => item.id === params.id && item.assignedAgentId === me.id);
+    const officer = authenticatedUser(request);
+    if (!officer) return unauthorized();
+    if (!isActiveLandOffice(officer)) return forbidden();
+    const report = db.fieldReports.find((item) => item.id === params.id);
     if (!report?.mutationId) return notFound("Mutation field report not found");
+    if (report.status !== "completed") {
+      return unprocessable({ status: { code: "field-report-not-completed" } });
+    }
+    if (report.reviewedAt) return conflict("This field investigation was already accepted");
     const mutation = db.mutations.find((item) => item.id === report.mutationId);
     if (!mutation) return notFound("Mutation not found");
-    if (mutation.disputeId) return HttpResponse.json(report);
-    const body = (await request.json()) as { description?: string };
-    if (!body.description?.trim()) return unprocessable({ description: { code: "dispute-description-required" } });
+    if (mutation.assignedOfficerId && mutation.assignedOfficerId !== officer.id) {
+      return conflict("This mutation is assigned to another land officer");
+    }
+    if (mutation.status !== "field-investigation") {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["field-investigation"] } });
+    }
     const now = new Date().toISOString();
-    const mediator = db.users.find((user) => user.role === "mediator" && user.status === "active");
-    const dispute = {
-      id: `ds-${Date.now()}`, caseNumber: `DSP-${new Date().getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
-      parcelId: mutation.parcelId, parcelDagNo: mutation.parcelDagNo,
-      type: "boundary" as const, status: "in-mediation" as const, priority: "high" as const,
-      filedById: me.id, filedByName: me.name, filedAt: now, updatedAt: now,
-      description: body.description.trim(),
-      parties: [{ name: mutation.fromOwnerName, role: "claimant" as const }, { name: mutation.toOwnerName, role: "respondent" as const }],
-      assignedAgentId: me.id, assignedMediatorId: mediator?.id, evidenceDocumentIds: mutation.documentIds,
-    };
-    db.disputes.unshift(dispute);
-    mutation.disputeId = dispute.id;
+    report.reviewedAt = now;
+    report.reviewedById = officer.id;
+    mutation.status = "field-verification-complete";
+    mutation.assignedOfficerId = officer.id;
     mutation.updatedAt = now;
-    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dispute-filed", actorId: me.id, actorName: me.name, payload: { caseNumber: dispute.caseNumber, previousStatus: mutation.status, newStatus: mutation.status, note: body.description.trim() }, createdAt: now });
+    await appendAudit({
+      entityType: "field-report", entityId: report.id, action: "review-accepted",
+      actorId: officer.id, actorName: officer.name,
+      payload: { mutationId: mutation.id, reviewedAt: now }, createdAt: now,
+    });
+    await appendAudit({
+      entityType: "mutation", entityId: mutation.id, action: "field-verification-complete",
+      actorId: officer.id, actorName: officer.name,
+      payload: { previousStatus: "field-investigation", newStatus: "field-verification-complete", fieldReportId: report.id, note: report.notes ?? "" },
+      createdAt: now,
+    });
     return HttpResponse.json(report);
   }),
 
@@ -3330,8 +3458,12 @@ export const handlers = [
     if (mutation && mutation.parcelId !== parcel.id) {
       return unprocessable({ mutationId: { code: "mutation-parcel-mismatch" } });
     }
-    if (mutation && mutation.status !== "under-primary-verification") {
-      return unprocessable({ mutationId: { code: "wrong-status", expected: ["under-primary-verification"] } });
+    if (
+      mutation &&
+      mutation.status !== "field-investigation" &&
+      !(mutation.status === "under-primary-verification" && mutation.verifiedAt)
+    ) {
+      return unprocessable({ mutationId: { code: "wrong-status", expected: ["verified-primary-investigation"] } });
     }
     if (mutation && db.fieldReports.some((report) => report.mutationId === mutation.id && report.status !== "cancelled")) {
       return conflict("This mutation already has a field visit.");
@@ -3367,6 +3499,9 @@ export const handlers = [
     db.fieldReports.unshift(report);
 
     if (mutation) {
+      const previousStatus = mutation.status;
+      mutation.status = "field-investigation";
+      mutation.updatedAt = now;
       await appendAudit({
         entityType: "mutation",
         entityId: mutation.id,
@@ -3374,14 +3509,25 @@ export const handlers = [
         actorId: me.id,
         actorName: me.name,
         payload: {
-          previousStatus: mutation.status,
-          newStatus: mutation.status,
+          previousStatus,
+          newStatus: "field-investigation",
           fieldReportId: report.id,
           assignedAgentId: agent.id,
         },
         createdAt: now,
       });
     }
+
+    db.notifications.unshift({
+      id: `n-${Date.now()}-${agent.id}`,
+      userId: agent.id,
+      at: now,
+      severity: "info",
+      title: "New field investigation assigned",
+      body: `You have been assigned a ${purpose.replace(/-/g, " ")} for dag ${report.parcelDagNo}.`,
+      read: false,
+      href: `/field/${report.id}`,
+    });
 
     // Booking a survey against an open dispute moves the case along and shows
     // up on its tracking timeline, same as the real workflow.
@@ -3428,7 +3574,13 @@ export const handlers = [
     if (denied) return denied;
     const hearing = db.hearings.find((h) => h.id === params.id);
     if (!hearing) return notFound("Hearing not found");
-    const { ruling } = (await request.json()) as { ruling: string };
+    const { ruling, outcome } = (await request.json()) as {
+      ruling: string;
+      outcome: "resolved" | "unresolved";
+    };
+    if (outcome !== "resolved" && outcome !== "unresolved") {
+      return badRequest("A mediation outcome is required");
+    }
 
     // The same gate the client shows (lib/hearings.ts), so a hand-rolled
     // request can't enter a ruling against a party who was never heard.
@@ -3437,6 +3589,7 @@ export const handlers = [
 
     const now = new Date().toISOString();
     hearing.ruling = ruling;
+    hearing.outcome = outcome;
     hearing.status = "ruled";
     hearing.ruledAt = now;
 
@@ -3447,7 +3600,7 @@ export const handlers = [
       action: "ruling",
       actorId: actor.id,
       actorName: actor.name,
-      payload: { caseNumber: hearing.caseNumber, ruling },
+      payload: { caseNumber: hearing.caseNumber, ruling, outcome },
       createdAt: now,
     });
 
@@ -3456,7 +3609,7 @@ export const handlers = [
     // hearing hanging off it.
     const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
     if (dispute && !isClosed(dispute.status)) {
-      dispute.status = "resolved";
+      dispute.status = outcome === "resolved" ? "resolved" : "rejected";
       // The ruling text is the resolution — record content, stored as typed.
       dispute.resolution = ruling;
       dispute.updatedAt = now;
@@ -3465,7 +3618,7 @@ export const handlers = [
         disputeId: dispute.id,
         at: now,
         type: "resolved",
-        title: "Ruling issued",
+        title: outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
         content: { code: "ruled" },
         description: ruling,
         actorId: actor.id,
@@ -3481,8 +3634,10 @@ export const handlers = [
           userId,
           at: now,
           severity: "info",
-          title: "Ruling issued",
-          body: `A ruling has been issued on case ${dispute.caseNumber}.`,
+          title: outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
+          body: outcome === "resolved"
+            ? `Case ${dispute.caseNumber} was resolved. The mutation can return for approval.`
+            : `Case ${dispute.caseNumber} could not be resolved. The mutation must return for rejection.`,
           content: { code: "dispute-ruled", caseNumber: dispute.caseNumber },
           read: false,
           href: `/disputes/${dispute.id}`,

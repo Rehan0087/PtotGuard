@@ -68,7 +68,7 @@ export default function NewGrievancePage() {
   const onSubmit = async (data: FormValues) => {
     try {
       const created = await fileGrievance.mutateAsync(data);
-      toast.success(t.pages.grievances.appliedTitle || "Complaint submitted", {
+      toast.success("Complaint submitted", {
         description: `Case ID: ${created.caseNumber}`,
       });
       router.push(`/grievances/${created.id}`);

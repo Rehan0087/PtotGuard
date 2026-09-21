@@ -9,6 +9,9 @@ export type HearingStatus =
   /** Ended without a ruling: settled, withdrawn, or taken elsewhere. */
   | "closed";
 
+/** Whether mediation cleared the mutation or failed to settle the dispute. */
+export type MediationOutcome = "resolved" | "unresolved";
+
 export interface HearingSession {
   id: ID;
   at: ISODateString;
@@ -28,5 +31,6 @@ export interface Hearing {
   hearingDate?: ISODateString;
   sessions: HearingSession[];
   ruling?: string;
+  outcome?: MediationOutcome;
   ruledAt?: ISODateString;
 }

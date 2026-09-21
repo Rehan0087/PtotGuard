@@ -181,6 +181,8 @@ export interface MutationTimelineEvent {
 
 export interface MutationDetail {
   mutation: Mutation;
+  /** Linked mediator case, when the field investigation found a dispute. */
+  dispute: Dispute | null;
   fieldReport: FieldReport | null;
   parcel: Parcel | null;
   documents: LandDocument[];

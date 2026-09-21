@@ -42,6 +42,7 @@ import {
   isHearingOpen,
   rulingGate,
   type HearingStatus,
+  type MediationOutcome,
   type RulingBlocker,
 } from "@plotguard/rules";
 import { useFmt } from "@/lib/i18n/format";
@@ -83,6 +84,7 @@ export default function CaseDetailPage() {
   const [summary, setSummary] = useState("");
   const [present, setPresent] = useState<string[]>([]);
   const [ruling, setRuling] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<MediationOutcome | "">("");
   const [adjournTo, setAdjournTo] = useState("");
   const [adjournReason, setAdjournReason] = useState("");
   const [nextMediator, setNextMediator] = useState("");
@@ -131,7 +133,8 @@ export default function CaseDetailPage() {
   };
 
   const rule = async () => {
-    await issueRuling.mutateAsync(draftRuling);
+    if (!outcome) return;
+    await issueRuling.mutateAsync({ ruling: draftRuling, outcome });
     toast.success(t.pages.hearing.ruled);
   };
 
@@ -267,6 +270,13 @@ export default function CaseDetailPage() {
 
             {decided ? (
               <>
+                {hearing.outcome ? (
+                  <p className="text-sm font-medium text-foreground">
+                    {hearing.outcome === "resolved"
+                      ? t.pages.hearing.outcomeResolved
+                      : t.pages.hearing.outcomeUnresolved}
+                  </p>
+                ) : null}
                 <p className="rounded-md bg-secondary/50 px-3 py-2 text-sm text-secondary-foreground">
                   {hearing.ruling ?? t.common.notAvailable}
                 </p>
@@ -278,6 +288,21 @@ export default function CaseDetailPage() {
               </>
             ) : (
               <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="mediation-outcome" className="text-xs">
+                    {t.pages.hearing.outcome}
+                  </Label>
+                  <select
+                    id="mediation-outcome"
+                    className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                    value={outcome}
+                    onChange={(event) => setOutcome(event.target.value as MediationOutcome | "")}
+                  >
+                    <option value="">{t.pages.hearing.pickOutcome}</option>
+                    <option value="resolved">{t.pages.hearing.outcomeResolved}</option>
+                    <option value="unresolved">{t.pages.hearing.outcomeUnresolved}</option>
+                  </select>
+                </div>
                 <Textarea
                   value={draftRuling}
                   onChange={(e) => setRuling(e.target.value)}
@@ -300,7 +325,7 @@ export default function CaseDetailPage() {
 
                 <Button
                   className="w-fit"
-                  disabled={!review.canRule || issueRuling.isPending}
+                  disabled={!review.canRule || !outcome || issueRuling.isPending}
                   onClick={rule}
                 >
                   <Gavel className="size-3.5" />

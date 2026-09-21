@@ -14,6 +14,7 @@ import {
   serviceApplicationStatusTone,
   userStatusTone,
   verificationStatusTone,
+  grievanceStatusTone,
 } from "@/lib/status";
 import { useT } from "./provider";
 
@@ -55,6 +56,7 @@ export function useStatusMeta() {
         fieldReport: pair(fieldReportStatusTone, t.status.fieldReport),
         hearing: pair(hearingStatusTone, t.status.hearing),
         user: pair(userStatusTone, t.status.user),
+        grievance: pair(grievanceStatusTone, t.status.grievance),
       };
     },
     [t],

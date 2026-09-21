@@ -29,5 +29,9 @@ export class ApplyLeaseSettlementDto {
   purpose!: string;
 
   @IsOptional()
+  @IsString()
+  khasPlotId?: string;
+
+  @IsOptional()
   documentIds?: string[];
 }
