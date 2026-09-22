@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Camera, Calendar, Crosshair, FileUp, Image as ImageIcon, MapPin, Navigation, Ruler, Send, WifiOff } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, Crosshair, FileUp, MapPin, Navigation, Ruler, Send, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -98,19 +99,27 @@ export default function CapturePage() {
   });
   const addPhoto = async () => {
     if (!photoFile) return;
-    const url = await readFile(photoFile);
-    await addMedia.mutateAsync({
-      photo: { url, caption: caption.trim() || photoFile.name },
-    });
-    setCaption("");
-    setPhotoFile(null);
-    toast.success(t.pages.capture.photoAdded);
+    try {
+      const url = await readFile(photoFile);
+      await addMedia.mutateAsync({
+        photo: { url, caption: caption.trim() || photoFile.name },
+      });
+      setCaption("");
+      setPhotoFile(null);
+      toast.success(t.pages.capture.photoAdded);
+    } catch {
+      toast.error(t.common.somethingWentWrong);
+    }
   };
   const addSketchMap = async (selected: File | undefined) => {
     if (!selected) return;
-    const url = await readFile(selected);
-    await addMedia.mutateAsync({ sketchMap: { url, fileName: selected.name } });
-    toast.success(t.pages.capture.sketchMapAdded);
+    try {
+      const url = await readFile(selected);
+      await addMedia.mutateAsync({ sketchMap: { url, fileName: selected.name } });
+      toast.success(t.pages.capture.sketchMapAdded);
+    } catch {
+      toast.error(t.common.somethingWentWrong);
+    }
   };
   const file = async () => {
     try {
@@ -156,7 +165,7 @@ export default function CapturePage() {
 
       <Card className="gap-4 px-4">
         <div className="flex items-center justify-between gap-2"><h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground"><Camera className="size-4 text-marker" />{t.pages.capture.photos}</h2><span className="tabular text-xs text-muted-foreground">{review.photosNeed > 0 ? t.pages.capture.required(review.photosHave, review.photosNeed) : f.number(review.photosHave)}</span></div>
-        {report.photos.length === 0 ? <p className="text-xs text-muted-foreground">{t.pages.capture.noPhotos}</p> : <ul className="space-y-1.5">{report.photos.map((photo) => <li key={photo.id} className="flex items-center gap-2.5 rounded-md bg-secondary/40 px-3 py-2 text-xs"><span className="grid size-8 shrink-0 place-items-center rounded bg-muted text-muted-foreground"><ImageIcon className="size-4" /></span><span className="min-w-0"><span className="block truncate text-foreground">{photo.caption ?? t.pages.capture.photoPlaceholder}</span><span className="block text-muted-foreground">{f.dateTime(photo.capturedAt)}</span></span></li>)}</ul>}
+        {report.photos.length === 0 ? <p className="text-xs text-muted-foreground">{t.pages.capture.noPhotos}</p> : <ul className="grid gap-2 sm:grid-cols-2">{report.photos.map((photo) => <li key={photo.id} className="overflow-hidden rounded-md bg-secondary/40 text-xs"><Image src={photo.url} alt={photo.caption ?? t.pages.capture.photoPlaceholder} width={640} height={420} unoptimized className="h-32 w-full object-cover" /><span className="block min-w-0 px-3 py-2"><span className="block truncate text-foreground">{photo.caption ?? t.pages.capture.photoPlaceholder}</span><span className="block text-muted-foreground">{f.dateTime(photo.capturedAt)}</span></span></li>)}</ul>}
         {!closed ? <div className="space-y-2"><Label htmlFor="land-photo" className="text-xs">{t.pages.capture.photoFile}</Label><Input id="land-photo" type="file" accept="image/*" onChange={(event) => setPhotoFile(event.target.files?.[0] ?? null)} /><Label htmlFor="caption" className="text-xs">{t.pages.capture.photoCaption}</Label><Input id="caption" value={caption} onChange={(event) => setCaption(event.target.value)} placeholder={t.pages.capture.photoCaptionHint} /><Button size="sm" variant="secondary" className="w-fit" disabled={!active || !photoFile || addMedia.isPending || !walk.online} onClick={() => void addPhoto()}><Camera className="size-3.5" />{t.pages.capture.addPhoto}</Button></div> : null}
       </Card>
     </div>
@@ -165,6 +174,7 @@ export default function CapturePage() {
       <div className="space-y-2">
         <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground"><FileUp className="size-4 text-marker" />{t.pages.capture.sketchMap}</h2>
         <p className="text-xs text-muted-foreground">{report.sketchMapFileName ? t.pages.capture.sketchMapUploaded(report.sketchMapFileName) : t.pages.capture.sketchMapHint}</p>
+        {report.sketchMapUrl?.startsWith("data:image/") ? <Image src={report.sketchMapUrl} alt={report.sketchMapFileName ?? t.pages.capture.sketchMap} width={960} height={640} unoptimized className="max-h-80 w-full rounded-md border border-border object-contain" /> : null}
         {!closed ? <Input type="file" accept="image/*,.pdf" disabled={!active || addMedia.isPending || !walk.online} onChange={(event) => void addSketchMap(event.target.files?.[0])} /> : null}
       </div>
     </Card>
