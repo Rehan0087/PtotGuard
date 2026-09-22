@@ -98,6 +98,7 @@ export type AcquisitionType =
   | "grant"
   | "partition"
   | "court-order"
+  | "state-acquisition"
   /** The record itself was wrong (name/owner misfiled), not a real transfer. */
   | "correction";
 
