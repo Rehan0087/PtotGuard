@@ -16,6 +16,7 @@ import {
   Smartphone,
   Sprout,
   X,
+  FileText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -27,6 +28,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
@@ -42,6 +49,7 @@ import {
 } from "@/hooks/queries";
 import type { PaymentMethod, ServiceApplication, KhasLandPlot } from "@/lib/types";
 import { KhasLandMap } from "@/components/khas-land-map";
+import { PaymentConfirmationDialog } from "@/components/payment-confirmation-dialog";
 
 type LandUse = "agricultural" | "non-agricultural";
 
@@ -119,10 +127,7 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
 
   const fee = policy
     ? {
-        amount:
-          landUse === "agricultural"
-            ? policy.leaseSettlementAgriculturalFeeBdt
-            : policy.leaseSettlementNonAgriculturalFeeBdt,
+        amount: policy.leaseSettlementApplicationFeeBdt ?? 20,
         currency: "BDT" as const,
       }
     : null;
@@ -301,13 +306,55 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
   const t = useT();
   const f = useFmt();
   const s = useStatusMeta();
+  const [busy, setBusy] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const details = application.details as {
     landUse?: LandUse;
     locationDescription?: string;
     areaDecimals?: number;
     termYears?: number;
+    leaseFeeAmount?: number;
+    leaseFeePaidAt?: string;
+    leaseExpiresAt?: string;
   };
   const isAgricultural = details.landUse === "agricultural";
+
+  async function handlePayLease(method: PaymentMethod) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/lease-settlement/${application.id}/pay-lease`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentMethod: method }),
+      });
+      if (!res.ok) throw new Error("Failed to pay lease");
+      toast.success("Lease fee paid successfully");
+      setPaymentDialogOpen(false);
+      window.location.reload();
+    } catch (e) {
+      toast.error("Payment failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRenewLease() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/lease-settlement/${application.id}/renew`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error("Failed to renew lease");
+      toast.success("Lease renewed for 1 year");
+      window.location.reload();
+    } catch (e) {
+      toast.error("Renewal failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Card className="gap-3 px-5">
@@ -329,13 +376,81 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
             {application.feeAmount != null ? (
               <>
                 {" · "}
-                <span className="tabular">{f.money({ amount: application.feeAmount, currency: "BDT" })}</span>
+                <span className="tabular">{f.money({ amount: application.feeAmount, currency: "BDT" })} (Application Fee)</span>
               </>
             ) : null}
           </div>
+          {details.leaseExpiresAt && (
+            <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-1">
+              Active until: {f.date(details.leaseExpiresAt)}
+            </div>
+          )}
         </div>
-        <StatusMetaBadge meta={s.serviceApplication[application.status]} />
+        <div className="flex flex-col items-end gap-2">
+          <StatusMetaBadge meta={s.serviceApplication[application.status]} />
+          {application.status === "approved" && !details.leaseFeePaidAt && details.leaseFeeAmount && (
+            <Button size="sm" onClick={() => setPaymentDialogOpen(true)} disabled={busy}>
+              Pay Lease Fee ({f.money({ amount: details.leaseFeeAmount, currency: "BDT" })})
+            </Button>
+          )}
+          {details.leaseFeePaidAt && (
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setReceiptOpen(true)}>
+                <FileText className="mr-2 size-3" />
+                View Receipt
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleRenewLease} disabled={busy}>
+                {busy && <Loader2 className="mr-2 size-3 animate-spin" />}
+                Renew Lease
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {details.leaseFeeAmount && (
+        <PaymentConfirmationDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          amount={f.money({ amount: details.leaseFeeAmount, currency: "BDT" })}
+          defaultMethod="bkash"
+          busy={busy}
+          onConfirm={handlePayLease}
+        />
+      )}
+
+      {details.leaseFeePaidAt && (
+        <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Lease Payment Receipt</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4 text-sm">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Application No:</span>
+                <span className="font-medium">{application.applicationNo}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Payment Date:</span>
+                <span className="font-medium">{f.date(details.leaseFeePaidAt)}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Amount Paid:</span>
+                <span className="font-medium">{f.money({ amount: details.leaseFeeAmount ?? 0, currency: "BDT" })}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Valid Until:</span>
+                <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                  {details.leaseExpiresAt ? f.date(details.leaseExpiresAt) : "N/A"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                This is a system generated receipt and does not require a physical signature. It serves as validation for one year of land lease.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   );
 }

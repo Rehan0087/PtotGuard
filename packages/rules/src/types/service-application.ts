@@ -80,3 +80,51 @@ export interface ServiceApplication {
   createdAt: ISODateString;
   updatedAt: ISODateString;
 }
+
+export type AcquisitionStage =
+  | "field-review"
+  | "citizen-decision"
+  | "appeal-review"
+  | "completed"
+  | "withdrawn";
+
+export type AcquisitionAppealOutcome = "withdraw" | "increase-compensation";
+export type AcquisitionAppealDecision = "withdraw" | "increase-compensation" | "proceed";
+
+/** Typed contents of ServiceApplication.details for an acquisition case. */
+export interface AcquisitionDetails extends Record<string, unknown> {
+  stage: AcquisitionStage;
+  purpose: string;
+  createdByOfficerId: ID;
+  assignedFieldAgentId: ID;
+  fieldReview?: {
+    reviewedAt: ISODateString;
+    reviewedById: ID;
+    notes: string;
+  };
+  awardAmount?: number;
+  appeal?: {
+    outcome: AcquisitionAppealOutcome;
+    reason: string;
+    requestedAmount?: number;
+    filedAt: ISODateString;
+  };
+  appealDecision?: {
+    decision: AcquisitionAppealDecision;
+    note?: string;
+    decidedAt: ISODateString;
+    decidedById: ID;
+  };
+  completedAt?: ISODateString;
+}
+
+export interface LeaseSettlementDetails extends Record<string, unknown> {
+  landUse: string;
+  locationDescription: string;
+  areaDecimals: number;
+  termYears: number;
+  purpose: string;
+  leaseFeeAmount?: number;
+  leaseFeePaidAt?: ISODateString;
+  leaseExpiresAt?: ISODateString;
+}
