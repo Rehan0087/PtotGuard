@@ -29,7 +29,11 @@ export type ServiceApplicationStatus =
 
 export type ServiceApplicationEventType =
   | "created"
+  | "assigned"
   | "submitted"
+  | "field-reviewed"
+  | "appealed"
+  | "accepted"
   | "payment-recorded"
   | "status-change"
   | "document-added"
@@ -117,7 +121,6 @@ export interface AcquisitionDetails extends Record<string, unknown> {
   };
   completedAt?: ISODateString;
 }
-
 export interface LeaseSettlementDetails extends Record<string, unknown> {
   landUse: string;
   locationDescription: string;

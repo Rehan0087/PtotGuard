@@ -46,6 +46,8 @@ import type {
   GrievanceDetail,
   GrievanceStatus,
   KhasLandPlot,
+  AcquisitionAppealDecision,
+  AcquisitionAppealOutcome,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
 import type { FieldProfileUpdate } from "@/lib/field-profile";
@@ -505,17 +507,43 @@ export function useApplyLeaseSettlement() {
 export function useIssueAcquisitionNotice() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { parcelId: string; purpose: string; awardAmount: number }) =>
+    mutationFn: (body: { parcelId: string; purpose: string; assignedFieldAgentId: string }) =>
       api.post<ServiceApplication>("/acquisition/notice", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
   });
 }
 
-export function useFileAcquisitionObjection(id: string) {
+export function useSubmitAcquisitionFieldReview(id: string) {
   const { invalidate } = useServiceApplicationWrite(id);
   return useMutation({
-    mutationFn: (objectionText: string) =>
-      api.patch<ServiceApplication>(`/acquisition/${id}/object`, { objectionText }),
+    mutationFn: (body: { awardAmount: number; reviewNotes: string }) =>
+      api.patch<ServiceApplication>(`/acquisition/${id}/field-review`, body),
+    onSuccess: invalidate,
+  });
+}
+
+export function useAcceptAcquisition(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: () => api.patch<ServiceApplication>(`/acquisition/${id}/accept`, {}),
+    onSuccess: invalidate,
+  });
+}
+
+export function useFileAcquisitionAppeal(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: (body: { outcome: AcquisitionAppealOutcome; reason: string; requestedAmount?: number }) =>
+      api.patch<ServiceApplication>(`/acquisition/${id}/appeal`, body),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDecideAcquisitionAppeal(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: (body: { decision: AcquisitionAppealDecision; awardAmount?: number; note?: string }) =>
+      api.patch<ServiceApplication>(`/acquisition/${id}/appeal-decision`, body),
     onSuccess: invalidate,
   });
 }

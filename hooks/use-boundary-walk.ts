@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { analyzeGpsTrack, annotateGpsPoints } from "@plotguard/rules";
 import type { FieldReportDetail } from "@/lib/types";
 import type {
@@ -62,6 +63,7 @@ export function useBoundaryWalk(
   assignedAgentId: string | null,
   remote: FieldReportDetail | undefined,
 ): BoundaryWalkState {
+  const queryClient = useQueryClient();
   const [localSurvey, setLocalSurvey] = useState<OfflineFieldSurvey>();
   const [points, setPoints] = useState<LocalGpsPoint[]>([]);
   const [operations, setOperations] = useState<FieldSyncOperation[]>([]);
@@ -110,7 +112,20 @@ export function useBoundaryWalk(
     if (!assignedAgentId || !processor) return;
     await processor.process(assignedAgentId);
     await refresh();
-  }, [assignedAgentId, processor, refresh]);
+    // The offline transport sits below TanStack Query, so it must explicitly
+    // retire every cached view affected by a completed field investigation.
+    // Otherwise the detail page is correct locally while the visit board and
+    // land-office mutation board keep their previous status for staleTime.
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["field-report", fieldReportId] }),
+      queryClient.invalidateQueries({ queryKey: ["field-reports-assigned"] }),
+      queryClient.invalidateQueries({ queryKey: ["field-reports"] }),
+      queryClient.invalidateQueries({ queryKey: ["mutations"] }),
+      queryClient.invalidateQueries({ queryKey: ["mutation"] }),
+      queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+      queryClient.invalidateQueries({ queryKey: ["records"] }),
+    ]);
+  }, [assignedAgentId, fieldReportId, processor, queryClient, refresh]);
 
   const retrySync = useCallback(async () => {
     if (!assignedAgentId || !processor) return;

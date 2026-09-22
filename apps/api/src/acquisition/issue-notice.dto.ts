@@ -1,4 +1,4 @@
-import { IsInt, IsString, Min } from "class-validator";
+import { IsString } from "class-validator";
 
 export class IssueNoticeDto {
   @IsString()
@@ -7,7 +7,6 @@ export class IssueNoticeDto {
   @IsString()
   purpose!: string;
 
-  @IsInt()
-  @Min(1)
-  awardAmount!: number;
+  @IsString()
+  assignedFieldAgentId!: string;
 }
