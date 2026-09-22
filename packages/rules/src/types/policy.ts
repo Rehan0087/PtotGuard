@@ -22,4 +22,5 @@ export interface Policy {
   /** Flat fees, BDT, keyed by land use — non-agricultural carries a premium. */
   leaseSettlementAgriculturalFeeBdt: number;
   leaseSettlementNonAgriculturalFeeBdt: number;
+  leaseSettlementApplicationFeeBdt: number;
 }

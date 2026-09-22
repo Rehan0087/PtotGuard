@@ -497,7 +497,8 @@ export const policies = {
   landAdminCorrectionFeeBdt: 500,
   revenueCaseFilingFeeBdt: 300,
   leaseSettlementAgriculturalFeeBdt: 300,
-  leaseSettlementNonAgriculturalFeeBdt: 1000,
+  leaseSettlementNonAgriculturalFeeBdt: 1200,
+  leaseSettlementApplicationFeeBdt: 20,
 };
 
 // ---------------------------------------------------------------------------

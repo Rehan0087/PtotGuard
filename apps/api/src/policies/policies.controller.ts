@@ -37,6 +37,7 @@ function toPolicy(row: Policy) {
     revenueCaseFilingFeeBdt,
     leaseSettlementAgriculturalFeeBdt,
     leaseSettlementNonAgriculturalFeeBdt,
+    leaseSettlementApplicationFeeBdt,
   } = row;
   return {
     mutationFeeBdt,
@@ -51,6 +52,7 @@ function toPolicy(row: Policy) {
     revenueCaseFilingFeeBdt,
     leaseSettlementAgriculturalFeeBdt,
     leaseSettlementNonAgriculturalFeeBdt,
+    leaseSettlementApplicationFeeBdt,
   };
 }
 

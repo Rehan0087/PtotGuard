@@ -121,3 +121,13 @@ export interface AcquisitionDetails extends Record<string, unknown> {
   };
   completedAt?: ISODateString;
 }
+export interface LeaseSettlementDetails extends Record<string, unknown> {
+  landUse: string;
+  locationDescription: string;
+  areaDecimals: number;
+  termYears: number;
+  purpose: string;
+  leaseFeeAmount?: number;
+  leaseFeePaidAt?: ISODateString;
+  leaseExpiresAt?: ISODateString;
+}

@@ -2015,7 +2015,40 @@ export const handlers = [
     return HttpResponse.json(application, { status: 201 });
   }),
 
-  // Land administration (certified copies + record corrections) --------------
+  http.patch(`${API}/lease-settlement/:id/pay-lease`, async ({ request, params }) => {
+    await latency();
+    const { id } = params;
+    const body = (await request.json()) as { transactionId: string };
+    const application = db.serviceApplications.find((a) => a.id === id);
+    if (!application) return new HttpResponse(null, { status: 404 });
+
+    const now = new Date();
+    application.details.leaseFeePaidAt = now.toISOString();
+    
+    // Set expiry to 1 year from now
+    now.setFullYear(now.getFullYear() + 1);
+    application.details.leaseExpiresAt = now.toISOString();
+    application.updatedAt = new Date().toISOString();
+
+    return HttpResponse.json(application);
+  }),
+
+  http.patch(`${API}/lease-settlement/:id/renew`, async ({ params }) => {
+    await latency();
+    const { id } = params;
+    const application = db.serviceApplications.find((a) => a.id === id);
+    if (!application) return new HttpResponse(null, { status: 404 });
+
+    // Set expiry to 1 year from current expiry
+    const expiry = new Date(application.details.leaseExpiresAt || new Date());
+    expiry.setFullYear(expiry.getFullYear() + 1);
+    application.details.leaseExpiresAt = expiry.toISOString();
+    application.updatedAt = new Date().toISOString();
+
+    return HttpResponse.json(application);
+  }),
+
+  // Land admin (certified copies / correction requests) -----------------------/ Land administration (certified copies + record corrections) --------------
   // What's owed is a flat fee by request type, not a computed assessment —
   // no rule to mirror here, just Policy lookup. Mirrors land-admin.controller.ts.
   http.post(`${API}/land-admin/apply`, async ({ request }) => {
@@ -2251,19 +2284,20 @@ export const handlers = [
       serviceType: "lease-settlement" as const,
       status: "submitted" as const,
       applicantId: me.id,
+      feeAmount: db.policies.leaseSettlementApplicationFeeBdt ?? 20,
       details: {
         landUse: body.landUse,
         locationDescription: body.locationDescription,
         areaDecimals: body.areaDecimals,
         termYears: body.termYears,
         purpose: body.purpose,
+        leaseFeeAmount:
+          body.landUse === "agricultural"
+            ? db.policies.leaseSettlementAgriculturalFeeBdt
+            : db.policies.leaseSettlementNonAgriculturalFeeBdt,
       },
       khasPlotId: body.khasPlotId,
       documentIds: body.documentIds ?? [],
-      feeAmount:
-        body.landUse === "agricultural"
-          ? db.policies.leaseSettlementAgriculturalFeeBdt
-          : db.policies.leaseSettlementNonAgriculturalFeeBdt,
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
