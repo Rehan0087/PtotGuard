@@ -8,6 +8,7 @@ import {
   Building2,
   SlidersHorizontal,
   ShieldCheck,
+  Landmark,
   HelpCircle,
   BookOpen,
   MessageCircleWarning,
@@ -81,6 +82,7 @@ export const NAV: Record<Role, PortalNav> = {
     home: "/field",
     items: [
       { labelKey: "assignedVisits", href: "/field", icon: MapPin },
+      { labelKey: "acquisition", href: "/acquisition", icon: Landmark },
     ],
   },
   mediator: {

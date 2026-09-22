@@ -19,6 +19,7 @@ import type {
   Policy,
   RestrictionType,
   Role,
+  ServiceApplication,
   User,
 } from "@/lib/types";
 import { ROLES } from "@/lib/types";
@@ -59,6 +60,9 @@ import {
   type LandTaxRates,
   type RulingOutcome,
   type GpsPointInput,
+  type AcquisitionDetails,
+  acquisitionTransition,
+  validIncreasedAward,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
@@ -101,6 +105,62 @@ function currentUser(request: Request): User {
   if (authenticated) return authenticated;
   const id = db.CURRENT_USER_BY_ROLE[getRole(request)];
   return db.users.find((u) => u.id === id)!;
+}
+
+function completeMockAcquisition(
+  application: ServiceApplication,
+  details: AcquisitionDetails,
+  actorId: string,
+  title: string,
+) {
+  const parcel = db.parcels.find((candidate) => candidate.id === application.parcelId);
+  if (!parcel) throw new Error("Acquisition parcel is missing from the mock store");
+  const now = new Date().toISOString();
+  if (!db.users.some((user) => user.id === "usr-state")) {
+    db.users.push({
+      id: "usr-state",
+      name: "Government of Bangladesh",
+      email: "state.owner@plotguard.gov.bd",
+      role: "land-office",
+      jurisdictionId: parcel.jurisdictionId,
+      status: "suspended",
+      title: "State-owned property account",
+      createdAt: now,
+    });
+  }
+  for (const record of db.ownershipRecords) {
+    if (record.parcelId === parcel.id && !record.toDate) record.toDate = now;
+  }
+  db.ownershipRecords.unshift({
+    id: `own-${Date.now()}`,
+    parcelId: parcel.id,
+    ownerId: "usr-state",
+    ownerName: "Government of Bangladesh",
+    acquisitionType: "state-acquisition",
+    fromDate: now,
+    toDate: null,
+  });
+  parcel.ownerId = "usr-state";
+  parcel.ownerName = "Government of Bangladesh";
+  parcel.ownershipType = "government";
+  parcel.lastMutationAt = now;
+  for (const restriction of db.parcelRestrictions) {
+    if (restriction.parcelId === parcel.id && restriction.type === "acquisition" && restriction.referenceNo === application.applicationNo && !restriction.toDate) restriction.toDate = now;
+  }
+  application.status = "approved";
+  application.details = { ...details, stage: "completed", completedAt: now } satisfies AcquisitionDetails;
+  application.decidedAt = now;
+  application.updatedAt = now;
+  db.serviceApplicationEvents.push({
+    id: `sae-${Date.now()}`, applicationId: application.id, at: now,
+    type: "accepted", title, actorId,
+  });
+  db.notifications.unshift({
+    id: `ntf-${Date.now()}`, userId: application.applicantId, at: now, severity: "success",
+    title: "Land acquisition completed",
+    body: `${application.applicationNo} is complete. Ownership is now recorded as state-owned property.`,
+    read: false, href: "/acquisition",
+  });
 }
 
 function authenticatedUser(
@@ -2238,10 +2298,8 @@ export const handlers = [
   }),
 
   // Acquisition & requisition ---------------------------------------------------
-  // The one service the citizen doesn't start: a land office officer issues
-  // a notice against a parcel with a compensation award; the owner may
-  // object. No fee, so no .../pay step — the notice is created already
-  // under-review. Mirrors acquisition.controller.ts.
+  // Land office assignment -> field valuation -> citizen decision/appeal ->
+  // land-office appeal decision. Mirrors acquisition.controller.ts.
   http.post(`${API}/acquisition/notice`, async ({ request }) => {
     await latency();
     const denied = requireRole(request, "land-office");
@@ -2250,12 +2308,16 @@ export const handlers = [
     const body = (await request.json()) as {
       parcelId: string;
       purpose: string;
-      awardAmount: number;
+      assignedFieldAgentId: string;
     };
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
     if (!parcel) return notFound("Parcel not found");
+    const agent = db.users.find(
+      (user) => user.id === body.assignedFieldAgentId && user.role === "field-agent" && user.status === "active",
+    );
+    if (!agent) return unprocessable({ assignedFieldAgentId: { code: "invalid-field-agent" } });
 
-    const CLOSED = new Set(["approved", "rejected"]);
+    const CLOSED = new Set(["approved", "rejected", "withdrawn"]);
     const hasOpenNotice = db.serviceApplications.some(
       (a) => a.parcelId === parcel.id && a.serviceType === "acquisition" && !CLOSED.has(a.status),
     );
@@ -2269,11 +2331,16 @@ export const handlers = [
       id: `sa-${Date.now()}`,
       applicationNo: `ACQ-2026-${String(1000 + count).padStart(6, "0")}`,
       serviceType: "acquisition" as const,
-      status: "under-review" as const,
+      status: "field-investigation" as const,
       parcelId: parcel.id,
       applicantId: parcel.ownerId,
-      assignedOfficerId: me.id,
-      details: { purpose: body.purpose, awardAmount: body.awardAmount },
+      assignedOfficerId: agent.id,
+      details: {
+        stage: "field-review",
+        purpose: body.purpose,
+        createdByOfficerId: me.id,
+        assignedFieldAgentId: agent.id,
+      } satisfies AcquisitionDetails,
       documentIds: [],
       submittedAt: now,
       createdAt: now,
@@ -2291,55 +2358,202 @@ export const handlers = [
         applicationNo: application.applicationNo,
         serviceType: "acquisition",
         parcelDagNo: parcel.dagNo,
-        awardAmount: body.awardAmount,
+        assignedFieldAgentId: agent.id,
       },
+    });
+    db.parcelRestrictions.push({
+      id: `res-${Date.now()}`,
+      parcelId: parcel.id,
+      type: "acquisition",
+      authority: "Land Office",
+      referenceNo: application.applicationNo,
+      note: body.purpose,
+      fromDate: now,
+      toDate: null,
     });
     db.serviceApplicationEvents.push({
       id: `sae-${Date.now()}`,
       applicationId: application.id,
       at: now,
-      type: "submitted",
-      title: "Acquisition notice issued",
+      type: "assigned",
+      title: "Acquisition review assigned",
+      description: `Assigned to ${agent.name}.`,
       actorId: me.id,
+    });
+    db.notifications.unshift({
+      id: `ntf-${Date.now()}`,
+      userId: agent.id,
+      at: now,
+      severity: "info",
+      title: "Acquisition review assigned",
+      body: `${application.applicationNo} requires your field review and compensation valuation.`,
+      read: false,
+      href: "/acquisition",
     });
 
     return HttpResponse.json(application, { status: 201 });
   }),
 
-  http.patch(`${API}/acquisition/:id/object`, async ({ params, request }) => {
+  http.patch(`${API}/acquisition/:id/field-review`, async ({ params, request }) => {
+    await latency();
+    const denied = requireRole(request, "field-agent");
+    if (denied) return denied;
+    const me = currentUser(request);
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application || application.serviceType !== "acquisition" || application.assignedOfficerId !== me.id) {
+      return notFound("Acquisition request not found");
+    }
+    const details = application.details as AcquisitionDetails;
+    const review = acquisitionTransition(details, application.status, "field-review");
+    if (!review.allowed) return unprocessable({ status: review.blockers[0] });
+    const body = (await request.json()) as { awardAmount: number; reviewNotes: string };
+    if (!(body.awardAmount > 0) || !body.reviewNotes?.trim()) return badRequest("Review amount and notes are required");
+    const now = new Date().toISOString();
+    application.status = "under-review";
+    application.details = {
+      ...details,
+      stage: "citizen-decision",
+      awardAmount: body.awardAmount,
+      fieldReview: { reviewedAt: now, reviewedById: me.id, notes: body.reviewNotes.trim() },
+    } satisfies AcquisitionDetails;
+    application.updatedAt = now;
+    await appendAudit({
+      entityType: "service-application", entityId: application.id, action: "field-review",
+      actorId: me.id, actorName: me.name,
+      payload: { applicationNo: application.applicationNo, awardAmount: body.awardAmount },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`, applicationId: application.id, at: now,
+      type: "field-reviewed", title: "Field review and valuation completed", actorId: me.id,
+    });
+    db.notifications.unshift({
+      id: `ntf-${Date.now()}`, userId: application.applicantId, at: now, severity: "warning",
+      title: "Acquisition compensation offered",
+      body: `${application.applicationNo} offers BDT ${body.awardAmount}. Accept it or file an appeal.`,
+      read: false, href: "/acquisition",
+    });
+    return HttpResponse.json(application);
+  }),
+
+  http.patch(`${API}/acquisition/:id/accept`, async ({ params, request }) => {
     await latency();
     const me = currentUser(request);
     const application = db.serviceApplications.find((a) => a.id === params.id);
-    // Same answer for missing or not yours as land-admin's own apply handler.
-    if (!application || application.applicantId !== me.id) {
-      return notFound("Service application not found");
+    if (!application || application.serviceType !== "acquisition" || application.applicantId !== me.id) {
+      return notFound("Acquisition request not found");
     }
-    if (application.status === "approved" || application.status === "rejected") {
-      return conflict("This notice has already been decided.");
-    }
-
-    const { objectionText } = (await request.json()) as { objectionText: string };
-    const now = new Date().toISOString();
-    application.details = { ...application.details, objectionText };
-    application.updatedAt = now;
-
+    const details = application.details as AcquisitionDetails;
+    const review = acquisitionTransition(details, application.status, "citizen-accept");
+    if (!review.allowed) return unprocessable({ status: review.blockers[0] });
+    completeMockAcquisition(application, details, me.id, "Citizen accepted the compensation offer");
     await appendAudit({
-      entityType: "service-application",
-      entityId: application.id,
-      action: "status-change",
-      actorId: me.id,
-      actorName: me.name,
-      payload: { applicationNo: application.applicationNo },
+      entityType: "service-application", entityId: application.id, action: "accept",
+      actorId: me.id, actorName: me.name,
+      payload: { applicationNo: application.applicationNo, awardAmount: details.awardAmount },
+    });
+    return HttpResponse.json(application);
+  }),
+
+  http.patch(`${API}/acquisition/:id/appeal`, async ({ params, request }) => {
+    await latency();
+    const me = currentUser(request);
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application || application.serviceType !== "acquisition" || application.applicantId !== me.id) {
+      return notFound("Acquisition request not found");
+    }
+    const details = application.details as AcquisitionDetails;
+    const review = acquisitionTransition(details, application.status, "citizen-appeal");
+    if (!review.allowed) return unprocessable({ status: review.blockers[0] });
+    const body = (await request.json()) as {
+      outcome: "withdraw" | "increase-compensation";
+      reason: string;
+      requestedAmount?: number;
+    };
+    if (!body.reason?.trim()) return badRequest("Appeal reason is required");
+    if (body.outcome === "increase-compensation" && !validIncreasedAward(details.awardAmount, body.requestedAmount)) {
+      return unprocessable({ requestedAmount: { code: "appeal-amount-not-higher" } });
+    }
+    const now = new Date().toISOString();
+    application.status = "hearing-scheduled";
+    application.details = {
+      ...details,
+      stage: "appeal-review",
+      appeal: { outcome: body.outcome, reason: body.reason.trim(), requestedAmount: body.requestedAmount, filedAt: now },
+    } satisfies AcquisitionDetails;
+    application.updatedAt = now;
+    await appendAudit({
+      entityType: "service-application", entityId: application.id, action: "appeal",
+      actorId: me.id, actorName: me.name,
+      payload: { applicationNo: application.applicationNo, outcome: body.outcome, requestedAmount: body.requestedAmount },
     });
     db.serviceApplicationEvents.push({
-      id: `sae-${Date.now()}`,
-      applicationId: application.id,
-      at: now,
-      type: "status-change",
-      title: "Objection filed",
-      actorId: me.id,
+      id: `sae-${Date.now()}`, applicationId: application.id, at: now, type: "appealed",
+      title: "Citizen appealed the acquisition", description: body.reason.trim(), actorId: me.id,
     });
+    db.notifications.unshift({
+      id: `ntf-${Date.now()}`, userId: details.createdByOfficerId, at: now, severity: "warning",
+      title: "Acquisition appeal filed", body: `${application.applicationNo} requires a land-office decision.`,
+      read: false, href: "/acquisition",
+    });
+    return HttpResponse.json(application);
+  }),
 
+  http.patch(`${API}/acquisition/:id/appeal-decision`, async ({ params, request }) => {
+    await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
+    const me = currentUser(request);
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application || application.serviceType !== "acquisition") return notFound("Acquisition request not found");
+    const details = application.details as AcquisitionDetails;
+    const body = (await request.json()) as {
+      decision: "withdraw" | "increase-compensation" | "proceed";
+      awardAmount?: number;
+      note?: string;
+    };
+    const review = acquisitionTransition(details, application.status, `appeal-${body.decision}`);
+    if (!review.allowed) return unprocessable({ status: review.blockers[0] });
+    if (body.decision === "increase-compensation" && !validIncreasedAward(details.awardAmount, body.awardAmount)) {
+      return unprocessable({ awardAmount: { code: "decision-amount-not-higher" } });
+    }
+    const now = new Date().toISOString();
+    const appealDecision = { decision: body.decision, note: body.note, decidedAt: now, decidedById: me.id };
+    if (body.decision === "proceed") {
+      completeMockAcquisition(application, { ...details, appealDecision }, me.id, "Land office confirmed acquisition after appeal");
+    } else if (body.decision === "withdraw") {
+      application.status = "rejected";
+      application.details = { ...details, stage: "withdrawn", appealDecision } satisfies AcquisitionDetails;
+      application.decidedAt = now;
+      application.updatedAt = now;
+      for (const restriction of db.parcelRestrictions) {
+        if (restriction.parcelId === application.parcelId && restriction.type === "acquisition" && restriction.referenceNo === application.applicationNo && !restriction.toDate) restriction.toDate = now;
+      }
+      db.notifications.unshift({
+        id: `ntf-${Date.now()}`, userId: application.applicantId, at: now, severity: "success",
+        title: "Acquisition withdrawn", body: `${application.applicationNo} will not acquire your land.`, read: false, href: "/acquisition",
+      });
+    } else {
+      application.status = "under-review";
+      application.details = {
+        ...details, stage: "citizen-decision", awardAmount: body.awardAmount,
+        appeal: undefined, appealDecision,
+      } satisfies AcquisitionDetails;
+      application.updatedAt = now;
+      db.notifications.unshift({
+        id: `ntf-${Date.now()}`, userId: application.applicantId, at: now, severity: "success",
+        title: "Acquisition compensation increased", body: `${application.applicationNo} now offers BDT ${body.awardAmount}.`, read: false, href: "/acquisition",
+      });
+    }
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`, applicationId: application.id, at: now, type: "decided",
+      title: body.decision === "withdraw" ? "Land office withdrew the acquisition" : body.decision === "proceed" ? "Land office confirmed acquisition after appeal" : "Compensation offer increased",
+      description: body.note, actorId: me.id,
+    });
+    await appendAudit({
+      entityType: "service-application", entityId: application.id, action: `appeal-${body.decision}`,
+      actorId: me.id, actorName: me.name,
+      payload: { applicationNo: application.applicationNo, awardAmount: body.awardAmount },
+    });
     return HttpResponse.json(application);
   }),
 
@@ -2651,6 +2865,9 @@ export const handlers = [
     if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
+    if (application.serviceType === "acquisition") {
+      return conflict("Use the acquisition workflow to decide this request.");
+    }
     if (application.status === "draft") {
       return unprocessable({ status: { code: "not-submitted" } });
     }
