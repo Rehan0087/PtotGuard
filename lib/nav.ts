@@ -12,6 +12,7 @@ import {
   HelpCircle,
   BookOpen,
   MessageCircleWarning,
+  Store,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -59,6 +60,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
       { labelKey: "profile", href: "/profile", icon: UserCog },
       { labelKey: "citizenServices", href: "/portal", icon: LayoutGrid },
+      { labelKey: "marketplace", href: "/marketplace", icon: Store },
       { labelKey: "faq", href: "/faq", icon: HelpCircle },
       { labelKey: "manual", href: "/support", icon: BookOpen },
     ],
