@@ -522,7 +522,7 @@ export class MutationsController {
           title: body.decision === "approve" ? "Mutation approved" : "Mutation rejected",
           body: `Mutation ${updated.mutationNumber} for dag ${updated.parcelDagNo} has been ${body.decision}d.`,
           read: false,
-          href: `/inheritance`,
+          href: `/mutations?mutation=${updated.id}`,
         },
       });
 

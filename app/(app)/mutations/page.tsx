@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -340,7 +340,7 @@ function OfficerMutationsFallback() {
   );
 }
 
-function MyMutationCard({ mutation }: { mutation: LandMutation }) {
+function MyMutationCard({ mutation, highlighted }: { mutation: LandMutation; highlighted: boolean }) {
   const t = useT();
   const f = useFmt();
   const s = useStatusMeta();
@@ -349,7 +349,10 @@ function MyMutationCard({ mutation }: { mutation: LandMutation }) {
   const decided = mutation.status === "complete" || mutation.status === "rejected";
 
   return (
-    <Card className="gap-4 px-5">
+    <Card
+      id={`mutation-${mutation.id}`}
+      className={cn("scroll-mt-24 gap-4 px-5", highlighted && "ring-2 ring-primary")}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -463,6 +466,8 @@ function CitizenMutations() {
   const t = useT();
   const s = useStatusMeta();
   const [status, setStatus] = useState<"all" | MutationStatus>("all");
+  // A notification links here as ?mutation=<id>; bring that case into view.
+  const focusId = useSearchParams().get("mutation");
 
   const { data, isLoading } = useMutations({
     scope: "mine",
@@ -472,6 +477,12 @@ function CitizenMutations() {
 
   const mutations = data?.items ?? [];
   const filtered = status !== "all";
+
+  useEffect(() => {
+    if (focusId && !isLoading) {
+      document.getElementById(`mutation-${focusId}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }, [focusId, isLoading]);
 
   return (
     <div className="space-y-6">
@@ -523,7 +534,7 @@ function CitizenMutations() {
       ) : (
         <div className="space-y-3">
           {mutations.map((m) => (
-            <MyMutationCard key={m.id} mutation={m} />
+            <MyMutationCard key={m.id} mutation={m} highlighted={m.id === focusId} />
           ))}
         </div>
       )}
@@ -538,8 +549,11 @@ function OfficerMutations() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const session = useSession();
-  const [selectedMutationId, setSelectedMutationId] = useState<string>();
-  const [detailOpen, setDetailOpen] = useState(false);
+  // A notification links here as ?mutation=<id>; open that case straight away.
+  const [selectedMutationId, setSelectedMutationId] = useState<string | undefined>(
+    () => searchParams.get("mutation") ?? undefined,
+  );
+  const [detailOpen, setDetailOpen] = useState(() => searchParams.has("mutation"));
   const [decision, setDecision] = useState<"approve" | "reject" | null>(null);
 
   const scope: Scope = searchParams.get("scope") === "assigned" ? "assigned" : "all";
