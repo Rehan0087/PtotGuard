@@ -17,6 +17,7 @@ import type {
   User,
   UserStatus,
 } from "./types";
+import { DISPUTE_CLOSED_STATUSES } from "./dispute-status";
 
 /** A visit that has been given out but not yet closed. */
 export const OPEN_VISIT_STATUSES: FieldReportStatus[] = [
@@ -127,7 +128,7 @@ export const PURPOSE_FOR_MUTATION: Record<MutationType, FieldReportPurpose> = {
   correction: "measurement",
 };
 
-const CLOSED_DISPUTE_STATUSES = new Set(["resolved", "rejected", "withdrawn"]);
+const CLOSED_DISPUTE_STATUSES = new Set(DISPUTE_CLOSED_STATUSES);
 
 /**
  * Open disputes with nobody booked to go and look. A cancelled visit doesn't
