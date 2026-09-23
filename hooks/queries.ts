@@ -1054,15 +1054,6 @@ export function useInviteUser() {
   });
 }
 
-/** A new temporary password for somebody locked out — shown once, same as an invitation. */
-export function useResetUserPassword(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.post<{ temporaryPassword: string }>(`/users/${id}/password-reset`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
-  });
-}
-
 /** Suspend/reactivate, or reassign jurisdiction — the two account actions
  * that need no real auth system behind them. */
 export function useUpdateUser(id: string) {
