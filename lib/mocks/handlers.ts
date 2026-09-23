@@ -192,11 +192,11 @@ const HEARING_STATUS_VALUES: string[] = [
 
 const DISPUTE_STATUS_VALUES: string[] = [
   "submitted",
-  "under-review",
-  "field-visit-scheduled",
-  "in-mediation",
+  "under-land-office-review",
+  "field-verified",
+  "forwarded-to-settlement",
   "hearing-scheduled",
-  "resolved",
+  "decided",
   "rejected",
   "withdrawn",
 ];
@@ -468,7 +468,7 @@ function changedFields<T extends Record<string, unknown>>(
  * something that was withdrawn or rejected.
  */
 function isClosed(status: DisputeStatus) {
-  return status === "resolved" || status === "rejected" || status === "withdrawn";
+  return status === "decided" || status === "rejected" || status === "withdrawn";
 }
 
 /**
@@ -1522,7 +1522,7 @@ export const handlers = [
       parcelId: mutation.parcelId,
       parcelDagNo: mutation.parcelDagNo,
       type: "ownership" as const,
-      status: "in-mediation" as const,
+      status: "forwarded-to-settlement" as const,
       priority: "high" as const,
       filedById: actor.id,
       filedByName: actor.name,
@@ -1542,10 +1542,10 @@ export const handlers = [
       disputeId: dispute.id,
       at: now,
       type: "assigned",
-      title: "Referred to mediation",
+      title: "Forwarded to Settlement Office",
       content: mediator
         ? { code: "assigned", to: mediator.name }
-        : { code: "status-change", status: "in-mediation" },
+        : { code: "status-change", status: "forwarded-to-settlement" },
       description: body.description.trim(),
       actorId: actor.id,
       actorName: actor.name,
@@ -2040,7 +2040,7 @@ export const handlers = [
     if (!application) return new HttpResponse(null, { status: 404 });
 
     // Set expiry to 1 year from current expiry
-    const expiry = new Date(application.details.leaseExpiresAt || new Date());
+    const expiry = new Date((application.details.leaseExpiresAt as string) || Date.now());
     expiry.setFullYear(expiry.getFullYear() + 1);
     application.details.leaseExpiresAt = expiry.toISOString();
     application.updatedAt = new Date().toISOString();
@@ -2921,7 +2921,53 @@ export const handlers = [
     return HttpResponse.json(dispute);
   }),
 
+  http.post(`${API}/disputes/:id/assign-agent`, async ({ params, request }) => {
+    await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
+    const dispute = db.disputes.find((d) => d.id === params.id);
+    if (!dispute) return notFound("Dispute not found");
+    if (dispute.status !== "under-land-office-review") {
+      return unprocessable({ status: { code: "wrong-status", status: dispute.status } });
+    }
+    const { agentId } = (await request.json()) as { agentId: string };
+    const agent = db.users.find(
+      (u) => u.id === agentId && u.role === "field-agent" && u.status === "active",
+    );
+    if (!agent) return notFound("Field agent not found");
+
+    const me = currentUser(request);
+    const now = new Date().toISOString();
+    dispute.assignedAgentId = agent.id;
+    dispute.updatedAt = now;
+
+    db.disputeEvents.push({
+      id: `de-${Date.now()}`,
+      disputeId: dispute.id,
+      at: now,
+      type: "assigned",
+      title: `Field agent assigned: ${agent.name}`,
+      content: { code: "assigned", to: agent.name },
+      actorId: me.id,
+      actorName: me.name,
+    });
+
+    db.notifications.unshift({
+      id: `n-${Date.now()}-${agent.id}`,
+      userId: agent.id,
+      at: now,
+      severity: "info",
+      title: "Field visit assigned",
+      body: `You have been assigned to verify dispute ${dispute.caseNumber}.`,
+      read: false,
+      href: `/disputes/${dispute.id}`,
+    });
+
+    return HttpResponse.json(dispute);
+  }),
+
   http.get(`${API}/disputes/:id`, async ({ params }) => {
+
     await latency();
     const dispute = db.disputes.find((d) => d.id === params.id);
     if (!dispute) return notFound("Dispute not found");
@@ -3453,8 +3499,8 @@ export const handlers = [
         const dispute = report.disputeId
       ? db.disputes.find((candidate) => candidate.id === report.disputeId)
       : undefined;
-        if (dispute && dispute.status === "field-visit-scheduled") {
-      dispute.status = "under-review";
+        if (dispute && dispute.status === "under-land-office-review") {
+      dispute.status = "field-verified";
       dispute.updatedAt = now;
       db.disputeEvents.push({
         id: `de-${Date.now()}`,
@@ -3462,7 +3508,7 @@ export const handlers = [
         at: now,
         type: "field-visit",
         title: "Field survey filed",
-        content: { code: "field-visit-completed" },
+        content: { code: "field-verified" },
         description: notes,
         actorId: me.id,
         actorName: me.name,
@@ -3741,7 +3787,6 @@ export const handlers = [
     // up on its tracking timeline, same as the real workflow.
     if (dispute) {
       dispute.assignedAgentId = agent.id;
-      dispute.status = "field-visit-scheduled";
       dispute.updatedAt = now;
       db.disputeEvents.push({
         id: `de-${Date.now()}`,
@@ -3749,7 +3794,7 @@ export const handlers = [
         at: now,
         type: "field-visit",
         title: "Field visit scheduled",
-        content: { code: "field-visit-scheduled" },
+        content: { code: "assigned", to: agent.name },
         description: `${agent.name} is booked for a ${purpose.replace(/-/g, " ")} on ${report.parcelDagNo}.`,
         actorId: me.id,
         actorName: me.name,
@@ -3817,7 +3862,7 @@ export const handlers = [
     // hearing hanging off it.
     const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
     if (dispute && !isClosed(dispute.status)) {
-      dispute.status = outcome === "resolved" ? "resolved" : "rejected";
+      dispute.status = outcome === "resolved" ? "decided" : "rejected";
       // The ruling text is the resolution — record content, stored as typed.
       dispute.resolution = ruling;
       dispute.updatedAt = now;
@@ -3826,8 +3871,8 @@ export const handlers = [
         disputeId: dispute.id,
         at: now,
         type: "resolved",
-        title: outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
-        content: { code: "ruled" },
+        title: outcome === "resolved" ? "Dispute decided" : "Claim not upheld",
+        content: { code: "decided" },
         description: ruling,
         actorId: actor.id,
         actorName: actor.name,
@@ -3842,10 +3887,10 @@ export const handlers = [
           userId,
           at: now,
           severity: "info",
-          title: outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
+          title: outcome === "resolved" ? "Dispute decided" : "Claim not upheld",
           body: outcome === "resolved"
-            ? `Case ${dispute.caseNumber} was resolved. The mutation can return for approval.`
-            : `Case ${dispute.caseNumber} could not be resolved. The mutation must return for rejection.`,
+            ? `Case ${dispute.caseNumber} has been decided by the Settlement Office.`
+            : `Case ${dispute.caseNumber}: the claim was not upheld. Please see the case for details.`,
           content: { code: "dispute-ruled", caseNumber: dispute.caseNumber },
           read: false,
           href: `/disputes/${dispute.id}`,
@@ -3908,7 +3953,7 @@ export const handlers = [
         actorName: me.name,
       } as never);
       if (to === "closed" && !isClosed(dispute.status) && dispute.status === "hearing-scheduled") {
-        dispute.status = "in-mediation";
+        dispute.status = "forwarded-to-settlement";
         dispute.updatedAt = now;
       }
     }
@@ -4049,7 +4094,7 @@ export const handlers = [
     const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
     if (dispute && !isClosed(dispute.status)) {
       const me = currentUser(request);
-      dispute.status = "in-mediation";
+      dispute.status = "forwarded-to-settlement";
       dispute.updatedAt = now;
       db.disputeEvents.push({
         id: `de-${Date.now()}`,
@@ -4103,6 +4148,11 @@ export const handlers = [
     if (!dispute) return notFound("Dispute not found");
     if (isClosed(dispute.status)) {
       return conflict("This case is closed and cannot be listed for hearing.");
+    }
+    // Settlement Office can only convene a hearing once the Land Office has
+    // forwarded the verified case — enforces the strict pipeline order.
+    if (dispute.status !== "forwarded-to-settlement") {
+      return conflict("This case must be forwarded to the Settlement Office before scheduling a hearing.");
     }
     const OPEN_HEARING_STATUSES = ["scheduled", "in-hearing", "deliberation"];
     if (

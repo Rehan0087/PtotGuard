@@ -25,7 +25,7 @@ export function disputesNeedingHearing(
   hearings: Hearing[],
 ): Dispute[] {
   const listed = new Set(hearings.map((h) => h.disputeId));
-  return disputes.filter((d) => d.status === "in-mediation" && !listed.has(d.id));
+  return disputes.filter((d) => d.status === "forwarded-to-settlement" && !listed.has(d.id));
 }
 
 /** Attendee lists are typed by hand, so match on shape rather than exact string. */

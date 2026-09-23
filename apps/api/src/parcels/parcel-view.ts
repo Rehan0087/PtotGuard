@@ -1,8 +1,8 @@
 import type { PrismaService } from "../prisma/prisma.service";
 import { ACTIVE_MUTATION_STATUSES, recordRegistryStatus, type MutationStatus } from "@plotguard/rules";
 
-/** Mirrors CLOSED_DISPUTE_STATUSES in @plotguard/rules' assignment.ts (unexported). */
-export const CLOSED_DISPUTE_STATUSES = ["resolved", "rejected", "withdrawn"];
+/** Mirrors DISPUTE_CLOSED_STATUSES in @plotguard/rules. */
+export const CLOSED_DISPUTE_STATUSES = ["decided", "rejected", "withdrawn"];
 
 export type GeoPoint = { lat: number; lng: number };
 

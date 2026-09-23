@@ -21,7 +21,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useDispute, useExecuteRuling, useRole, useUpdateDisputeStatus } from "@/hooks/queries";
+import {
+  useDispute,
+  useExecuteRuling,
+  useRole,
+  useUpdateDisputeStatus,
+  useAssignDisputeAgent,
+} from "@/hooks/queries";
 import { useDisputeEventTitle } from "@/lib/i18n/content";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
@@ -232,6 +238,38 @@ function ExecuteRulingCard({
   );
 }
 
+function AssignAgentCard({ disputeId }: { disputeId: string }) {
+  const t = useT();
+  const assign = useAssignDisputeAgent(disputeId);
+  // Using a fixed agent ID for demo purposes. In a real app, this would be a select dropdown
+  // populated by fetching active field agents.
+  const demoAgentId = "usr-agent";
+
+  function submit() {
+    assign.mutate(demoAgentId, {
+      onSuccess: () => toast.success("Field agent assigned successfully"),
+      onError: () => toast.error("Failed to assign field agent"),
+    });
+  }
+
+  return (
+    <Card className="gap-3 px-4">
+      <h3 className="font-heading text-sm font-semibold text-foreground">Assign Field Agent</h3>
+      <p className="text-xs text-muted-foreground">
+        Assign a field agent to verify this case on the ground.
+      </p>
+
+      <Button
+        className="w-full"
+        disabled={assign.isPending}
+        onClick={submit}
+      >
+        Assign field agent
+      </Button>
+    </Card>
+  );
+}
+
 export default function DisputeDetailPage() {
   const t = useT();
   const f = useFmt();
@@ -381,7 +419,11 @@ export default function DisputeDetailPage() {
             <MoveCaseCard disputeId={dispute.id} status={dispute.status as DisputeStatus} />
           ) : null}
 
-          {role === "land-office" && dispute.status === "resolved" ? (
+          {role === "land-office" && dispute.status === "under-land-office-review" ? (
+            <AssignAgentCard disputeId={dispute.id} />
+          ) : null}
+
+          {role === "land-office" && dispute.status === "decided" ? (
             <ExecuteRulingCard
               disputeId={dispute.id}
               status={dispute.status}

@@ -10,11 +10,11 @@ export type DisputeType =
 
 export type DisputeStatus =
   | "submitted"
-  | "under-review"
-  | "field-visit-scheduled"
-  | "in-mediation"
+  | "under-land-office-review"
+  | "field-verified"
+  | "forwarded-to-settlement"
   | "hearing-scheduled"
-  | "resolved"
+  | "decided"
   | "rejected"
   | "withdrawn";
 
@@ -52,9 +52,8 @@ export type DisputeEventContent =
   | { code: "hearing-adjourned" }
   | { code: "hearing-closed" }
   | { code: "hearing-appealed" }
-  | { code: "field-visit-scheduled" }
-  | { code: "field-visit-completed" }
-  | { code: "ruled" }
+  | { code: "field-verified" }
+  | { code: "decided" }
   | {
       code: "records-executed";
       /** Mirrors RulingOutcome["action"] in ../execution — kept as a plain

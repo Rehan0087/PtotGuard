@@ -243,8 +243,8 @@ model Dispute {
   parcelDagNo         String
   /// DisputeType: "boundary" | "ownership" | "inheritance" | "encroachment" | "fraud" | "easement"
   type                String
-  /// DisputeStatus: "submitted" | "under-review" | "field-visit-scheduled"
-  /// | "in-mediation" | "hearing-scheduled" | "resolved" | "rejected" | "withdrawn"
+  /// DisputeStatus: "submitted" | "under-land-office-review" | "field-verified"
+  /// | "forwarded-to-settlement" | "hearing-scheduled" | "decided" | "rejected" | "withdrawn"
   status              String    @default("submitted")
   /// Priority: "low" | "medium" | "high"
   priority            String    @default("medium")
@@ -268,7 +268,7 @@ model Dispute {
   hearingDate         DateTime?
   resolution          String?
   /// Set once a land-office officer applies the ruling to the parcel record
-  /// — see executionGate() in @plotguard/rules. Null while a resolved case
+  /// — see executionGate() in @plotguard/rules. Null while a decided case
   /// still awaits that step.
   recordsExecutedAt   DateTime?
   recordsExecutedById String?

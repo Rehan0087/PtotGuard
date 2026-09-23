@@ -4,7 +4,7 @@ import type { Dispute } from "./types";
 
 function dispute(over: Partial<Dispute> & { recordsExecutedAt?: string | null } = {}) {
   return {
-    status: "resolved" as Dispute["status"],
+    status: "decided" as Dispute["status"],
     recordsExecutedAt: null,
     ...over,
   };
@@ -12,9 +12,9 @@ function dispute(over: Partial<Dispute> & { recordsExecutedAt?: string | null } 
 
 describe("executionGate", () => {
   it("refuses a dispute that hasn't been ruled on yet", () => {
-    const review = executionGate(dispute({ status: "in-mediation" }), { action: "no-change" }, []);
+    const review = executionGate(dispute({ status: "hearing-scheduled" }), { action: "no-change" }, []);
     expect(review.canExecute).toBe(false);
-    expect(review.blockers).toContainEqual({ code: "not-resolved" });
+    expect(review.blockers).toContainEqual({ code: "not-decided" });
   });
 
   it("refuses a case already executed", () => {
@@ -33,12 +33,12 @@ describe("executionGate", () => {
     expect(review.blockers).toContainEqual({ code: "need-outcome" });
   });
 
-  it("allows no-change once resolved", () => {
+  it("allows no-change once decided", () => {
     const review = executionGate(dispute(), { action: "no-change" }, []);
     expect(review.canExecute).toBe(true);
   });
 
-  it("allows referred-to-mutation once resolved", () => {
+  it("allows referred-to-mutation once decided", () => {
     const review = executionGate(dispute(), { action: "referred-to-mutation" }, []);
     expect(review.canExecute).toBe(true);
   });
@@ -105,7 +105,7 @@ describe("executionGate", () => {
 
   it("reports every applicable blocker at once, not just the first", () => {
     const review = executionGate(
-      dispute({ status: "in-mediation", recordsExecutedAt: "2026-08-01T00:00:00Z" }),
+      dispute({ status: "hearing-scheduled", recordsExecutedAt: "2026-08-01T00:00:00Z" }),
       undefined,
       [],
     );

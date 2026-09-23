@@ -87,6 +87,13 @@ export class HearingsController {
     if (CLOSED_DISPUTE_STATUSES.includes(dispute.status)) {
       throw new ConflictError("This case is closed and cannot be listed for hearing.");
     }
+    // Settlement Office can only convene a hearing once the Land Office has
+    // forwarded the verified case — this enforces the strict pipeline order.
+    if (dispute.status !== "forwarded-to-settlement") {
+      throw new ConflictError(
+        "This case must be forwarded to the Settlement Office before scheduling a hearing.",
+      );
+    }
 
     // The board already hides a case a colleague has listed; this is what
     // makes it true of the record rather than only of one mediator's screen.
@@ -164,7 +171,7 @@ export class HearingsController {
             at: now,
             severity: "info",
             title: "Hearing scheduled",
-            body: `Case ${dispute.caseNumber} has been listed for hearing by the mediator.`,
+            body: `Case ${dispute.caseNumber} has been listed for a hearing by the Settlement Office. You will be notified of the hearing date.`,
             content: { code: "hearing-scheduled", caseNumber: dispute.caseNumber },
             read: false,
             href: `/disputes/${dispute.id}`,
@@ -230,12 +237,10 @@ export class HearingsController {
 
       // A sitting is a public step in the case, so it belongs on the tracking
       // timeline the citizen watches — not only in the mediator's own view.
+      // In the new pipeline the dispute stays at `hearing-scheduled`; we do
+      // not back-track to a previous status during an active hearing.
       const dispute = await tx.dispute.findUnique({ where: { id: hearing.disputeId } });
       if (dispute && !CLOSED_DISPUTE_STATUSES.includes(dispute.status)) {
-        await tx.dispute.update({
-          where: { id: dispute.id },
-          data: { status: "in-mediation", updatedAt: now },
-        });
         await tx.disputeEvent.create({
           data: {
             id: `de-${randomUUID()}`,
@@ -301,7 +306,9 @@ export class HearingsController {
           where: { id: dispute.id },
           // The ruling text is the resolution — record content, stored as typed.
           data: {
-            status: body.outcome === "resolved" ? "resolved" : "rejected",
+            // A resolved outcome becomes "decided" — the Settlement Office
+            // decided the case; "rejected" means the claim was not upheld.
+            status: body.outcome === "resolved" ? "decided" : "rejected",
             resolution: body.ruling,
             updatedAt: now,
           },
@@ -312,8 +319,8 @@ export class HearingsController {
             disputeId: dispute.id,
             at: now,
             type: "resolved",
-            title: body.outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
-            content: { code: "ruled" },
+            title: body.outcome === "resolved" ? "Dispute decided" : "Claim not upheld",
+            content: { code: "decided" },
             description: body.ruling,
             actorId,
           },
@@ -333,10 +340,10 @@ export class HearingsController {
               userId,
               at: now,
               severity: "info",
-              title: body.outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
+              title: body.outcome === "resolved" ? "Dispute decided" : "Claim not upheld",
               body: body.outcome === "resolved"
-                ? `Case ${dispute.caseNumber} was resolved. The mutation can return for approval.`
-                : `Case ${dispute.caseNumber} could not be resolved. The mutation must return for rejection.`,
+                ? `Case ${dispute.caseNumber} has been decided by the Settlement Office.`
+                : `Case ${dispute.caseNumber}: the claim was not upheld. Please see the case for details.`,
               content: { code: "dispute-ruled", caseNumber: dispute.caseNumber },
               read: false,
               href: `/disputes/${dispute.id}`,
