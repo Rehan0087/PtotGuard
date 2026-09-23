@@ -168,6 +168,8 @@ export class MutationsController {
    * approval below can actually move Parcel.ownerId anywhere real. See
    * users.controller.ts's search() for how the citizen finds that account.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post()
   @HttpCode(201)
   async create(@Body() body: CreateMutationDto, @Req() req: Request) {
@@ -185,7 +187,10 @@ export class MutationsController {
         ? Promise.resolve(null)
         : this.prisma.user.findUnique({ where: { id: body.toOwnerId } }),
     ]);
-    if (!parcel) throw new NotFoundError("Parcel not found");
+    const actorId = currentUserId(req);
+    // Same answer for "no such parcel" and "not yours" as land-admin and
+    // disputes: only the recorded owner may start a transfer of their land.
+    if (!parcel || parcel.ownerId !== actorId) throw new NotFoundError("Parcel not found");
 
     if (!isCorrection) {
       if (!toOwner || toOwner.role !== "citizen") {
@@ -200,8 +205,6 @@ export class MutationsController {
         "parcelId",
       );
     }
-
-    const actorId = currentUserId(req);
 
     return this.prisma.$transaction(async (tx) => {
       // Same fragile-but-consistent numbering as disputes/jurisdictions
@@ -522,6 +525,7 @@ export class MutationsController {
     });
   }
 
+  @UseGuards(AccessTokenGuard)
   @Patch(":id/dcr-payment")
   async recordDcrPayment(@Param("id") id: string, @Req() req: Request) {
     const actor = await loadMutationReadActor(this.prisma, req);

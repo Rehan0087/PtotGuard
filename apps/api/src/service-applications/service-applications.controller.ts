@@ -99,6 +99,8 @@ export class ServiceApplicationsController {
 
   /** Starts a draft. No gate: a citizen may open one before deciding every
    * field, the same way a form draft is never refused for being incomplete. */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post()
   @HttpCode(201)
   async create(@Body() body: CreateServiceApplicationDto, @Req() req: Request) {
@@ -152,10 +154,15 @@ export class ServiceApplicationsController {
   /** draft → submitted. A citizen may revise a draft freely, so this is the
    * only transition guarded against direction rather than content: it just
    * cannot fire twice. */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Patch(":id/submit")
   async submit(@Param("id") id: string, @Req() req: Request) {
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
-    if (!application) throw new NotFoundError("Service application not found");
+    // Not found and not yours are the same answer — see land-admin's apply().
+    if (!application || application.applicantId !== currentUserId(req)) {
+      throw new NotFoundError("Service application not found");
+    }
     if (application.status !== "draft") {
       throw new ConflictError("This application has already been submitted.");
     }
@@ -197,10 +204,14 @@ export class ServiceApplicationsController {
    * payment recording. Must follow submit (an application still being
    * drafted has nothing to charge for yet) and can only happen once.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Patch(":id/pay")
   async pay(@Param("id") id: string, @Body() body: RecordPaymentDto, @Req() req: Request) {
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
-    if (!application) throw new NotFoundError("Service application not found");
+    if (!application || application.applicantId !== currentUserId(req)) {
+      throw new NotFoundError("Service application not found");
+    }
     if (!application.submittedAt) {
       throw new ValidationError({ code: "not-submitted" }, "status");
     }

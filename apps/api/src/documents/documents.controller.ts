@@ -107,6 +107,8 @@ export class DocumentsController {
    * photos. Ownership-checked when a parcel is named, matching the upload
    * dialog's own picker (`useParcels({ owner: "me" })`).
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post()
   @HttpCode(201)
   async create(@Body() body: UploadDocumentDto, @Req() req: Request) {
@@ -274,6 +276,8 @@ export class DocumentsController {
     return updated;
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Post(":id/run-ocr")
   async runOcrNow(@Param("id") id: string, @Req() req: Request) {
     const doc = await this.prisma.landDocument.findUnique({ where: { id } });

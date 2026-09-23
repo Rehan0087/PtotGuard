@@ -1222,6 +1222,8 @@ export const handlers = [
   /** Mirrors DocumentsController.create() — no real object storage in this phase. */
   http.post(`${API}/documents`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as Partial<{
       parcelId: string;
@@ -1282,8 +1284,11 @@ export const handlers = [
     const parsed = validateCreateMutationBody(await request.json());
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
-    if (!parcel) return notFound("Parcel not found");
+    // Mirrors MutationsController.create(): only the recorded owner files.
+    if (!parcel || parcel.ownerId !== currentUser(request).id) return notFound("Parcel not found");
     const toOwner = db.users.find((u) => u.id === body.toOwnerId);
     if (!toOwner || toOwner.role !== "citizen") return notFound("Recipient not found");
 
@@ -1951,6 +1956,8 @@ export const handlers = [
 
   http.post(`${API}/land-tax/pay`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as { parcelId: string; paymentMethod: string };
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
@@ -2085,8 +2092,12 @@ export const handlers = [
     await latency();
     const { id } = params;
     const body = (await request.json()) as { transactionId: string };
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === id);
-    if (!application) return new HttpResponse(null, { status: 404 });
+    if (!application || application.applicantId !== currentUser(request).id) {
+      return notFound("Application not found");
+    }
 
     const now = new Date();
     application.details.leaseFeePaidAt = now.toISOString();
@@ -2099,11 +2110,15 @@ export const handlers = [
     return HttpResponse.json(application);
   }),
 
-  http.patch(`${API}/lease-settlement/:id/renew`, async ({ params }) => {
+  http.patch(`${API}/lease-settlement/:id/renew`, async ({ params, request }) => {
     await latency();
     const { id } = params;
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === id);
-    if (!application) return new HttpResponse(null, { status: 404 });
+    if (!application || application.applicantId !== currentUser(request).id) {
+      return notFound("Application not found");
+    }
 
     // Set expiry to 1 year from current expiry
     const expiry = new Date((application.details.leaseExpiresAt as string) || Date.now());
@@ -2119,6 +2134,8 @@ export const handlers = [
   // no rule to mirror here, just Policy lookup. Mirrors land-admin.controller.ts.
   http.post(`${API}/land-admin/apply`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as {
       parcelId: string;
@@ -2378,6 +2395,8 @@ export const handlers = [
   // lease-settlement.controller.ts.
   http.post(`${API}/lease-settlement/apply`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as {
       landUse: "agricultural" | "non-agricultural";
@@ -2719,6 +2738,8 @@ export const handlers = [
   // notice lands straight in under-review. Mirrors appointments.controller.ts.
   http.post(`${API}/appointments/book`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as {
       officeJurisdictionId: string;
@@ -2781,6 +2802,8 @@ export const handlers = [
 
   http.patch(`${API}/appointments/:id/reschedule`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
     if (application.status === "approved" || application.status === "rejected") {
@@ -2861,6 +2884,8 @@ export const handlers = [
 
   http.post(`${API}/service-applications`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const body = (await request.json()) as Partial<{
       serviceType: string;
       parcelId: string;
@@ -2906,8 +2931,12 @@ export const handlers = [
 
   http.patch(`${API}/service-applications/:id/submit`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
-    if (!application) return notFound("Service application not found");
+    if (!application || application.applicantId !== currentUser(request).id) {
+      return notFound("Service application not found");
+    }
     if (application.status !== "draft") {
       return conflict("This application has already been submitted.");
     }
@@ -2940,8 +2969,12 @@ export const handlers = [
 
   http.patch(`${API}/service-applications/:id/pay`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
-    if (!application) return notFound("Service application not found");
+    if (!application || application.applicantId !== currentUser(request).id) {
+      return notFound("Service application not found");
+    }
     if (!application.submittedAt) {
       return unprocessable({ status: { code: "not-submitted" } });
     }
@@ -3263,6 +3296,8 @@ export const handlers = [
   /** Mirrors DisputesController.create() — see its own note on ownership and routing. */
   http.post(`${API}/disputes`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
     const me = currentUser(request);
     const body = (await request.json()) as Partial<{
       parcelId: string;

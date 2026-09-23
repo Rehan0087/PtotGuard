@@ -411,8 +411,16 @@ describe("mutation read and filing compatibility", () => {
   });
   it("captures the registry owner on citizen filing", async () => {
     const f = fixture();
+    f.prisma.parcel.findUnique.mockResolvedValue({ id: "p-1", dagNo: "42", ownerId: "usr-ayesha", owner: { name: "Ayesha" }, jurisdictionId: "j-local" });
     await f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash" }, request("citizen"));
-    expect(f.tx.mutation.create).toHaveBeenCalledWith({ data: expect.objectContaining({ status: "submitted", fromOwnerId: "usr-old", fromOwnerName: "Old owner", requestedById: "usr-ayesha" }) });
+    expect(f.tx.mutation.create).toHaveBeenCalledWith({ data: expect.objectContaining({ status: "submitted", fromOwnerId: "usr-ayesha", fromOwnerName: "Ayesha", requestedById: "usr-ayesha" }) });
+  });
+  it("refuses a filing on a parcel the caller does not own, as not found", async () => {
+    const f = fixture();
+    await expect(
+      f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash" }, request("citizen")),
+    ).rejects.toMatchObject({ response: { error: "not_found" } });
+    expect(f.tx.mutation.create).not.toHaveBeenCalled();
   });
   it("derives detail from real users, documents, parcel and chronological audit events", async () => {
     const f = fixture("under-primary-verification");

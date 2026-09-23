@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, HttpCode, Post, Req, Patch, Param } from "@nestjs/common";
+import { Body, Controller, HttpCode, Post, Req, Patch, Param, UseGuards } from "@nestjs/common";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
 import type { Request } from "express";
 import type { Policy } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -36,6 +39,8 @@ export class LeaseSettlementController {
     private readonly audit: AuditService,
   ) {}
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post("apply")
   @HttpCode(201)
   async apply(@Body() body: ApplyLeaseSettlementDto, @Req() req: Request) {
@@ -112,11 +117,13 @@ export class LeaseSettlementController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Patch(":id/pay-lease")
   async payLease(@Param("id") id: string, @Body() body: RecordPaymentDto, @Req() req: Request) {
     const me = currentUserId(req);
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
-    if (!application) throw new NotFoundError("Application not found");
+    if (!application || application.applicantId !== me) throw new NotFoundError("Application not found");
     if (application.serviceType !== "lease-settlement") throw new Error("Invalid application type");
     if (application.status !== "approved") throw new Error("Lease must be approved before payment");
 
@@ -152,11 +159,13 @@ export class LeaseSettlementController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Patch(":id/renew")
   async renewLease(@Param("id") id: string, @Req() req: Request) {
     const me = currentUserId(req);
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
-    if (!application) throw new NotFoundError("Application not found");
+    if (!application || application.applicantId !== me) throw new NotFoundError("Application not found");
     if (application.serviceType !== "lease-settlement") throw new Error("Invalid application type");
     
     const details = application.details as Record<string, any>;

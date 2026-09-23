@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, HttpCode, Post, Req } from "@nestjs/common";
+import { Body, Controller, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
 import type { Request } from "express";
 import type { Policy, ServiceApplication } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -50,6 +53,8 @@ export class LandAdminController {
     private readonly audit: AuditService,
   ) {}
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post("apply")
   @HttpCode(201)
   async apply(@Body() body: ApplyLandAdminDto, @Req() req: Request) {

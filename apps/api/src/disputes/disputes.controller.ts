@@ -124,6 +124,8 @@ export class DisputesController {
    * jurisdiction") that was never actually implemented anywhere:
    * `assignedOfficerId` existed on the schema but had no writer.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post()
   @HttpCode(201)
   async create(@Body() body: CreateDisputeDto, @Req() req: Request) {

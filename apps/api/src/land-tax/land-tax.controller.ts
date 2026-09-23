@@ -219,6 +219,8 @@ export class LandTaxController {
    * request body carries only *which* holding and *how* it was paid. Recording
    * a client-supplied total would let anyone pay one taka against any bill.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post("pay")
   @HttpCode(201)
   async pay(@Body() body: PayLandTaxDto, @Req() req: Request) {
