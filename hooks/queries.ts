@@ -208,6 +208,18 @@ export function useUpdateDisputeStatus(id: string) {
   });
 }
 
+/** Land Office assigns a field agent to a dispute under review. */
+export function useAssignDisputeAgent(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (agentId: string) =>
+      api.post<Dispute>(`/disputes/${id}/assign-agent`, { agentId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dispute", id] });
+    },
+  });
+}
+
 /** Land office turning a mediator's ruling into an actual record change. */
 export function useExecuteRuling(id: string) {
   const qc = useQueryClient();

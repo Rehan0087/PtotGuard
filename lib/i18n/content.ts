@@ -81,12 +81,12 @@ export function useDisputeEventTitle() {
           return t.disputeEvents["hearing-closed"];
         case "hearing-appealed":
           return t.disputeEvents["hearing-appealed"];
-        case "field-visit-scheduled":
-          return t.disputeEvents["field-visit-scheduled"];
-        case "field-visit-completed":
-          return t.disputeEvents["field-visit-completed"];
-        case "ruled":
-          return t.disputeEvents.ruled;
+        case "field-verified":
+          return t.disputeEvents["field-verified"];
+        case "decided":
+          return t.disputeEvents.decided;
+        case "records-executed":
+          return t.disputeEvents["records-executed"];
         default:
           return event.title;
       }

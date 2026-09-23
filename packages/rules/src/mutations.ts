@@ -319,7 +319,7 @@ export function mutationActionGate(
   }
 
   if (mutation.disputeId) {
-    if (mediationStatus !== "resolved" && mediationStatus !== "rejected") {
+    if (mediationStatus !== "decided" && mediationStatus !== "rejected") {
       return {
         canStartVerification,
         canCompleteVerification,

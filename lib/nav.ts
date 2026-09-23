@@ -86,7 +86,7 @@ export const NAV: Record<Role, PortalNav> = {
     ],
   },
   mediator: {
-    portalKey: "mediation",
+    portalKey: "settlementOffice",
     home: "/cases",
     items: [{ labelKey: "cases", href: "/cases", icon: Gavel }],
   },

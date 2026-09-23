@@ -36,11 +36,11 @@ export const registryStatusTone: Record<RegistryStatus, StatusTone> = {
 
 export const disputeStatusTone: Record<DisputeStatus, StatusTone> = {
   submitted: "pending",
-  "under-review": "review",
-  "field-visit-scheduled": "review",
-  "in-mediation": "disputed",
+  "under-land-office-review": "review",
+  "field-verified": "review",
+  "forwarded-to-settlement": "review",
   "hearing-scheduled": "disputed",
-  resolved: "verified",
+  decided: "verified",
   rejected: "flagged",
   withdrawn: "draft",
 };

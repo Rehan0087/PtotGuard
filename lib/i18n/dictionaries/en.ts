@@ -142,6 +142,7 @@ export const en = {
       landOffice: "Land Office",
       fieldSurvey: "Field Survey",
       mediation: "Mediation",
+      settlementOffice: "Settlement Office",
       administration: "Administration",
     },
     /** Sidebar section headings. Only used where a portal groups its items. */
@@ -222,11 +223,11 @@ export const en = {
     },
     dispute: {
       submitted: "Submitted",
-      "under-review": "Under review",
-      "field-visit-scheduled": "Field visit scheduled",
-      "in-mediation": "In mediation",
+      "under-land-office-review": "Land Office review",
+      "field-verified": "Field verified",
+      "forwarded-to-settlement": "Forwarded to Settlement Office",
       "hearing-scheduled": "Hearing scheduled",
-      resolved: "Resolved",
+      decided: "Decided",
       rejected: "Rejected",
       withdrawn: "Withdrawn",
     },
@@ -334,9 +335,9 @@ export const en = {
     "evidence-added": "Evidence added",
     "status-change": (status: string) => `Moved to ${status}`,
     "hearing-held": (ordinal: number) => `Hearing ${n(ordinal)} held`,
-    "field-visit-scheduled": "Field visit scheduled",
-    "field-visit-completed": "Field survey filed",
-    ruled: "Ruling issued",
+    "field-verified": "Field survey filed",
+    decided: "Ruling issued",
+    "records-executed": "Records updated",
     "hearing-adjourned": "Hearing adjourned",
     "hearing-closed": "Hearing closed without a ruling",
     "hearing-appealed": "Ruling appealed",
@@ -725,7 +726,7 @@ export const en = {
     cases: {
       description: "Disputes referred to you for hearing, deliberation, and ruling.",
       emptyTitle: "No cases assigned",
-      emptyBody: "Disputes escalated to mediation will be listed here.",
+      emptyBody: "Disputes forwarded to the Settlement Office will be listed here.",
       partySeparator: " vs ",
       hearingAt: (when: string) => `Hearing ${when}`,
       sessions: (count: number) => `${n(count)} session${count === 1 ? "" : "s"}`,
@@ -733,9 +734,9 @@ export const en = {
       viewDispute: "View dispute record",
       openCase: "Open case",
 
-      // Cases referred to mediation with no hearing listed yet.
+      // Cases forwarded to Settlement Office with no hearing listed yet.
       toConvene: "Awaiting a hearing date",
-      toConveneBody: "Referred to mediation. Set a date to list the case.",
+      toConveneBody: "Forwarded by Land Office. Set a hearing date to proceed.",
       noneToConvene: "Every referred case has a hearing listed.",
       hearingDate: "Hearing date",
       convene: "List for hearing",
