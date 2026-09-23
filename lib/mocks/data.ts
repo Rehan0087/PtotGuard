@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Seed dataset for the mock API. Realistic and interconnected so every portal
  * looks populated in demos. Setting: **Cumilla District, Bangladesh** — dag/khatian
  * numbers, upazila/mouza hierarchy, BDT values, Faraiz/Hindu inheritance context.
@@ -119,12 +119,12 @@ export const users: User[] = [
     createdAt: "2023-02-08T09:00:00Z",
   },
   {
-    id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@landtribunal.gov.bd",
+    id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@settlement.gov.bd",
     role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer (Retd. Judge)", status: "active",
     createdAt: "2020-09-01T09:00:00Z",
   },
   {
-    id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@landtribunal.gov.bd",
+    id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@settlement.gov.bd",
     role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer", status: "active",
     createdAt: "2021-03-15T09:00:00Z",
   },
@@ -240,6 +240,14 @@ export const parcelRestrictions: ParcelRestriction[] = [
   { id: "res-4", parcelId: "p-311", type: "mortgage", authority: "Janata Bank, Cumilla", referenceNo: "JB/MTG/2019/1188", note: "Discharged on repayment.", fromDate: "2019-11-02T00:00:00Z", toDate: "2025-01-30T00:00:00Z" },
 ];
 
+export const khasLandPlots: any[] = [
+  { id: "klp-1", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "110", landUse: "agricultural", areaDecimals: 50, centroidLat: 23.550, centroidLng: 90.990, boundaryGeoJson: square({ lat: 23.550, lng: 90.990 }), status: "available" },
+  { id: "klp-2", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "115", landUse: "non-agricultural", areaDecimals: 12, centroidLat: 23.552, centroidLng: 90.992, boundaryGeoJson: square({ lat: 23.552, lng: 90.992 }), status: "available" },
+  { id: "klp-3", mouza: "Payalgacha", upazila: "Barura", district: "Cumilla", dagNo: "220", landUse: "agricultural", areaDecimals: 120, centroidLat: 23.360, centroidLng: 91.030, boundaryGeoJson: square({ lat: 23.360, lng: 91.030 }), status: "available" },
+  { id: "klp-4", mouza: "Payalgacha", upazila: "Barura", district: "Cumilla", dagNo: "225", landUse: "non-agricultural", areaDecimals: 8, centroidLat: 23.362, centroidLng: 91.032, boundaryGeoJson: square({ lat: 23.362, lng: 91.032 }), status: "reserved" },
+  { id: "klp-5", mouza: "Debidwar", upazila: "Debidwar", district: "Cumilla", dagNo: "45", landUse: "non-agricultural", areaDecimals: 5, centroidLat: 23.555, centroidLng: 90.985, boundaryGeoJson: square({ lat: 23.555, lng: 90.985 }), status: "leased" },
+];
+
 export const ownershipRecords: OwnershipRecord[] = [
   { id: "own-1", parcelId: "p-142", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "purchase", fromDate: "2015-07-20T00:00:00Z", toDate: null, documentId: "d-2" },
   { id: "own-2", parcelId: "p-142", ownerId: "usr-legacy-1", ownerName: "Abdul Jalil Sarkar", acquisitionType: "grant", fromDate: "1998-03-01T00:00:00Z", toDate: "2015-07-20T00:00:00Z" },
@@ -287,7 +295,7 @@ export const documents: LandDocument[] = [
 export const disputes: Dispute[] = [
   {
     id: "ds-417", caseNumber: "DSP-2026-00417", parcelId: "p-142", parcelDagNo: "CS-142/3",
-    type: "boundary", status: "under-review", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
+    type: "boundary", status: "under-land-office-review", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
     filedAt: "2026-07-15T10:30:00Z", updatedAt: "2026-07-21T09:00:00Z",
     description: "The adjoining landholder has cultivated roughly 3 metres past the eastern boundary of dag CS-142/3. Requesting a survey to confirm the recorded demarcation.",
     parties: [
@@ -298,33 +306,33 @@ export const disputes: Dispute[] = [
   },
   {
     id: "ds-402", caseNumber: "DSP-2026-00402", parcelId: "p-205", parcelDagNo: "BS-205",
-    type: "encroachment", status: "field-visit-scheduled", priority: "high", filedById: "usr-shanti", filedByName: "Shanti Rani Das",
+    type: "encroachment", status: "under-land-office-review", priority: "high", filedById: "usr-shanti", filedByName: "Shanti Rani Das",
     filedAt: "2026-07-08T13:00:00Z", updatedAt: "2026-07-20T16:00:00Z",
     description: "An unauthorised structure has been raised on the north-west corner of the orchard. Requesting encroachment verification and removal.",
     parties: [{ name: "Shanti Rani Das", role: "claimant", userId: "usr-shanti" }, { name: "Unknown occupant", role: "respondent" }],
-    assignedOfficerId: "usr-officer2", assignedAgentId: "usr-agent", evidenceDocumentIds: ["d-5", "d-10"],
+    assignedOfficerId: "usr-officer2", evidenceDocumentIds: ["d-5", "d-10"],
   },
   {
     id: "ds-388", caseNumber: "DSP-2026-00388", parcelId: "p-176", parcelDagNo: "CS-176",
-    type: "fraud", status: "in-mediation", priority: "high", filedById: "usr-karim", filedByName: "Md. Karim Uddin",
+    type: "fraud", status: "forwarded-to-settlement", priority: "high", filedById: "usr-karim", filedByName: "Md. Karim Uddin",
     filedAt: "2026-06-25T09:45:00Z", updatedAt: "2026-07-19T11:30:00Z",
-    description: "Two conflicting sale deeds (dolil) presented for the same dag. Suspected forged signature on the second deed. Referred for mediation.",
+    description: "Two conflicting sale deeds (dolil) presented for the same dag. Suspected forged signature on the second deed. Referred to Settlement Office.",
     parties: [{ name: "Md. Karim Uddin", role: "claimant", userId: "usr-karim" }, { name: "Sohel Rana", role: "respondent" }],
-    assignedMediatorId: "usr-mediator", evidenceDocumentIds: ["d-6", "d-11"],
+    assignedOfficerId: "usr-officer", assignedMediatorId: "usr-mediator", evidenceDocumentIds: ["d-6", "d-11"],
   },
   // Referred to mediation but not yet listed for hearing — this is what fills
   // the mediator's "to convene" board.
   {
     id: "ds-381", caseNumber: "DSP-2026-00381", parcelId: "p-092", parcelDagNo: "RS-92/4",
-    type: "easement", status: "resolved", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
+    type: "easement", status: "decided", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
     filedAt: "2026-06-18T07:20:00Z", updatedAt: "2026-07-16T10:05:00Z",
-    description: "Right of way across the northern strip of dag RS-92/4 blocked after the neighbouring owner raised a boundary wall. Referred for mediation.",
+    description: "Right of way across the northern strip of dag RS-92/4 blocked after the neighbouring owner raised a boundary wall.",
     parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Sohel Rana", role: "respondent" }],
     assignedMediatorId: "usr-mediator", evidenceDocumentIds: [], resolution: "The recorded access path was confirmed and reopened by agreement.",
   },
   {
     id: "ds-370", caseNumber: "DSP-2026-00370", parcelId: "p-311", parcelDagNo: "RS-311/2",
-    type: "ownership", status: "resolved", priority: "low", filedById: "usr-karim", filedByName: "Md. Karim Uddin",
+    type: "ownership", status: "decided", priority: "low", filedById: "usr-karim", filedByName: "Md. Karim Uddin",
     filedAt: "2026-05-30T10:00:00Z", updatedAt: "2026-06-20T14:00:00Z",
     description: "Clerical mismatch in the recorded owner name resolved after document verification.",
     parties: [{ name: "Md. Karim Uddin", role: "claimant", userId: "usr-karim" }],
@@ -348,7 +356,7 @@ export const disputes: Dispute[] = [
   },
   {
     id: "ds-430", caseNumber: "DSP-2026-00430", parcelId: "p-403", parcelDagNo: "RS-403",
-    type: "boundary", status: "field-visit-scheduled", priority: "high", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
+    type: "boundary", status: "field-verified", priority: "high", filedById: "usr-ayesha", filedByName: "Ayesha Siddika",
     filedAt: "2026-09-06T09:00:00Z", updatedAt: "2026-09-07T08:30:00Z",
     description: "The field agent found a boundary occupation on the southern edge during measurement.",
     parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Adjacent occupier", role: "respondent" }],
@@ -360,9 +368,9 @@ export const disputeEvents: DisputeEvent[] = [
   { id: "de-1", disputeId: "ds-417", at: "2026-07-15T10:30:00Z", type: "filed", title: "Dispute filed", content: { code: "filed" }, description: "Boundary dispute submitted by Ayesha Siddika.", actorId: "usr-ayesha", actorName: "Ayesha Siddika" },
   { id: "de-2", disputeId: "ds-417", at: "2026-07-16T09:10:00Z", type: "assigned", title: "Assigned to Sub-Registrar", content: { code: "assigned", to: "Sub-Registrar" }, description: "Case routed to Nasrin Akter, Debidwar Upazila.", actorName: "System" },
   { id: "de-3", disputeId: "ds-417", at: "2026-07-17T14:00:00Z", type: "document-added", title: "Evidence added", content: { code: "evidence-added" }, description: "Khatian for dag CS-142/3 attached as evidence.", actorId: "usr-ayesha", actorName: "Ayesha Siddika" },
-  { id: "de-4", disputeId: "ds-417", at: "2026-07-21T09:00:00Z", type: "status-change", title: "Moved to Under review", content: { code: "status-change", status: "under-review" }, description: "Officer began reviewing submitted records.", actorId: "usr-officer", actorName: "Nasrin Akter" },
+  { id: "de-4", disputeId: "ds-417", at: "2026-07-21T09:00:00Z", type: "status-change", title: "Moved to Under review", content: { code: "status-change", status: "under-land-office-review" }, description: "Officer began reviewing submitted records.", actorId: "usr-officer", actorName: "Nasrin Akter" },
   { id: "de-5", disputeId: "ds-388", at: "2026-06-25T09:45:00Z", type: "filed", title: "Dispute filed", content: { code: "filed" }, actorId: "usr-karim", actorName: "Md. Karim Uddin" },
-  { id: "de-6", disputeId: "ds-388", at: "2026-07-02T11:00:00Z", type: "status-change", title: "Referred to mediation", content: { code: "status-change", status: "in-mediation" }, actorName: "System" },
+  { id: "de-6", disputeId: "ds-388", at: "2026-07-02T11:00:00Z", type: "status-change", title: "Referred to mediation", content: { code: "status-change", status: "forwarded-to-settlement" }, actorName: "System" },
   { id: "de-7", disputeId: "ds-388", at: "2026-07-19T11:30:00Z", type: "hearing", title: "First hearing held", content: { code: "hearing-held", ordinal: 1 }, description: "Both parties presented deeds. Handwriting examination ordered.", actorId: "usr-mediator", actorName: "Shahida Khatun" },
 ];
 
@@ -489,20 +497,86 @@ export const policies = {
   landAdminCorrectionFeeBdt: 500,
   revenueCaseFilingFeeBdt: 300,
   leaseSettlementAgriculturalFeeBdt: 300,
-  leaseSettlementNonAgriculturalFeeBdt: 1000,
+  leaseSettlementNonAgriculturalFeeBdt: 1200,
+  leaseSettlementApplicationFeeBdt: 20,
 };
 
 // ---------------------------------------------------------------------------
 // Notifications (citizen inbox is richest for the demo)
 // ---------------------------------------------------------------------------
 export const notifications: AppNotification[] = [
-  { id: "n-1", userId: "usr-ayesha", at: "2026-07-21T09:05:00Z", severity: "info", title: "Dispute moved to Under review", body: "Case DSP-2026-00417 is now being reviewed by the Sub-Registrar.", content: { code: "dispute-status", caseNumber: "DSP-2026-00417", status: "under-review" }, read: false, href: "/disputes/ds-417" },
+  { id: "n-1", userId: "usr-ayesha", at: "2026-07-21T09:05:00Z", severity: "info", title: "Dispute moved to Under review", body: "Case DSP-2026-00417 is now being reviewed by the Sub-Registrar.", content: { code: "dispute-status", caseNumber: "DSP-2026-00417", status: "under-land-office-review" }, read: false, href: "/disputes/ds-417" },
   { id: "n-2", userId: "usr-ayesha", at: "2026-07-18T11:25:00Z", severity: "success", title: "Document verified", body: "Your khatian for dag CS-142/3 passed verification.", content: { code: "document-verified", dagNo: "CS-142/3" }, read: false, href: "/documents" },
   { id: "n-3", userId: "usr-ayesha", at: "2026-07-22T08:20:00Z", severity: "critical", title: "Action needed: affidavit unclear", body: "The warish (inheritance) affidavit for dag RS-88 needs a clearer re-scan to continue OCR.", content: { code: "document-unclear", dagNo: "RS-88" }, read: false, href: "/documents" },
   { id: "n-4", userId: "usr-ayesha", at: "2026-07-20T16:10:00Z", severity: "info", title: "Field survey scheduled", body: "A boundary survey for dag CS-142/3 has been scheduled.", content: { code: "survey-scheduled", dagNo: "CS-142/3" }, read: true, href: "/disputes/ds-417" },
   { id: "n-5", userId: "usr-ayesha", at: "2026-07-14T10:05:00Z", severity: "info", title: "Namjari in verification", body: "Inheritance mutation MUT-2026-01192 for dag RS-88 is being verified.", content: { code: "mutation-verification", mutationNumber: "MUT-2026-01192", dagNo: "RS-88" }, read: true, href: "/inheritance" },
   { id: "n-6", userId: "usr-ayesha", at: "2026-07-10T08:05:00Z", severity: "success", title: "Welcome to PlotGuard", body: "Your account is active. You can now search records and track disputes.", content: { code: "welcome" }, read: true },
   { id: "n-7", userId: "usr-officer", at: "2026-07-21T09:02:00Z", severity: "warning", title: "New dispute assigned", body: "DSP-2026-00417 requires review.", content: { code: "dispute-assigned", caseNumber: "DSP-2026-00417" }, read: false, href: "/disputes" },
+];
+
+// ---------------------------------------------------------------------------
+// Assistant (citizen help chatbot) — one running conversation per user,
+// simulated with keyword matching in the handler since there is no real
+// model to call in mock mode. See apps/api/src/assistant for the real one.
+// ---------------------------------------------------------------------------
+export interface AssistantMessageMock {
+  id: string;
+  userId: string;
+  role: "user" | "model";
+  content: string;
+  createdAt: string;
+}
+
+export const assistantMessages: AssistantMessageMock[] = [];
+
+// ---------------------------------------------------------------------------
+// Land marketplace — browse, list, express interest. See lib/mocks/handlers.ts
+// for how a listing hands off into the Mutation ("sale") flow once accepted.
+// ---------------------------------------------------------------------------
+export interface LandListingMock {
+  id: string;
+  parcelId: string;
+  sellerId: string;
+  askingPriceBdt: number;
+  description: string;
+  status: "active" | "under-transfer" | "withdrawn";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LandListingInquiryMock {
+  id: string;
+  listingId: string;
+  buyerId: string;
+  message?: string;
+  status: "open" | "accepted" | "declined" | "withdrawn";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const landListings: LandListingMock[] = [
+  {
+    id: "ll-1",
+    parcelId: "p-092",
+    sellerId: "usr-ayesha",
+    askingPriceBdt: 1_500_000,
+    description: "Roadside residential plot in Rajamehar, close to the bazar and paved road access.",
+    status: "active",
+    createdAt: "2026-09-10T09:00:00Z",
+    updatedAt: "2026-09-10T09:00:00Z",
+  },
+];
+
+export const landListingInquiries: LandListingInquiryMock[] = [
+  {
+    id: "lli-1",
+    listingId: "ll-1",
+    buyerId: "usr-karim",
+    message: "Interested — is the boundary survey up to date?",
+    status: "open",
+    createdAt: "2026-09-12T10:00:00Z",
+    updatedAt: "2026-09-12T10:00:00Z",
+  },
 ];
 
 // ---------------------------------------------------------------------------

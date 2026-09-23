@@ -1,36 +1,41 @@
 /**
  * Which status a dispute may move to next, and through which channel.
  *
- * Status on a dispute is not a free-text field, and two of its values are
- * not this endpoint's to write. `hearing-scheduled` is stamped by convening
- * a hearing — which also assigns the mediator and creates the hearing row —
- * and `resolved` is stamped by a mediator's ruling, which also records the
- * resolution text. A plain status write that reached either one would leave
- * a case claiming a hearing that does not exist, or a resolution with no
- * ruling behind it. So the gate names the right channel instead of allowing
- * the shortcut.
+ * The new pipeline is strictly linear — no skipping stages:
+ *   submitted → under-land-office-review → field-verified
+ *   → forwarded-to-settlement → hearing-scheduled → decided
  *
- * Pure like every rule here: the mediator's screen offers exactly the moves
- * the endpoint will accept, because both ask this function.
+ * Two statuses are special-channel only:
+ * - `hearing-scheduled` is stamped by POST /hearings (also assigns the
+ *   mediator and creates the hearing row).
+ * - `decided` is stamped by PATCH /hearings/:id/ruling (also records the
+ *   resolution text and decision notes).
+ *
+ * Escape hatches `rejected` and `withdrawn` are available from every
+ * non-terminal status.
+ *
+ * Pure like every rule here: the Land Office and Settlement Office screens
+ * offer exactly the moves the endpoint will accept, because both ask this
+ * function.
  */
 import type { DisputeStatus } from "./types";
 
 /** A dispute in one of these is finished; nothing moves it again. */
-export const DISPUTE_CLOSED_STATUSES: DisputeStatus[] = ["resolved", "rejected", "withdrawn"];
+export const DISPUTE_CLOSED_STATUSES: DisputeStatus[] = ["decided", "rejected", "withdrawn"];
 
 /**
- * What a plain status write may do. `hearing-scheduled` and `resolved` are
+ * What a plain status write may do. `hearing-scheduled` and `decided` are
  * deliberately absent from every list — see `schedule-via-hearing` and
- * `resolve-via-ruling`. A listed case may fall back to `in-mediation`
- * because a hearing can be adjourned without the case itself closing.
+ * `decide-via-ruling`. The pipeline is strictly ordered; Land Office
+ * cannot forward to Settlement directly without field verification first.
  */
 const ALLOWED: Record<DisputeStatus, DisputeStatus[]> = {
-  submitted: ["under-review", "rejected", "withdrawn"],
-  "under-review": ["field-visit-scheduled", "in-mediation", "rejected", "withdrawn"],
-  "field-visit-scheduled": ["under-review", "in-mediation", "rejected", "withdrawn"],
-  "in-mediation": ["under-review", "rejected", "withdrawn"],
-  "hearing-scheduled": ["in-mediation", "rejected", "withdrawn"],
-  resolved: [],
+  submitted: ["under-land-office-review", "rejected", "withdrawn"],
+  "under-land-office-review": ["field-verified", "rejected", "withdrawn"],
+  "field-verified": ["forwarded-to-settlement", "rejected", "withdrawn"],
+  "forwarded-to-settlement": ["rejected", "withdrawn"],
+  "hearing-scheduled": ["rejected", "withdrawn"],
+  decided: [],
   rejected: [],
   withdrawn: [],
 };
@@ -39,7 +44,7 @@ export type DisputeTransitionBlocker =
   | { code: "already-closed"; status: DisputeStatus }
   | { code: "same-status"; status: DisputeStatus }
   | { code: "schedule-via-hearing" }
-  | { code: "resolve-via-ruling" }
+  | { code: "decide-via-ruling" }
   | { code: "illegal-transition"; from: DisputeStatus; to: DisputeStatus };
 
 export interface DisputeTransitionReview {
@@ -64,7 +69,7 @@ export function disputeTransition(
   const blockers: DisputeTransitionBlocker[] = [];
   if (to === from) blockers.push({ code: "same-status", status: from });
   else if (to === "hearing-scheduled") blockers.push({ code: "schedule-via-hearing" });
-  else if (to === "resolved") blockers.push({ code: "resolve-via-ruling" });
+  else if (to === "decided") blockers.push({ code: "decide-via-ruling" });
   else if (!ALLOWED[from].includes(to)) blockers.push({ code: "illegal-transition", from, to });
 
   return { canChange: blockers.length === 0, blockers };

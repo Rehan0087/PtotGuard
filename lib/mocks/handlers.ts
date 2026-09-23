@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MSW request handlers — a mock of the frozen PlotGuard Core API. Response shapes
  * match the planned NestJS backend exactly, so swapping MSW for the live API is a
  * config change (see lib/api-client.ts), not a rewrite. Paths after the /api base
@@ -19,6 +19,7 @@ import type {
   Policy,
   RestrictionType,
   Role,
+  ServiceApplication,
   User,
 } from "@/lib/types";
 import { ROLES } from "@/lib/types";
@@ -59,6 +60,13 @@ import {
   type LandTaxRates,
   type RulingOutcome,
   type GpsPointInput,
+  type AcquisitionDetails,
+  acquisitionTransition,
+  validIncreasedAward,
+  canListParcel,
+  listingTransition,
+  canDecideInquiry,
+  canWithdrawInquiry,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
@@ -103,6 +111,62 @@ function currentUser(request: Request): User {
   return db.users.find((u) => u.id === id)!;
 }
 
+function completeMockAcquisition(
+  application: ServiceApplication,
+  details: AcquisitionDetails,
+  actorId: string,
+  title: string,
+) {
+  const parcel = db.parcels.find((candidate) => candidate.id === application.parcelId);
+  if (!parcel) throw new Error("Acquisition parcel is missing from the mock store");
+  const now = new Date().toISOString();
+  if (!db.users.some((user) => user.id === "usr-state")) {
+    db.users.push({
+      id: "usr-state",
+      name: "Government of Bangladesh",
+      email: "state.owner@plotguard.gov.bd",
+      role: "land-office",
+      jurisdictionId: parcel.jurisdictionId,
+      status: "suspended",
+      title: "State-owned property account",
+      createdAt: now,
+    });
+  }
+  for (const record of db.ownershipRecords) {
+    if (record.parcelId === parcel.id && !record.toDate) record.toDate = now;
+  }
+  db.ownershipRecords.unshift({
+    id: `own-${Date.now()}`,
+    parcelId: parcel.id,
+    ownerId: "usr-state",
+    ownerName: "Government of Bangladesh",
+    acquisitionType: "state-acquisition",
+    fromDate: now,
+    toDate: null,
+  });
+  parcel.ownerId = "usr-state";
+  parcel.ownerName = "Government of Bangladesh";
+  parcel.ownershipType = "government";
+  parcel.lastMutationAt = now;
+  for (const restriction of db.parcelRestrictions) {
+    if (restriction.parcelId === parcel.id && restriction.type === "acquisition" && restriction.referenceNo === application.applicationNo && !restriction.toDate) restriction.toDate = now;
+  }
+  application.status = "approved";
+  application.details = { ...details, stage: "completed", completedAt: now } satisfies AcquisitionDetails;
+  application.decidedAt = now;
+  application.updatedAt = now;
+  db.serviceApplicationEvents.push({
+    id: `sae-${Date.now()}`, applicationId: application.id, at: now,
+    type: "accepted", title, actorId,
+  });
+  db.notifications.unshift({
+    id: `ntf-${Date.now()}`, userId: application.applicantId, at: now, severity: "success",
+    title: "Land acquisition completed",
+    body: `${application.applicationNo} is complete. Ownership is now recorded as state-owned property.`,
+    read: false, href: "/acquisition",
+  });
+}
+
 function authenticatedUser(
   request: Request,
   expectedType: "access" | "refresh" = "access",
@@ -132,11 +196,11 @@ const HEARING_STATUS_VALUES: string[] = [
 
 const DISPUTE_STATUS_VALUES: string[] = [
   "submitted",
-  "under-review",
-  "field-visit-scheduled",
-  "in-mediation",
+  "under-land-office-review",
+  "field-verified",
+  "forwarded-to-settlement",
   "hearing-scheduled",
-  "resolved",
+  "decided",
   "rejected",
   "withdrawn",
 ];
@@ -380,6 +444,83 @@ function conflict(message: string, reason?: unknown) {
   return HttpResponse.json({ error: "conflict", message, reason }, { status: 409 });
 }
 
+// --- Land marketplace helpers ------------------------------------------
+
+function personSummary(userId: string) {
+  const user = db.users.find((u) => u.id === userId);
+  return { id: userId, name: user?.name ?? "Unknown" };
+}
+
+function parcelSummary(parcelId: string) {
+  const parcel = db.parcels.find((p) => p.id === parcelId);
+  return parcel
+    ? {
+        id: parcel.id,
+        ulpin: parcel.ulpin ?? null,
+        dagNo: parcel.dagNo,
+        khatianNo: parcel.khatianNo,
+        title: parcel.title,
+        landUse: parcel.landUse,
+        area: parcel.area,
+        jurisdictionId: parcel.jurisdictionId,
+      }
+    : null;
+}
+
+function withListingJoins(listing: db.LandListingMock) {
+  return { ...listing, parcel: parcelSummary(listing.parcelId), seller: personSummary(listing.sellerId) };
+}
+
+function withInquiryJoins(inquiry: db.LandListingInquiryMock) {
+  return { ...inquiry, buyer: personSummary(inquiry.buyerId) };
+}
+
+function inquiriesFor(listingId: string) {
+  return db.landListingInquiries.filter((i) => i.listingId === listingId);
+}
+
+function transitionListingMock(id: string, request: Request, to: db.LandListingMock["status"]) {
+  const me = currentUser(request);
+  const listing = db.landListings.find((l) => l.id === id);
+  if (!listing) return notFound("Listing not found");
+  if (listing.sellerId !== me.id) return notFound("Listing not found");
+  const review = listingTransition(listing.status, to);
+  if (!review.canChange) return unprocessable({ base: { code: "illegal-transition", blockers: review.blockers } });
+  listing.status = to;
+  listing.updatedAt = new Date().toISOString();
+  return HttpResponse.json(withListingJoins(listing));
+}
+
+function decideInquiryMock(
+  id: string,
+  inquiryId: string,
+  request: Request,
+  to: "accepted" | "declined",
+) {
+  const me = currentUser(request);
+  const listing = db.landListings.find((l) => l.id === id);
+  const inquiry = db.landListingInquiries.find((i) => i.id === inquiryId);
+  if (!listing || !inquiry || inquiry.listingId !== id) return notFound("Inquiry not found");
+  if (listing.sellerId !== me.id) return notFound("Inquiry not found");
+  const review = canDecideInquiry(listing.status, inquiry.status);
+  if (!review.canDecide) return unprocessable({ base: { code: "cannot-decide", ...review.blocker } });
+
+  const now = new Date().toISOString();
+  inquiry.status = to;
+  inquiry.updatedAt = now;
+  if (to === "accepted") {
+    for (const other of inquiriesFor(id)) {
+      if (other.id !== inquiryId && other.status === "open") {
+        other.status = "declined";
+        other.updatedAt = now;
+      }
+    }
+    listing.status = "under-transfer";
+    listing.updatedAt = now;
+  }
+  return HttpResponse.json({ inquiry: withInquiryJoins(inquiry), buyerId: inquiry.buyerId });
+}
+
 /**
  * Flat `field.from` / `field.to` pairs for the fields that actually changed.
  *
@@ -408,7 +549,7 @@ function changedFields<T extends Record<string, unknown>>(
  * something that was withdrawn or rejected.
  */
 function isClosed(status: DisputeStatus) {
-  return status === "resolved" || status === "rejected" || status === "withdrawn";
+  return status === "decided" || status === "rejected" || status === "withdrawn";
 }
 
 /**
@@ -1462,7 +1603,7 @@ export const handlers = [
       parcelId: mutation.parcelId,
       parcelDagNo: mutation.parcelDagNo,
       type: "ownership" as const,
-      status: "in-mediation" as const,
+      status: "forwarded-to-settlement" as const,
       priority: "high" as const,
       filedById: actor.id,
       filedByName: actor.name,
@@ -1482,10 +1623,10 @@ export const handlers = [
       disputeId: dispute.id,
       at: now,
       type: "assigned",
-      title: "Referred to mediation",
+      title: "Forwarded to Settlement Office",
       content: mediator
         ? { code: "assigned", to: mediator.name }
-        : { code: "status-change", status: "in-mediation" },
+        : { code: "status-change", status: "forwarded-to-settlement" },
       description: body.description.trim(),
       actorId: actor.id,
       actorName: actor.name,
@@ -1940,7 +2081,40 @@ export const handlers = [
     return HttpResponse.json(notification, { status: 201 });
   }),
 
-  // Land administration (certified copies + record corrections) --------------
+  http.patch(`${API}/lease-settlement/:id/pay-lease`, async ({ request, params }) => {
+    await latency();
+    const { id } = params;
+    const body = (await request.json()) as { transactionId: string };
+    const application = db.serviceApplications.find((a) => a.id === id);
+    if (!application) return new HttpResponse(null, { status: 404 });
+
+    const now = new Date();
+    application.details.leaseFeePaidAt = now.toISOString();
+    
+    // Set expiry to 1 year from now
+    now.setFullYear(now.getFullYear() + 1);
+    application.details.leaseExpiresAt = now.toISOString();
+    application.updatedAt = new Date().toISOString();
+
+    return HttpResponse.json(application);
+  }),
+
+  http.patch(`${API}/lease-settlement/:id/renew`, async ({ params }) => {
+    await latency();
+    const { id } = params;
+    const application = db.serviceApplications.find((a) => a.id === id);
+    if (!application) return new HttpResponse(null, { status: 404 });
+
+    // Set expiry to 1 year from current expiry
+    const expiry = new Date((application.details.leaseExpiresAt as string) || Date.now());
+    expiry.setFullYear(expiry.getFullYear() + 1);
+    application.details.leaseExpiresAt = expiry.toISOString();
+    application.updatedAt = new Date().toISOString();
+
+    return HttpResponse.json(application);
+  }),
+
+  // Land admin (certified copies / correction requests) -----------------------/ Land administration (certified copies + record corrections) --------------
   // What's owed is a flat fee by request type, not a computed assessment —
   // no rule to mirror here, just Policy lookup. Mirrors land-admin.controller.ts.
   http.post(`${API}/land-admin/apply`, async ({ request }) => {
@@ -2212,7 +2386,15 @@ export const handlers = [
       termYears: number;
       purpose: string;
       documentIds?: string[];
+      khasPlotId?: string;
     };
+
+    if (body.khasPlotId) {
+      const plot = db.khasLandPlots.find((p) => p.id === body.khasPlotId);
+      if (plot) {
+        plot.status = "reserved";
+      }
+    }
 
     const now = new Date().toISOString();
     const count = db.serviceApplications.filter((a) => a.serviceType === "lease-settlement").length;
@@ -2222,18 +2404,20 @@ export const handlers = [
       serviceType: "lease-settlement" as const,
       status: "submitted" as const,
       applicantId: me.id,
+      feeAmount: db.policies.leaseSettlementApplicationFeeBdt ?? 20,
       details: {
         landUse: body.landUse,
         locationDescription: body.locationDescription,
         areaDecimals: body.areaDecimals,
         termYears: body.termYears,
         purpose: body.purpose,
+        leaseFeeAmount:
+          body.landUse === "agricultural"
+            ? db.policies.leaseSettlementAgriculturalFeeBdt
+            : db.policies.leaseSettlementNonAgriculturalFeeBdt,
       },
+      khasPlotId: body.khasPlotId,
       documentIds: body.documentIds ?? [],
-      feeAmount:
-        body.landUse === "agricultural"
-          ? db.policies.leaseSettlementAgriculturalFeeBdt
-          : db.policies.leaseSettlementNonAgriculturalFeeBdt,
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -2268,10 +2452,8 @@ export const handlers = [
   }),
 
   // Acquisition & requisition ---------------------------------------------------
-  // The one service the citizen doesn't start: a land office officer issues
-  // a notice against a parcel with a compensation award; the owner may
-  // object. No fee, so no .../pay step — the notice is created already
-  // under-review. Mirrors acquisition.controller.ts.
+  // Land office assignment -> field valuation -> citizen decision/appeal ->
+  // land-office appeal decision. Mirrors acquisition.controller.ts.
   http.post(`${API}/acquisition/notice`, async ({ request }) => {
     await latency();
     const denied = requireRole(request, "land-office");
@@ -2280,12 +2462,16 @@ export const handlers = [
     const body = (await request.json()) as {
       parcelId: string;
       purpose: string;
-      awardAmount: number;
+      assignedFieldAgentId: string;
     };
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
     if (!parcel) return notFound("Parcel not found");
+    const agent = db.users.find(
+      (user) => user.id === body.assignedFieldAgentId && user.role === "field-agent" && user.status === "active",
+    );
+    if (!agent) return unprocessable({ assignedFieldAgentId: { code: "invalid-field-agent" } });
 
-    const CLOSED = new Set(["approved", "rejected"]);
+    const CLOSED = new Set(["approved", "rejected", "withdrawn"]);
     const hasOpenNotice = db.serviceApplications.some(
       (a) => a.parcelId === parcel.id && a.serviceType === "acquisition" && !CLOSED.has(a.status),
     );
@@ -2299,11 +2485,16 @@ export const handlers = [
       id: `sa-${Date.now()}`,
       applicationNo: `ACQ-2026-${String(1000 + count).padStart(6, "0")}`,
       serviceType: "acquisition" as const,
-      status: "under-review" as const,
+      status: "field-investigation" as const,
       parcelId: parcel.id,
       applicantId: parcel.ownerId,
-      assignedOfficerId: me.id,
-      details: { purpose: body.purpose, awardAmount: body.awardAmount },
+      assignedOfficerId: agent.id,
+      details: {
+        stage: "field-review",
+        purpose: body.purpose,
+        createdByOfficerId: me.id,
+        assignedFieldAgentId: agent.id,
+      } satisfies AcquisitionDetails,
       documentIds: [],
       submittedAt: now,
       createdAt: now,
@@ -2321,100 +2512,205 @@ export const handlers = [
         applicationNo: application.applicationNo,
         serviceType: "acquisition",
         parcelDagNo: parcel.dagNo,
-        awardAmount: body.awardAmount,
+        assignedFieldAgentId: agent.id,
       },
+    });
+    db.parcelRestrictions.push({
+      id: `res-${Date.now()}`,
+      parcelId: parcel.id,
+      type: "acquisition",
+      authority: "Land Office",
+      referenceNo: application.applicationNo,
+      note: body.purpose,
+      fromDate: now,
+      toDate: null,
     });
     db.serviceApplicationEvents.push({
       id: `sae-${Date.now()}`,
       applicationId: application.id,
       at: now,
-      type: "submitted",
-      title: "Acquisition notice issued",
+      type: "assigned",
+      title: "Acquisition review assigned",
+      description: `Assigned to ${agent.name}.`,
       actorId: me.id,
+    });
+    db.notifications.unshift({
+      id: `ntf-${Date.now()}`,
+      userId: agent.id,
+      at: now,
+      severity: "info",
+      title: "Acquisition review assigned",
+      body: `${application.applicationNo} requires your field review and compensation valuation.`,
+      read: false,
+      href: "/acquisition",
     });
 
     return HttpResponse.json(application, { status: 201 });
   }),
 
-  http.patch(`${API}/acquisition/:id/object`, async ({ params, request }) => {
+  http.patch(`${API}/acquisition/:id/field-review`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "field-agent");
+    if (denied) return denied;
     const me = currentUser(request);
     const application = db.serviceApplications.find((a) => a.id === params.id);
-    // Same answer for missing or not yours as land-admin's own apply handler.
-    if (!application || application.applicantId !== me.id) {
-      return notFound("Service application not found");
+    if (!application || application.serviceType !== "acquisition" || application.assignedOfficerId !== me.id) {
+      return notFound("Acquisition request not found");
     }
-    if (application.status === "approved" || application.status === "rejected") {
-      return conflict("This notice has already been decided.");
-    }
-
-    const { objectionText } = (await request.json()) as { objectionText: string };
+    const details = application.details as AcquisitionDetails;
+    const review = acquisitionTransition(details, application.status, "field-review");
+    if (!review.allowed) return unprocessable({ status: review.blockers[0] });
+    const body = (await request.json()) as { awardAmount: number; reviewNotes: string };
+    if (!(body.awardAmount > 0) || !body.reviewNotes?.trim()) return badRequest("Review amount and notes are required");
     const now = new Date().toISOString();
-    application.details = { ...application.details, objectionText };
+    application.status = "under-review";
+    application.details = {
+      ...details,
+      stage: "citizen-decision",
+      awardAmount: body.awardAmount,
+      fieldReview: { reviewedAt: now, reviewedById: me.id, notes: body.reviewNotes.trim() },
+    } satisfies AcquisitionDetails;
     application.updatedAt = now;
-
     await appendAudit({
-      entityType: "service-application",
-      entityId: application.id,
-      action: "status-change",
-      actorId: me.id,
-      actorName: me.name,
-      payload: { applicationNo: application.applicationNo },
+      entityType: "service-application", entityId: application.id, action: "field-review",
+      actorId: me.id, actorName: me.name,
+      payload: { applicationNo: application.applicationNo, awardAmount: body.awardAmount },
     });
     db.serviceApplicationEvents.push({
-      id: `sae-${Date.now()}`,
-      applicationId: application.id,
-      at: now,
-      type: "status-change",
-      title: "Objection filed",
-      actorId: me.id,
+      id: `sae-${Date.now()}`, applicationId: application.id, at: now,
+      type: "field-reviewed", title: "Field review and valuation completed", actorId: me.id,
+    });
+    db.notifications.unshift({
+      id: `ntf-${Date.now()}`, userId: application.applicantId, at: now, severity: "warning",
+      title: "Acquisition compensation offered",
+      body: `${application.applicationNo} offers BDT ${body.awardAmount}. Accept it or file an appeal.`,
+      read: false, href: "/acquisition",
     });
     return HttpResponse.json(application);
   }),
 
-  // Land information bank -------------------------------------------------------
-  // Read-only: parcels with an approved acquisition notice. No khas-land
-  // inventory exists in this system, so this shows only what actually
-  // happened — nothing applied for, paid, or decided. Mirrors
-  // land-info-bank.controller.ts.
-  http.get(`${API}/land-info-bank`, async ({ request }) => {
+  http.patch(`${API}/acquisition/:id/accept`, async ({ params, request }) => {
     await latency();
-    const url = new URL(request.url);
-    const q = url.searchParams.get("q")?.trim().toLowerCase();
-
-    const entries = db.serviceApplications
-      .filter((a) => a.serviceType === "acquisition" && a.status === "approved")
-      .sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))
-      .map((application) => ({
-        application,
-        parcel: (() => {
-          const parcel = db.parcels.find((p) => p.id === application.parcelId);
-          if (!parcel) return undefined;
-          return {
-            ...parcel,
-            registryStatus: recordRegistryStatus(
-              db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
-              db.disputes.filter((dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status)).length,
-              db.documents.some((document) => document.parcelId === parcel.id && document.verificationStatus === "flagged"),
-            ),
-          };
-        })(),
-      }))
-      .filter((e): e is { application: (typeof db.serviceApplications)[number]; parcel: NonNullable<typeof e.parcel> } =>
-        Boolean(e.parcel),
-      )
-      .filter((e) => {
-        if (!q) return true;
-        const purpose = String((e.application.details as { purpose?: string })?.purpose ?? "");
-        return (
-          e.parcel.dagNo.toLowerCase().includes(q) ||
-          e.parcel.title.toLowerCase().includes(q) ||
-          purpose.toLowerCase().includes(q)
-        );
-      });
-
-    return HttpResponse.json(paginate(entries, url));
+    const me = currentUser(request);
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application || application.serviceType !== "acquisition" || application.applicantId !== me.id) {
+      return notFound("Acquisition request not found");
+    }
+    const details = application.details as AcquisitionDetails;
+    const review = acquisitionTransition(details, application.status, "citizen-accept");
+    if (!review.allowed) return unprocessable({ status: review.blockers[0] });
+    completeMockAcquisition(application, details, me.id, "Citizen accepted the compensation offer");
+    await appendAudit({
+      entityType: "service-application", entityId: application.id, action: "accept",
+      actorId: me.id, actorName: me.name,
+      payload: { applicationNo: application.applicationNo, awardAmount: details.awardAmount },
+    });
+    return HttpResponse.json(application);
   }),
+
+  http.patch(`${API}/acquisition/:id/appeal`, async ({ params, request }) => {
+    await latency();
+    const me = currentUser(request);
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application || application.serviceType !== "acquisition" || application.applicantId !== me.id) {
+      return notFound("Acquisition request not found");
+    }
+    const details = application.details as AcquisitionDetails;
+    const review = acquisitionTransition(details, application.status, "citizen-appeal");
+    if (!review.allowed) return unprocessable({ status: review.blockers[0] });
+    const body = (await request.json()) as {
+      outcome: "withdraw" | "increase-compensation";
+      reason: string;
+      requestedAmount?: number;
+    };
+    if (!body.reason?.trim()) return badRequest("Appeal reason is required");
+    if (body.outcome === "increase-compensation" && !validIncreasedAward(details.awardAmount, body.requestedAmount)) {
+      return unprocessable({ requestedAmount: { code: "appeal-amount-not-higher" } });
+    }
+    const now = new Date().toISOString();
+    application.status = "hearing-scheduled";
+    application.details = {
+      ...details,
+      stage: "appeal-review",
+      appeal: { outcome: body.outcome, reason: body.reason.trim(), requestedAmount: body.requestedAmount, filedAt: now },
+    } satisfies AcquisitionDetails;
+    application.updatedAt = now;
+    await appendAudit({
+      entityType: "service-application", entityId: application.id, action: "appeal",
+      actorId: me.id, actorName: me.name,
+      payload: { applicationNo: application.applicationNo, outcome: body.outcome, requestedAmount: body.requestedAmount },
+    });
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`, applicationId: application.id, at: now, type: "appealed",
+      title: "Citizen appealed the acquisition", description: body.reason.trim(), actorId: me.id,
+    });
+    db.notifications.unshift({
+      id: `ntf-${Date.now()}`, userId: details.createdByOfficerId, at: now, severity: "warning",
+      title: "Acquisition appeal filed", body: `${application.applicationNo} requires a land-office decision.`,
+      read: false, href: "/acquisition",
+    });
+    return HttpResponse.json(application);
+  }),
+
+  http.patch(`${API}/acquisition/:id/appeal-decision`, async ({ params, request }) => {
+    await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
+    const me = currentUser(request);
+    const application = db.serviceApplications.find((a) => a.id === params.id);
+    if (!application || application.serviceType !== "acquisition") return notFound("Acquisition request not found");
+    const details = application.details as AcquisitionDetails;
+    const body = (await request.json()) as {
+      decision: "withdraw" | "increase-compensation" | "proceed";
+      awardAmount?: number;
+      note?: string;
+    };
+    const review = acquisitionTransition(details, application.status, `appeal-${body.decision}`);
+    if (!review.allowed) return unprocessable({ status: review.blockers[0] });
+    if (body.decision === "increase-compensation" && !validIncreasedAward(details.awardAmount, body.awardAmount)) {
+      return unprocessable({ awardAmount: { code: "decision-amount-not-higher" } });
+    }
+    const now = new Date().toISOString();
+    const appealDecision = { decision: body.decision, note: body.note, decidedAt: now, decidedById: me.id };
+    if (body.decision === "proceed") {
+      completeMockAcquisition(application, { ...details, appealDecision }, me.id, "Land office confirmed acquisition after appeal");
+    } else if (body.decision === "withdraw") {
+      application.status = "rejected";
+      application.details = { ...details, stage: "withdrawn", appealDecision } satisfies AcquisitionDetails;
+      application.decidedAt = now;
+      application.updatedAt = now;
+      for (const restriction of db.parcelRestrictions) {
+        if (restriction.parcelId === application.parcelId && restriction.type === "acquisition" && restriction.referenceNo === application.applicationNo && !restriction.toDate) restriction.toDate = now;
+      }
+      db.notifications.unshift({
+        id: `ntf-${Date.now()}`, userId: application.applicantId, at: now, severity: "success",
+        title: "Acquisition withdrawn", body: `${application.applicationNo} will not acquire your land.`, read: false, href: "/acquisition",
+      });
+    } else {
+      application.status = "under-review";
+      application.details = {
+        ...details, stage: "citizen-decision", awardAmount: body.awardAmount,
+        appeal: undefined, appealDecision,
+      } satisfies AcquisitionDetails;
+      application.updatedAt = now;
+      db.notifications.unshift({
+        id: `ntf-${Date.now()}`, userId: application.applicantId, at: now, severity: "success",
+        title: "Acquisition compensation increased", body: `${application.applicationNo} now offers BDT ${body.awardAmount}.`, read: false, href: "/acquisition",
+      });
+    }
+    db.serviceApplicationEvents.push({
+      id: `sae-${Date.now()}`, applicationId: application.id, at: now, type: "decided",
+      title: body.decision === "withdraw" ? "Land office withdrew the acquisition" : body.decision === "proceed" ? "Land office confirmed acquisition after appeal" : "Compensation offer increased",
+      description: body.note, actorId: me.id,
+    });
+    await appendAudit({
+      entityType: "service-application", entityId: application.id, action: `appeal-${body.decision}`,
+      actorId: me.id, actorName: me.name,
+      payload: { applicationNo: application.applicationNo, awardAmount: body.awardAmount },
+    });
+    return HttpResponse.json(application);
+  }),
+
 
   // Appointment booking -----------------------------------------------------
   // "Office" is a real upazila-level jurisdiction, the same one every other
@@ -2690,6 +2986,9 @@ export const handlers = [
     if (!application) return notFound("Service application not found");
     if (application.serviceType === "revenue-case" && application.assignedMediatorId !== me.id) return notFound("Service application not found");
     if (application.serviceType !== "revenue-case" && me.role !== "land-office") return notFound("Service application not found");
+    if (application.serviceType === "acquisition") {
+      return conflict("Use the acquisition workflow to decide this request.");
+    }
     if (application.status === "draft") {
       return unprocessable({ status: { code: "not-submitted" } });
     }
@@ -2767,7 +3066,53 @@ export const handlers = [
     return HttpResponse.json(dispute);
   }),
 
+  http.post(`${API}/disputes/:id/assign-agent`, async ({ params, request }) => {
+    await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
+    const dispute = db.disputes.find((d) => d.id === params.id);
+    if (!dispute) return notFound("Dispute not found");
+    if (dispute.status !== "under-land-office-review") {
+      return unprocessable({ status: { code: "wrong-status", status: dispute.status } });
+    }
+    const { agentId } = (await request.json()) as { agentId: string };
+    const agent = db.users.find(
+      (u) => u.id === agentId && u.role === "field-agent" && u.status === "active",
+    );
+    if (!agent) return notFound("Field agent not found");
+
+    const me = currentUser(request);
+    const now = new Date().toISOString();
+    dispute.assignedAgentId = agent.id;
+    dispute.updatedAt = now;
+
+    db.disputeEvents.push({
+      id: `de-${Date.now()}`,
+      disputeId: dispute.id,
+      at: now,
+      type: "assigned",
+      title: `Field agent assigned: ${agent.name}`,
+      content: { code: "assigned", to: agent.name },
+      actorId: me.id,
+      actorName: me.name,
+    });
+
+    db.notifications.unshift({
+      id: `n-${Date.now()}-${agent.id}`,
+      userId: agent.id,
+      at: now,
+      severity: "info",
+      title: "Field visit assigned",
+      body: `You have been assigned to verify dispute ${dispute.caseNumber}.`,
+      read: false,
+      href: `/disputes/${dispute.id}`,
+    });
+
+    return HttpResponse.json(dispute);
+  }),
+
   http.get(`${API}/disputes/:id`, async ({ params }) => {
+
     await latency();
     const dispute = db.disputes.find((d) => d.id === params.id);
     if (!dispute) return notFound("Dispute not found");
@@ -2997,6 +3342,25 @@ export const handlers = [
     });
 
     return HttpResponse.json(dispute, { status: 201 });
+  }),
+
+  http.get(`${API}/khas-land-plots`, async ({ request }) => {
+    await latency();
+    const url = new URL(request.url);
+    const landUse = url.searchParams.get("landUse");
+    const status = url.searchParams.get("status") || "available";
+
+    let plots = db.khasLandPlots.filter(p => p.status === status);
+    if (landUse) {
+      plots = plots.filter(p => p.landUse === landUse);
+    }
+
+    return HttpResponse.json<Paginated<any>>({
+      items: plots,
+      total: plots.length,
+      page: 1,
+      pageSize: Math.max(1, plots.length),
+    });
   }),
 
   // Field reports ----------------------------------------------------------
@@ -3280,8 +3644,8 @@ export const handlers = [
         const dispute = report.disputeId
       ? db.disputes.find((candidate) => candidate.id === report.disputeId)
       : undefined;
-        if (dispute && dispute.status === "field-visit-scheduled") {
-      dispute.status = "under-review";
+        if (dispute && dispute.status === "under-land-office-review") {
+      dispute.status = "field-verified";
       dispute.updatedAt = now;
       db.disputeEvents.push({
         id: `de-${Date.now()}`,
@@ -3289,7 +3653,7 @@ export const handlers = [
         at: now,
         type: "field-visit",
         title: "Field survey filed",
-        content: { code: "field-visit-completed" },
+        content: { code: "field-verified" },
         description: notes,
         actorId: me.id,
         actorName: me.name,
@@ -3568,7 +3932,6 @@ export const handlers = [
     // up on its tracking timeline, same as the real workflow.
     if (dispute) {
       dispute.assignedAgentId = agent.id;
-      dispute.status = "field-visit-scheduled";
       dispute.updatedAt = now;
       db.disputeEvents.push({
         id: `de-${Date.now()}`,
@@ -3576,7 +3939,7 @@ export const handlers = [
         at: now,
         type: "field-visit",
         title: "Field visit scheduled",
-        content: { code: "field-visit-scheduled" },
+        content: { code: "assigned", to: agent.name },
         description: `${agent.name} is booked for a ${purpose.replace(/-/g, " ")} on ${report.parcelDagNo}.`,
         actorId: me.id,
         actorName: me.name,
@@ -3644,7 +4007,7 @@ export const handlers = [
     // hearing hanging off it.
     const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
     if (dispute && !isClosed(dispute.status)) {
-      dispute.status = outcome === "resolved" ? "resolved" : "rejected";
+      dispute.status = outcome === "resolved" ? "decided" : "rejected";
       // The ruling text is the resolution — record content, stored as typed.
       dispute.resolution = ruling;
       dispute.updatedAt = now;
@@ -3653,8 +4016,8 @@ export const handlers = [
         disputeId: dispute.id,
         at: now,
         type: "resolved",
-        title: outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
-        content: { code: "ruled" },
+        title: outcome === "resolved" ? "Dispute decided" : "Claim not upheld",
+        content: { code: "decided" },
         description: ruling,
         actorId: actor.id,
         actorName: actor.name,
@@ -3669,10 +4032,10 @@ export const handlers = [
           userId,
           at: now,
           severity: "info",
-          title: outcome === "resolved" ? "Dispute resolved" : "Dispute unresolved",
+          title: outcome === "resolved" ? "Dispute decided" : "Claim not upheld",
           body: outcome === "resolved"
-            ? `Case ${dispute.caseNumber} was resolved. The mutation can return for approval.`
-            : `Case ${dispute.caseNumber} could not be resolved. The mutation must return for rejection.`,
+            ? `Case ${dispute.caseNumber} has been decided by the Settlement Office.`
+            : `Case ${dispute.caseNumber}: the claim was not upheld. Please see the case for details.`,
           content: { code: "dispute-ruled", caseNumber: dispute.caseNumber },
           read: false,
           href: `/disputes/${dispute.id}`,
@@ -3735,7 +4098,7 @@ export const handlers = [
         actorName: me.name,
       } as never);
       if (to === "closed" && !isClosed(dispute.status) && dispute.status === "hearing-scheduled") {
-        dispute.status = "in-mediation";
+        dispute.status = "forwarded-to-settlement";
         dispute.updatedAt = now;
       }
     }
@@ -3876,7 +4239,7 @@ export const handlers = [
     const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
     if (dispute && !isClosed(dispute.status)) {
       const me = currentUser(request);
-      dispute.status = "in-mediation";
+      dispute.status = "forwarded-to-settlement";
       dispute.updatedAt = now;
       db.disputeEvents.push({
         id: `de-${Date.now()}`,
@@ -3930,6 +4293,11 @@ export const handlers = [
     if (!dispute) return notFound("Dispute not found");
     if (isClosed(dispute.status)) {
       return conflict("This case is closed and cannot be listed for hearing.");
+    }
+    // Settlement Office can only convene a hearing once the Land Office has
+    // forwarded the verified case — enforces the strict pipeline order.
+    if (dispute.status !== "forwarded-to-settlement") {
+      return conflict("This case must be forwarded to the Settlement Office before scheduling a hearing.");
     }
     const OPEN_HEARING_STATUSES = ["scheduled", "in-hearing", "deliberation"];
     if (
@@ -4118,6 +4486,226 @@ export const handlers = [
     if (!n) return notFound("Notification not found");
     n.read = true;
     return HttpResponse.json(n);
+  }),
+
+  // Assistant (citizen help chatbot) --------------------------------------
+  // Simulated: keyword matching against the same mock data, not a real
+  // model. Proves the UI contract (shapes), not the model's intelligence —
+  // see apps/api/src/assistant for the real Gemini-backed version.
+  http.get(`${API}/assistant/conversation`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const messages = db.assistantMessages.filter((m) => m.userId === me.id);
+    return HttpResponse.json({ id: `conv-${me.id}`, messages });
+  }),
+
+  http.post(`${API}/assistant/message`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as { message: string; locale: "en" | "bn" };
+
+    const userMessage: db.AssistantMessageMock = {
+      id: crypto.randomUUID(),
+      userId: me.id,
+      role: "user",
+      content: body.message,
+      createdAt: new Date().toISOString(),
+    };
+    db.assistantMessages.push(userMessage);
+
+    const text = body.message.toLowerCase();
+    let reply = "This is a mock reply — ask about your tax, mutations, or disputes to see it look something up.";
+    const suggestedActions: { href: string; label: string }[] = [];
+
+    if (text.includes("tax")) {
+      const applications = db.serviceApplications.filter(
+        (a) => a.applicantId === me.id && a.serviceType === "land-tax",
+      );
+      reply = applications.length
+        ? `You have ${applications.length} land tax application(s). Most recent status: ${applications[0].status}.`
+        : "You have no land tax applications on file.";
+      suggestedActions.push({ href: "/land-tax", label: "Go to Land Tax" });
+    } else if (text.includes("dispute")) {
+      const disputes = db.disputes.filter((d) => d.filedById === me.id);
+      reply = disputes.length
+        ? `You have ${disputes.length} dispute(s) filed. Most recent status: ${disputes[0].status}.`
+        : "You have no disputes on file.";
+      suggestedActions.push({ href: "/disputes/new", label: "File a dispute" });
+    } else if (text.includes("mutation") || text.includes("namjari")) {
+      const mutations = db.mutations.filter(
+        (m) => m.requestedById === me.id || m.fromOwnerId === me.id || m.toOwnerId === me.id,
+      );
+      reply = mutations.length
+        ? `You have ${mutations.length} mutation filing(s). Most recent status: ${mutations[0].status}.`
+        : "You have no mutation filings on file.";
+      suggestedActions.push({ href: "/mutations/new", label: "File a mutation" });
+    }
+
+    const modelMessage: db.AssistantMessageMock = {
+      id: crypto.randomUUID(),
+      userId: me.id,
+      role: "model",
+      content: reply,
+      createdAt: new Date().toISOString(),
+    };
+    db.assistantMessages.push(modelMessage);
+
+    return HttpResponse.json({ message: modelMessage, suggestedActions });
+  }),
+
+  http.post(`${API}/assistant/reset`, async ({ request }) => {
+    const me = currentUser(request);
+    const remaining = db.assistantMessages.filter((m) => m.userId !== me.id);
+    db.assistantMessages.length = 0;
+    db.assistantMessages.push(...remaining);
+    return HttpResponse.json({ ok: true });
+  }),
+
+  // Land marketplace ---------------------------------------------------------
+  // Browse, list, express interest. Accepting an inquiry only moves the
+  // listing to "under-transfer" and hands back the buyer's id/name — see
+  // apps/api/src/land-listings for the real endpoints this mirrors.
+
+  http.get(`${API}/land-listings`, async ({ request }) => {
+    await latency();
+    const url = new URL(request.url);
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const landUse = url.searchParams.get("landUse");
+    const items = db.landListings
+      .filter((l) => l.status === "active")
+      .filter((l) => !q || l.description.toLowerCase().includes(q))
+      .filter((l) => !landUse || db.parcels.find((p) => p.id === l.parcelId)?.landUse === landUse)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(withListingJoins);
+    return HttpResponse.json(paginate(items, url));
+  }),
+
+  http.get(`${API}/land-listings/mine`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const items = db.landListings
+      .filter((l) => l.sellerId === me.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((l) => ({ ...withListingJoins(l), inquiries: inquiriesFor(l.id).map(withInquiryJoins) }));
+    return HttpResponse.json(items);
+  }),
+
+  http.get(`${API}/land-listings/inquiries/mine`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const items = db.landListingInquiries
+      .filter((i) => i.buyerId === me.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((i) => {
+        const listing = db.landListings.find((l) => l.id === i.listingId)!;
+        return { ...withInquiryJoins(i), listing: withListingJoins(listing) };
+      });
+    return HttpResponse.json(items);
+  }),
+
+  http.get(`${API}/land-listings/:id`, async ({ params, request }) => {
+    await latency();
+    const me = currentUser(request);
+    const listing = db.landListings.find((l) => l.id === params.id);
+    if (!listing) return notFound("Listing not found");
+    const isSeller = listing.sellerId === me.id;
+    const inquiries = inquiriesFor(listing.id)
+      .filter((i) => isSeller || i.buyerId === me.id)
+      .map(withInquiryJoins);
+    return HttpResponse.json({ ...withListingJoins(listing), inquiries });
+  }),
+
+  http.post(`${API}/land-listings`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as {
+      parcelId: string;
+      askingPriceBdt: number;
+      description: string;
+    };
+    const parcel = db.parcels.find((p) => p.id === body.parcelId);
+    if (!parcel) return notFound("Parcel not found");
+    if (parcel.ownerId !== me.id) return notFound("Parcel not found");
+
+    const restrictions = db.parcelRestrictions.filter((r) => r.parcelId === parcel.id);
+    const hasOpenListing = db.landListings.some(
+      (l) => l.parcelId === parcel.id && (l.status === "active" || l.status === "under-transfer"),
+    );
+    const review = canListParcel(restrictions, hasOpenListing);
+    if (!review.canList) {
+      return unprocessable({ parcelId: { code: "not-listable", blockers: review.blockers } });
+    }
+
+    const now = new Date().toISOString();
+    const created: db.LandListingMock = {
+      id: crypto.randomUUID(),
+      parcelId: parcel.id,
+      sellerId: me.id,
+      askingPriceBdt: body.askingPriceBdt,
+      description: body.description,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.landListings.push(created);
+    return HttpResponse.json(withListingJoins(created), { status: 201 });
+  }),
+
+  http.patch(`${API}/land-listings/:id/withdraw`, async ({ params, request }) =>
+    transitionListingMock(params.id as string, request, "withdrawn"),
+  ),
+
+  http.patch(`${API}/land-listings/:id/reactivate`, async ({ params, request }) =>
+    transitionListingMock(params.id as string, request, "active"),
+  ),
+
+  http.post(`${API}/land-listings/:id/inquiries`, async ({ params, request }) => {
+    await latency();
+    const me = currentUser(request);
+    const listing = db.landListings.find((l) => l.id === params.id);
+    if (!listing) return notFound("Listing not found");
+    if (listing.sellerId === me.id) return unprocessable({ base: { code: "own-listing" } });
+    if (listing.status !== "active") {
+      return unprocessable({ base: { code: "listing-not-active", status: listing.status } });
+    }
+    const existingOpen = db.landListingInquiries.find(
+      (i) => i.listingId === listing.id && i.buyerId === me.id && i.status === "open",
+    );
+    if (existingOpen) return conflict("You already have an open inquiry on this listing.");
+
+    const body = (await request.json()) as { message?: string };
+    const now = new Date().toISOString();
+    const created: db.LandListingInquiryMock = {
+      id: crypto.randomUUID(),
+      listingId: listing.id,
+      buyerId: me.id,
+      message: body.message,
+      status: "open",
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.landListingInquiries.push(created);
+    return HttpResponse.json(withInquiryJoins(created), { status: 201 });
+  }),
+
+  http.patch(`${API}/land-listings/:id/inquiries/:inquiryId/accept`, async ({ params, request }) =>
+    decideInquiryMock(params.id as string, params.inquiryId as string, request, "accepted"),
+  ),
+
+  http.patch(`${API}/land-listings/:id/inquiries/:inquiryId/decline`, async ({ params, request }) =>
+    decideInquiryMock(params.id as string, params.inquiryId as string, request, "declined"),
+  ),
+
+  http.patch(`${API}/land-listings/:id/inquiries/:inquiryId/withdraw`, async ({ params, request }) => {
+    const me = currentUser(request);
+    const inquiry = db.landListingInquiries.find((i) => i.id === params.inquiryId);
+    if (!inquiry || inquiry.listingId !== params.id) return notFound("Inquiry not found");
+    if (inquiry.buyerId !== me.id) return notFound("Inquiry not found");
+    const review = canWithdrawInquiry(inquiry.status);
+    if (!review.canWithdraw) return unprocessable({ base: { code: "cannot-withdraw", ...review.blocker } });
+    inquiry.status = "withdrawn";
+    inquiry.updatedAt = new Date().toISOString();
+    return HttpResponse.json(withInquiryJoins(inquiry));
   }),
 
   // Admin ------------------------------------------------------------------

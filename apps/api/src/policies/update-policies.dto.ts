@@ -73,4 +73,9 @@ export class UpdatePoliciesDto {
   @IsInt()
   @Min(0)
   leaseSettlementNonAgriculturalFeeBdt?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  leaseSettlementApplicationFeeBdt?: number;
 }

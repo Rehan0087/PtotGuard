@@ -1,18 +1,18 @@
 import { IsIn } from "class-validator";
 
 /**
- * Every status a dispute can hold. `hearing-scheduled` and `resolved` are
+ * Every status a dispute can hold. `hearing-scheduled` and `decided` are
  * accepted by the validator but refused by `disputeTransition()`, so the
  * caller gets the gate's "use the hearing / use the ruling" answer rather
  * than a shapeless 400.
  */
 const STATUSES = [
   "submitted",
-  "under-review",
-  "field-visit-scheduled",
-  "in-mediation",
+  "under-land-office-review",
+  "field-verified",
+  "forwarded-to-settlement",
   "hearing-scheduled",
-  "resolved",
+  "decided",
   "rejected",
   "withdrawn",
 ] as const;

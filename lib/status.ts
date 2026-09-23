@@ -19,6 +19,9 @@ import type {
   HearingStatus,
   UserStatus,
   ServiceApplicationStatus,
+  GrievanceStatus,
+  LandListingStatus,
+  LandListingInquiryStatus,
 } from "@/lib/types";
 
 export interface StatusMeta {
@@ -35,11 +38,11 @@ export const registryStatusTone: Record<RegistryStatus, StatusTone> = {
 
 export const disputeStatusTone: Record<DisputeStatus, StatusTone> = {
   submitted: "pending",
-  "under-review": "review",
-  "field-visit-scheduled": "review",
-  "in-mediation": "disputed",
+  "under-land-office-review": "review",
+  "field-verified": "review",
+  "forwarded-to-settlement": "review",
   "hearing-scheduled": "disputed",
-  resolved: "verified",
+  decided: "verified",
   rejected: "flagged",
   withdrawn: "draft",
 };
@@ -110,5 +113,27 @@ export const serviceApplicationStatusTone: Record<ServiceApplicationStatus, Stat
   "hearing-scheduled": "disputed",
   approved: "verified",
   rejected: "flagged",
+  withdrawn: "draft",
+};
+
+export const grievanceStatusTone: Record<GrievanceStatus, StatusTone> = {
+  submitted: "pending",
+  "under-review": "review",
+  investigating: "review",
+  escalated: "flagged",
+  resolved: "verified",
+  dismissed: "flagged",
+};
+
+export const landListingStatusTone: Record<LandListingStatus, StatusTone> = {
+  active: "verified",
+  "under-transfer": "review",
+  withdrawn: "draft",
+};
+
+export const landListingInquiryStatusTone: Record<LandListingInquiryStatus, StatusTone> = {
+  open: "pending",
+  accepted: "verified",
+  declined: "flagged",
   withdrawn: "draft",
 };

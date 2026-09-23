@@ -17,15 +17,16 @@ import type { Dispute, Hearing } from "./types";
  * mediator's inbound queue, in the same shape as `disputesNeedingSurvey()`.
  *
  * Referral is the officer's decision, not the mediator's, so this deliberately
- * only picks up disputes already moved to `in-mediation`. A case still under
- * review belongs to the land office, however obviously contested it looks.
+ * only picks up disputes already moved to `forwarded-to-settlement`. A case
+ * still under review belongs to the land office, however obviously contested
+ * it looks.
  */
 export function disputesNeedingHearing(
   disputes: Dispute[],
   hearings: Hearing[],
 ): Dispute[] {
   const listed = new Set(hearings.map((h) => h.disputeId));
-  return disputes.filter((d) => d.status === "in-mediation" && !listed.has(d.id));
+  return disputes.filter((d) => d.status === "forwarded-to-settlement" && !listed.has(d.id));
 }
 
 /** Attendee lists are typed by hand, so match on shape rather than exact string. */

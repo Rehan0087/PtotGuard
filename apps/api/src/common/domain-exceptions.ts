@@ -65,3 +65,18 @@ export class ConflictError extends DomainError {
     );
   }
 }
+
+export class ForbiddenError extends DomainError {
+  constructor(message = "Forbidden", reason?: unknown) {
+    super(
+      { error: "forbidden", message, ...(reason ? { reason } : {}) } satisfies ErrorBody,
+      HttpStatus.FORBIDDEN,
+    );
+  }
+}
+
+export class TooManyRequestsError extends DomainError {
+  constructor(message = "Too many requests") {
+    super({ error: "too_many_requests", message } satisfies ErrorBody, HttpStatus.TOO_MANY_REQUESTS);
+  }
+}

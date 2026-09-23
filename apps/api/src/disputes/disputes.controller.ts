@@ -249,14 +249,12 @@ export class DisputesController {
   }
 
   /**
-   * A mediator or officer moving a case along. Two statuses are missing from
-   * what this will accept, on purpose: `hearing-scheduled` belongs to
-   * POST /hearings and `resolved` to PATCH /hearings/:id/ruling, each of
-   * which writes more than a status. `disputeTransition()` is the same gate
-   * the mediator's screen uses to decide what to offer.
+   * Land Office (or Settlement Office/mediator) moving a case along.
+   * `hearing-scheduled` belongs to POST /hearings and `decided` to
+   * PATCH /hearings/:id/ruling, each of which writes more than a status.
+   * `disputeTransition()` is the same gate the officer's screen uses.
    */
-  // Both roles that handle a case: the mediator on their own screen, the
-  // officer on the dispute record. A party to the case cannot move it.
+  // Land Office handles the case; mediator/Settlement Office acts via hearings only.
   @UseGuards(AccessTokenGuard, RolesGuard)
   @Roles("mediator", "land-office")
   @Patch(":id/status")
@@ -306,7 +304,18 @@ export class DisputesController {
         { filedById: dispute.filedById, parties: dispute.parties as never },
         actorId,
       );
-      
+
+      const statusLabels: Record<string, string> = {
+        "under-land-office-review": "received by the Land Office",
+        "field-verified": "verified by a field agent",
+        "forwarded-to-settlement": "forwarded to the Settlement Office",
+        "hearing-scheduled": "scheduled for a hearing",
+        decided: "decided by the Settlement Office",
+        rejected: "rejected",
+        withdrawn: "withdrawn",
+      };
+      const statusLabel = statusLabels[to] ?? to;
+
       if (audience.length > 0) {
         await tx.appNotification.createMany({
           data: audience.map((userId) => ({
@@ -315,13 +324,87 @@ export class DisputesController {
             at: now,
             severity: "info",
             title: "Dispute status updated",
-            body: `Case ${dispute.caseNumber} status was updated to ${to}.`,
+            body: `Case ${dispute.caseNumber} has been ${statusLabel}.`,
             content: { code: "dispute-status", caseNumber: dispute.caseNumber, status: to },
             read: false,
             href: `/disputes/${dispute.id}`,
           })),
         });
       }
+
+      return updated;
+    });
+  }
+
+  /**
+   * Land Office assigns a field agent to a dispute that is under review.
+   * Creating a FieldReport linked to the dispute puts the visit on the
+   * agent's queue. Status stays at `under-land-office-review` — the Land
+   * Office moves it to `field-verified` after reviewing the report.
+   */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
+  @Post(":id/assign-agent")
+  @HttpCode(200)
+  async assignAgent(
+    @Param("id") id: string,
+    @Body() body: { agentId: string },
+    @Req() req: Request,
+  ) {
+    const dispute = await this.prisma.dispute.findUnique({ where: { id } });
+    if (!dispute) throw new NotFoundError("Dispute not found");
+    if (dispute.status !== "under-land-office-review") {
+      throw new ValidationError({ code: "wrong-status", status: dispute.status }, "status");
+    }
+
+    const agent = await this.prisma.user.findUnique({ where: { id: body.agentId } });
+    if (!agent || agent.role !== "field-agent" || agent.status !== "active") {
+      throw new NotFoundError("Field agent not found");
+    }
+
+    const actorId = currentUserId(req);
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+
+      const updated = await tx.dispute.update({
+        where: { id },
+        data: { assignedAgentId: agent.id, updatedAt: now },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "dispute",
+        entityId: id,
+        action: "assign",
+        actorId,
+        payload: { caseNumber: dispute.caseNumber, agentId: agent.id, agentName: agent.name },
+      });
+
+      await tx.disputeEvent.create({
+        data: {
+          id: `de-${randomUUID()}`,
+          disputeId: id,
+          at: now,
+          type: "assigned",
+          title: `Field agent assigned: ${agent.name}`,
+          content: { code: "assigned", to: agent.name },
+          actorId,
+        },
+      });
+
+      // Notify the agent they have a new visit
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: agent.id,
+          at: now,
+          severity: "info",
+          title: "Field visit assigned",
+          body: `You have been assigned to verify dispute ${dispute.caseNumber}.`,
+          read: false,
+          href: `/disputes/${id}`,
+        },
+      });
 
       return updated;
     });

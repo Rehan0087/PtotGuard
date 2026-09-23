@@ -14,6 +14,9 @@ import {
   serviceApplicationStatusTone,
   userStatusTone,
   verificationStatusTone,
+  grievanceStatusTone,
+  landListingStatusTone,
+  landListingInquiryStatusTone,
 } from "@/lib/status";
 import { useT } from "./provider";
 
@@ -46,7 +49,18 @@ export function useStatusMeta() {
       });
       return {
         registry: pair(registryStatusTone, t.status.registry),
-        dispute: pair(disputeStatusTone, t.status.dispute),
+        dispute: (() => {
+          const d = pair(disputeStatusTone, t.status.dispute);
+          // Safely map old MSW session snapshot statuses to their new equivalents
+          // so the UI doesn't crash on stale local data.
+          Object.assign(d, {
+            "under-review": d["under-land-office-review"],
+            "field-visit-scheduled": d["field-verified"],
+            "in-mediation": d["forwarded-to-settlement"],
+            resolved: d.decided,
+          });
+          return d;
+        })(),
         serviceApplication: pair(serviceApplicationStatusTone, t.status.serviceApplication),
         priority: pair(priorityTone, t.status.priority),
         mutation,
@@ -55,6 +69,9 @@ export function useStatusMeta() {
         fieldReport: pair(fieldReportStatusTone, t.status.fieldReport),
         hearing: pair(hearingStatusTone, t.status.hearing),
         user: pair(userStatusTone, t.status.user),
+        grievance: pair(grievanceStatusTone, t.status.grievance),
+        landListing: pair(landListingStatusTone, t.status.landListing),
+        landListingInquiry: pair(landListingInquiryStatusTone, t.status.landListingInquiry),
       };
     },
     [t],

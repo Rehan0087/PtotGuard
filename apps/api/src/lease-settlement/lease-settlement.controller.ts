@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, HttpCode, Post, Req } from "@nestjs/common";
+import { Body, Controller, HttpCode, Post, Req, Patch, Param } from "@nestjs/common";
 import type { Request } from "express";
 import type { Policy } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -7,6 +7,7 @@ import { AuditService } from "../audit/audit.service";
 import { NotFoundError } from "../common/domain-exceptions";
 import { currentUserId } from "../auth/dev-current-user";
 import { ApplyLeaseSettlementDto } from "./apply-lease-settlement.dto";
+import { RecordPaymentDto } from "../service-applications/record-payment.dto";
 
 function feeFor(landUse: string, policy: Policy): number {
   return landUse === "agricultural"
@@ -47,6 +48,17 @@ export class LeaseSettlementController {
       const applicationNo = `LSE-2026-${String(1000 + count).padStart(6, "0")}`;
       const now = new Date();
 
+      if (body.khasPlotId) {
+        const plot = await tx.khasLandPlot.findUnique({ where: { id: body.khasPlotId } });
+        if (!plot) throw new NotFoundError("Khas land plot not found");
+        if (plot.status !== "available") throw new Error("Plot is not available for lease");
+
+        await tx.khasLandPlot.update({
+          where: { id: body.khasPlotId },
+          data: { status: "reserved" },
+        });
+      }
+
       const created = await tx.serviceApplication.create({
         data: {
           id: `sa-${randomUUID()}`,
@@ -54,6 +66,7 @@ export class LeaseSettlementController {
           serviceType: "lease-settlement",
           status: "submitted",
           parcelId: null,
+          khasPlotId: body.khasPlotId ?? null,
           applicantId: me,
           details: {
             landUse: body.landUse,
@@ -61,9 +74,10 @@ export class LeaseSettlementController {
             areaDecimals: body.areaDecimals,
             termYears: body.termYears,
             purpose: body.purpose,
+            leaseFeeAmount: feeFor(body.landUse, policy),
           } as never,
           documentIds: body.documentIds ?? [],
-          feeAmount: feeFor(body.landUse, policy),
+          feeAmount: policy.leaseSettlementApplicationFeeBdt,
           submittedAt: now,
         },
       });
@@ -95,6 +109,87 @@ export class LeaseSettlementController {
       });
 
       return created;
+    });
+  }
+
+  @Patch(":id/pay-lease")
+  async payLease(@Param("id") id: string, @Body() body: RecordPaymentDto, @Req() req: Request) {
+    const me = currentUserId(req);
+    const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
+    if (!application) throw new NotFoundError("Application not found");
+    if (application.serviceType !== "lease-settlement") throw new Error("Invalid application type");
+    if (application.status !== "approved") throw new Error("Lease must be approved before payment");
+
+    const details = application.details as Record<string, any>;
+    if (details.leaseFeePaidAt) throw new Error("Lease fee already paid");
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const expiresAt = new Date(now);
+      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+      const updated = await tx.serviceApplication.update({
+        where: { id },
+        data: {
+          details: {
+            ...details,
+            leaseFeePaidAt: now.toISOString(),
+            leaseFeePaymentMethod: body.paymentMethod,
+            leaseExpiresAt: expiresAt.toISOString(),
+          } as never,
+        },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "service-application",
+        entityId: id,
+        action: "payment",
+        actorId: me,
+        payload: { event: "lease-fee-paid" },
+      });
+
+      return updated;
+    });
+  }
+
+  @Patch(":id/renew")
+  async renewLease(@Param("id") id: string, @Req() req: Request) {
+    const me = currentUserId(req);
+    const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
+    if (!application) throw new NotFoundError("Application not found");
+    if (application.serviceType !== "lease-settlement") throw new Error("Invalid application type");
+    
+    const details = application.details as Record<string, any>;
+    if (!details.leaseFeePaidAt) throw new Error("Initial lease fee must be paid before renewal");
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const currentExpiresAt = details.leaseExpiresAt ? new Date(details.leaseExpiresAt) : now;
+      
+      // If already expired, renew from now. If active, extend by 1 year from expiry.
+      const baseDate = currentExpiresAt < now ? now : currentExpiresAt;
+      const newExpiresAt = new Date(baseDate);
+      newExpiresAt.setFullYear(newExpiresAt.getFullYear() + 1);
+
+      const updated = await tx.serviceApplication.update({
+        where: { id },
+        data: {
+          details: {
+            ...details,
+            leaseExpiresAt: newExpiresAt.toISOString(),
+          } as never,
+        },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "service-application",
+        entityId: id,
+        action: "update",
+        actorId: me,
+        payload: { event: "lease-renewed", newExpiresAt },
+      });
+
+      return updated;
     });
   }
 }

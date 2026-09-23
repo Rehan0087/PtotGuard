@@ -16,7 +16,7 @@ import { LandAdminModule } from "./land-admin/land-admin.module";
 import { RevenueCasesModule } from "./revenue-cases/revenue-cases.module";
 import { LeaseSettlementModule } from "./lease-settlement/lease-settlement.module";
 import { AcquisitionModule } from "./acquisition/acquisition.module";
-import { LandInfoBankModule } from "./land-info-bank/land-info-bank.module";
+
 import { AppointmentsModule } from "./appointments/appointments.module";
 import { InheritanceModule } from "./inheritance/inheritance.module";
 import { FieldReportsModule } from "./field-reports/field-reports.module";
@@ -27,6 +27,10 @@ import { AuthModule } from "./auth/auth.module";
 import { AdminDashboardModule } from "./admin-dashboard/admin-dashboard.module";
 import { LandOfficeDashboardModule } from "./land-office-dashboard/land-office-dashboard.module";
 import { OcrModule } from "./ocr/ocr.module";
+import { GrievancesModule } from "./grievances/grievances.module";
+import { KhasLandPlotsModule } from "./khas-land-plots/khas-land-plots.module";
+import { AssistantModule } from "./assistant/assistant.module";
+import { LandListingsModule } from "./land-listings/land-listings.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
@@ -48,7 +52,7 @@ import { OcrModule } from "./ocr/ocr.module";
     RevenueCasesModule,
     LeaseSettlementModule,
     AcquisitionModule,
-    LandInfoBankModule,
+
     AppointmentsModule,
     InheritanceModule,
     FieldReportsModule,
@@ -59,7 +63,12 @@ import { OcrModule } from "./ocr/ocr.module";
     AdminDashboardModule,
     LandOfficeDashboardModule,
     OcrModule,
+    GrievancesModule,
+    KhasLandPlotsModule,
+    AssistantModule,
+    LandListingsModule,
   ],
+
   controllers: [HealthController],
   providers: [
     // Registered here rather than in main.ts so it is also active in tests that

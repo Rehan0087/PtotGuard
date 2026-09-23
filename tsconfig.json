@@ -34,5 +34,5 @@
   // compiler options — the API needs decorator metadata, the rules package
   // targets plain node. Globbing them in from here type-checks their sources
   // under the *web* app's settings and fails on options they never asked for.
-  "exclude": ["node_modules", "apps", "packages"]
+  "exclude": ["node_modules", "apps", "packages", "PtotGuard"]
 }

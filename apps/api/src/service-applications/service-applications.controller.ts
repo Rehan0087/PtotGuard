@@ -272,6 +272,9 @@ export class ServiceApplicationsController {
   ) {
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
     if (!application) throw new NotFoundError("Service application not found");
+    if (application.serviceType === "acquisition") {
+      throw new ConflictError("Use the acquisition workflow to decide this request.");
+    }
     if (application.status === "draft") {
       throw new ValidationError({ code: "not-submitted" }, "status");
     }

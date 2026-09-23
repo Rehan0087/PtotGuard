@@ -31,7 +31,7 @@ export type RulingOutcome =
   | { action: "referred-to-mutation" };
 
 export type ExecutionBlocker =
-  | { code: "not-resolved" }
+  | { code: "not-decided" }
   | { code: "already-executed" }
   | { code: "need-outcome" }
   | { code: "need-restriction-type" }
@@ -59,10 +59,9 @@ export function executionGate(
 ): ExecutionReview {
   const blockers: ExecutionBlocker[] = [];
 
-  // Mirrors rulingGate()'s own "already-decided" shape: a case not yet
-  // resolved has no ruling to execute, and one already executed does not
-  // take a second bite at the record.
-  if (dispute.status !== "resolved") blockers.push({ code: "not-resolved" });
+  // A case not yet decided has no ruling to execute, and one already
+  // executed does not take a second bite at the record.
+  if (dispute.status !== "decided") blockers.push({ code: "not-decided" });
   if (dispute.recordsExecutedAt) blockers.push({ code: "already-executed" });
 
   if (!outcome) {

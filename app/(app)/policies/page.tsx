@@ -38,6 +38,7 @@ function makeSchema(t: Dictionary) {
     revenueCaseFilingFeeBdt: z.number().int().min(0, t.common.required),
     leaseSettlementAgriculturalFeeBdt: z.number().int().min(0, t.common.required),
     leaseSettlementNonAgriculturalFeeBdt: z.number().int().min(0, t.common.required),
+    leaseSettlementApplicationFeeBdt: z.number().int().min(0, t.common.required),
   });
 }
 
@@ -112,6 +113,7 @@ export default function PoliciesPage() {
       revenueCaseFilingFeeBdt: 0,
       leaseSettlementAgriculturalFeeBdt: 0,
       leaseSettlementNonAgriculturalFeeBdt: 0,
+      leaseSettlementApplicationFeeBdt: 0,
     },
     values: policies,
   });
@@ -263,6 +265,12 @@ export default function PoliciesPage() {
         <Card className="gap-4 p-6">
           <h2 className="font-heading text-sm font-semibold text-foreground">{p.leaseSettlementSection}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
+            <NumberField
+              control={control}
+              name="leaseSettlementApplicationFeeBdt"
+              label="Application Fee"
+              suffix="BDT"
+            />
             <NumberField
               control={control}
               name="leaseSettlementAgriculturalFeeBdt"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, UserPlus, UserRound } from "lucide-react";
+import { UserPlus, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -22,7 +22,6 @@ import {
 import {
   useInviteUser,
   useJurisdictions,
-  useResetUserPassword,
   useSession,
   useUpdateUser,
   useUsers,
@@ -41,24 +40,18 @@ function UserRow({
   jurisdictions,
   jName,
   isSelf,
-  onIssued,
 }: {
   user: User;
   jurisdictions: Jurisdiction[];
   jName: (id: string) => string;
   isSelf: boolean;
-  /** A password the administrator must read now; the page shows it once. */
-  onIssued: (name: string, password: string) => void;
 }) {
   const dict = useT();
   const t = dict.pages.users;
   const s = useStatusMeta();
   const update = useUpdateUser(user.id);
-  const resetPassword = useResetUserPassword(user.id);
   const [confirming, setConfirming] = useState(false);
   const selfSuspendBlocked = isSelf && user.status === "active";
-  // passwordResetGate()'s answer, shown before the endpoint has to give it.
-  const resetBlocked = user.status === "invited";
 
   function onError() {
     toast.error(t.failedTitle, {
@@ -181,8 +174,7 @@ function UserRow({
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5">
-            <Button
+          <Button
               size="xs"
               variant={user.status === "suspended" ? "secondary" : "outline"}
               disabled={selfSuspendBlocked}
@@ -193,22 +185,6 @@ function UserRow({
             >
               {user.status === "suspended" ? t.reactivate : t.suspend}
             </Button>
-            <Button
-              size="xs"
-              variant="ghost"
-              disabled={resetBlocked || resetPassword.isPending}
-              title={resetBlocked ? t.cannotResetInvited : undefined}
-              onClick={() =>
-                resetPassword.mutate(undefined, {
-                  onSuccess: (result) => onIssued(user.name, result.temporaryPassword),
-                  onError: () => toast.error(t.failedTitle),
-                })
-              }
-            >
-              <KeyRound className="size-3.5" />
-              {t.resetPassword}
-            </Button>
-          </div>
         )}
       </TableCell>
     </TableRow>
@@ -403,7 +379,6 @@ export default function UsersPage() {
                   jurisdictions={jurisdictions}
                   jName={jName}
                   isSelf={u.id === session?.user.id}
-                  onIssued={(name, password) => setIssued({ name, password })}
                 />
               ))}
             </TableBody>

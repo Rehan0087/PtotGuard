@@ -10,11 +10,12 @@ import {
   Sprout,
   Building2,
   Scale,
-  FileStack,
   FileText,
   CalendarClock,
   Receipt,
   GitBranch,
+  MessageCircleWarning,
+  Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
@@ -33,12 +34,12 @@ const SERVICES: Service[] = [
   { navKey: "acquisition", icon: Landmark, href: "/acquisition", iconColor: "text-pink-600 border-pink-600" },
   { navKey: "myProperties", icon: MapPin, href: "/properties", iconColor: "text-blue-500 border-blue-500" },
   { navKey: "leaseSettlement", icon: Sprout, href: "/lease-settlement", iconColor: "text-green-500 border-green-500" },
-  { navKey: "landAdmin", icon: Building2, href: "/land-admin", iconColor: "text-slate-600 border-slate-600" },
-  { navKey: "revenueCases", icon: Scale, href: "/revenue-cases", iconColor: "text-amber-600 border-amber-600" },
-  { navKey: "infoBank", icon: FileStack, href: "/land-info-bank", iconColor: "text-indigo-500 border-indigo-500" },
+  { navKey: "marketplace", icon: Store, href: "/marketplace", iconColor: "text-indigo-500 border-indigo-500" },
+
   { navKey: "inheritance", icon: GitBranch, href: "/inheritance", iconColor: "text-purple-500 border-purple-500" },
   { navKey: "myDocuments", icon: FileText, href: "/documents", iconColor: "text-sky-500 border-sky-500" },
   { navKey: "disputes", icon: Scale, href: "/disputes", iconColor: "text-red-500 border-red-500" },
+  { navKey: "grievances", icon: MessageCircleWarning, href: "/grievances", iconColor: "text-amber-500 border-amber-500" },
   { navKey: "appointments", icon: CalendarClock, href: "/appointments", iconColor: "text-cyan-600 border-cyan-600" },
   { navKey: "payments", icon: Receipt, href: "/payments", iconColor: "text-emerald-500 border-emerald-500" },
 ];

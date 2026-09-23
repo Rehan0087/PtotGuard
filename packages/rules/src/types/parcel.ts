@@ -98,6 +98,7 @@ export type AcquisitionType =
   | "grant"
   | "partition"
   | "court-order"
+  | "state-acquisition"
   /** The record itself was wrong (name/owner misfiled), not a real transfer. */
   | "correction";
 
@@ -115,3 +116,22 @@ export interface OwnershipRecord {
   /** Mutation that produced this ownership row, when applicable. */
   mutationId?: ID;
 }
+
+export interface KhasLandPlot {
+  id: ID;
+  mouza: string;
+  upazila: string;
+  district: string;
+  jlNo?: string;
+  dagNo: string;
+  landUse: "agricultural" | "non-agricultural";
+  areaDecimals: number;
+  centroidLat: number;
+  centroidLng: number;
+  boundaryGeoJson?: GeoPolygon;
+  status: "available" | "reserved" | "leased";
+  notes?: string;
+  createdAt: ISODateString;
+  updatedAt: ISODateString;
+}
+

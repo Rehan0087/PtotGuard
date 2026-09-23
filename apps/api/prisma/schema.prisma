@@ -96,8 +96,15 @@ model User {
   fieldSurveySessions          FieldSurveySession[]
   fieldSurveySyncReceipts      FieldSurveySyncReceipt[]
   hearingsAsMediator           Hearing[]
+  grievancesFiled              Grievance[]               @relation("GrievanceFiler")
+  grievancesAsOfficer          Grievance[]               @relation("GrievanceOfficer")
+  grievancesEscalated          Grievance[]               @relation("GrievanceEscalated")
+  grievanceEvents              GrievanceEvent[]
   notifications                AppNotification[]
   auditActions                 AuditEvent[]
+  assistantConversation        AssistantConversation?
+  landListingsSold             LandListing[]             @relation("LandListingSeller")
+  landListingInquiriesMade     LandListingInquiry[]      @relation("LandListingBuyer")
 
   @@index([jurisdictionId])
   @@map("users")
@@ -144,6 +151,7 @@ model Parcel {
   mutations           Mutation[]
   serviceApplications ServiceApplication[]
   fieldReports        FieldReport[]
+  landListings        LandListing[]
 
   /// Scoped to the jurisdiction, not global. A dag number only carries meaning
   /// within its mouza — two mouzas can each legitimately hold a dag 142 /
@@ -240,8 +248,8 @@ model Dispute {
   parcelDagNo         String
   /// DisputeType: "boundary" | "ownership" | "inheritance" | "encroachment" | "fraud" | "easement"
   type                String
-  /// DisputeStatus: "submitted" | "under-review" | "field-visit-scheduled"
-  /// | "in-mediation" | "hearing-scheduled" | "resolved" | "rejected" | "withdrawn"
+  /// DisputeStatus: "submitted" | "under-land-office-review" | "field-verified"
+  /// | "forwarded-to-settlement" | "hearing-scheduled" | "decided" | "rejected" | "withdrawn"
   status              String    @default("submitted")
   /// Priority: "low" | "medium" | "high"
   priority            String    @default("medium")
@@ -265,7 +273,7 @@ model Dispute {
   hearingDate         DateTime?
   resolution          String?
   /// Set once a land-office officer applies the ruling to the parcel record
-  /// — see executionGate() in @plotguard/rules. Null while a resolved case
+  /// — see executionGate() in @plotguard/rules. Null while a decided case
   /// still awaits that step.
   recordsExecutedAt   DateTime?
   recordsExecutedById String?
@@ -415,6 +423,8 @@ model ServiceApplication {
   /// Not every service is parcel-bound (e.g. an information-bank browse request).
   parcelId          String?
   parcel            Parcel?   @relation(fields: [parcelId], references: [id])
+  khasPlotId        String?
+  khasPlot          KhasLandPlot? @relation(fields: [khasPlotId], references: [id])
   applicantId       String
   applicant         User      @relation("ServiceApplicant", fields: [applicantId], references: [id])
   assignedOfficerId String?
@@ -464,6 +474,82 @@ model ServiceApplicationEvent {
 
   @@index([applicationId])
   @@map("service_application_events")
+}
+
+// --- Assistant ----------------------------------------------------------
+
+/// One running thread per citizen — not a conversation list. Reset clears
+/// its messages rather than starting a second row.
+model AssistantConversation {
+  id        String   @id
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AssistantMessage[]
+
+  @@map("assistant_conversations")
+}
+
+model AssistantMessage {
+  id             String                @id
+  conversationId String
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id])
+  /// AssistantMessageRole: "user" | "model" — matches the Gemini SDK's own
+  /// role names, so stored history replays into startChat() unchanged.
+  role           String
+  content        String
+  /// Tool names invoked to produce this reply — support/debugging only,
+  /// never shown to the citizen. Empty for user messages.
+  toolCalls      Json?
+  createdAt      DateTime              @default(now())
+
+  @@index([conversationId])
+  @@map("assistant_messages")
+}
+
+// --- Land marketplace --------------------------------------------------
+
+/// A parcel its owner has put up for sale. Browsing and inquiries happen
+/// here; the actual transfer is the existing Mutation ("sale") flow,
+/// kicked off once the seller accepts a buyer.
+model LandListing {
+  id             String   @id
+  parcelId       String
+  parcel         Parcel   @relation(fields: [parcelId], references: [id])
+  sellerId       String
+  seller         User     @relation("LandListingSeller", fields: [sellerId], references: [id])
+  askingPriceBdt Int
+  description    String
+  /// LandListingStatus: "active" | "under-transfer" | "withdrawn"
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  inquiries LandListingInquiry[]
+
+  @@index([parcelId])
+  @@index([sellerId])
+  @@index([status])
+  @@map("land_listings")
+}
+
+model LandListingInquiry {
+  id        String      @id
+  listingId String
+  listing   LandListing @relation(fields: [listingId], references: [id])
+  buyerId   String
+  buyer     User        @relation("LandListingBuyer", fields: [buyerId], references: [id])
+  message   String?
+  /// LandListingInquiryStatus: "open" | "accepted" | "declined" | "withdrawn"
+  status    String      @default("open")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@map("land_listing_inquiries")
 }
 
 // --- Field reports ----------------------------------------------------------
@@ -597,6 +683,64 @@ model Hearing {
   @@map("hearings")
 }
 
+// --- Grievances (complaint / grievance redressal) -------------------------
+// Citizen complaints *about* the land office (technical issues, delays,
+// staff conduct, corruption) — distinct from Dispute (citizen-vs-citizen
+// land conflicts). Staff-conduct / corruption complaints bypass the
+// implicated officer's queue and are routed to a supervisor or admin.
+
+model Grievance {
+  id                String          @id
+  caseNumber        String          @unique
+  /// GrievanceCategory: "technical" | "delay" | "staff-conduct" | "corruption"
+  category          String
+  /// GrievanceStatus: "submitted" | "under-review" | "investigating"
+  ///   | "resolved" | "dismissed" | "escalated"
+  status            String          @default("submitted")
+  description       String
+  filedById         String
+  filedBy           User            @relation("GrievanceFiler", fields: [filedById], references: [id])
+  filedByName       String
+  /// Set to null for staff-conduct/corruption so the accused officer's queue is bypassed.
+  assignedOfficerId String?
+  assignedOfficer   User?           @relation("GrievanceOfficer", fields: [assignedOfficerId], references: [id])
+  /// For conduct/corruption: routed to the supervisor instead.
+  escalatedToId     String?
+  escalatedTo       User?           @relation("GrievanceEscalated", fields: [escalatedToId], references: [id])
+  resolutionNote    String?
+  /// 1-5 citizen satisfaction rating, filled when status = "resolved" or "dismissed".
+  satisfactionRating Int?
+  slaDeadline       DateTime?
+  escalatedAt       DateTime?
+  resolvedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  events GrievanceEvent[]
+
+  @@index([filedById])
+  @@index([status])
+  @@index([assignedOfficerId])
+  @@map("grievances")
+}
+
+model GrievanceEvent {
+  id          String    @id
+  grievanceId String
+  grievance   Grievance @relation(fields: [grievanceId], references: [id])
+  at          DateTime  @default(now())
+  /// GrievanceEventType: "filed" | "assigned" | "status-change" | "resolved" | "dismissed" | "escalated" | "rated"
+  type        String
+  title       String
+  description String?
+  actorId     String?
+  actor       User?     @relation(fields: [actorId], references: [id])
+  actorName   String?
+
+  @@index([grievanceId])
+  @@map("grievance_events")
+}
+
 // --- Notifications ------------------------------------------------------
 
 model AppNotification {
@@ -615,6 +759,30 @@ model AppNotification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// --- Khas Land Plots ----------------------------------------------------
+
+model KhasLandPlot {
+  id                  String   @id
+  mouza               String
+  upazila             String
+  district            String
+  jlNo                String?       // Jurisdiction list number
+  dagNo               String
+  landUse             String        // "agricultural" | "non-agricultural"
+  areaDecimals        Int
+  centroidLat         Float
+  centroidLng         Float
+  boundaryGeoJson     Json?         // GeoJSON polygon for Leaflet rendering
+  status              String        @default("available")  // "available" | "reserved" | "leased"
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  serviceApplications ServiceApplication[]
+
+  @@map("khas_land_plots")
 }
 
 // --- Policy (system configuration; one row) --------------------------------
@@ -643,6 +811,7 @@ model Policy {
   revenueCaseFilingFeeBdt              Int    @default(300)
   /// Flat fees, BDT, keyed by land use — same two-fee shape as land-admin's,
   /// since non-agricultural settlement carries a real premium in practice.
+  leaseSettlementApplicationFeeBdt     Int    @default(20)
   leaseSettlementAgriculturalFeeBdt    Int    @default(300)
   leaseSettlementNonAgriculturalFeeBdt Int    @default(1000)
 

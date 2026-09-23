@@ -8,8 +8,10 @@ import {
   Building2,
   SlidersHorizontal,
   ShieldCheck,
+  Landmark,
   HelpCircle,
   BookOpen,
+  MessageCircleWarning,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -72,6 +74,7 @@ export const NAV: Record<Role, PortalNav> = {
         href: "/land-officer-responsibilities",
         icon: LayoutGrid,
       },
+      { labelKey: "grievances", href: "/grievances", icon: MessageCircleWarning },
     ],
   },
   "field-agent": {
@@ -79,10 +82,11 @@ export const NAV: Record<Role, PortalNav> = {
     home: "/field",
     items: [
       { labelKey: "assignedVisits", href: "/field", icon: MapPin },
+      { labelKey: "acquisition", href: "/acquisition", icon: Landmark },
     ],
   },
   mediator: {
-    portalKey: "mediation",
+    portalKey: "settlementOffice",
     home: "/cases",
     items: [{ labelKey: "cases", href: "/cases", icon: Gavel }],
   },
@@ -95,6 +99,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "auditLedger", href: "/audit", icon: ShieldCheck },
       { labelKey: "jurisdictions", href: "/jurisdictions", icon: Building2 },
       { labelKey: "policies", href: "/policies", icon: SlidersHorizontal },
+      { labelKey: "grievances", href: "/grievances", icon: MessageCircleWarning },
     ],
   },
 };

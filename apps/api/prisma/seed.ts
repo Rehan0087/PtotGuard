@@ -132,6 +132,18 @@ async function main(): Promise<void> {
 
   await prisma.parcel.createMany({ data: withUlpin });
 
+  // --- Khas Land Plots ----------------------------------------------------
+  await prisma.khasLandPlot.createMany({
+    data: [
+      { id: "klp-1", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "110", landUse: "agricultural", areaDecimals: 50, centroidLat: 23.550, centroidLng: 90.990, boundaryGeoJson: square({ lat: 23.550, lng: 90.990 }), status: "available" },
+      { id: "klp-2", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "115", landUse: "non-agricultural", areaDecimals: 12, centroidLat: 23.552, centroidLng: 90.992, boundaryGeoJson: square({ lat: 23.552, lng: 90.992 }), status: "available" },
+      { id: "klp-3", mouza: "Payalgacha", upazila: "Barura", district: "Cumilla", dagNo: "220", landUse: "agricultural", areaDecimals: 120, centroidLat: 23.360, centroidLng: 91.030, boundaryGeoJson: square({ lat: 23.360, lng: 91.030 }), status: "available" },
+      { id: "klp-4", mouza: "Payalgacha", upazila: "Barura", district: "Cumilla", dagNo: "225", landUse: "non-agricultural", areaDecimals: 8, centroidLat: 23.362, centroidLng: 91.032, boundaryGeoJson: square({ lat: 23.362, lng: 91.032 }), status: "reserved" },
+      { id: "klp-5", mouza: "Debidwar", upazila: "Debidwar", district: "Cumilla", dagNo: "45", landUse: "non-agricultural", areaDecimals: 5, centroidLat: 23.555, centroidLng: 90.985, boundaryGeoJson: square({ lat: 23.555, lng: 90.985 }), status: "leased" },
+    ] as Prisma.KhasLandPlotCreateManyInput[]
+  });
+
+
   // Encumbrances. Chosen to exercise both effects the rule distinguishes: a
   // mortgage that permits transfer with the lender's release, and blockers on
   // the two plots already in dispute. One lifted mortgage so the "expired"
@@ -221,18 +233,18 @@ async function main(): Promise<void> {
   // --- Disputes + timeline -------------------------------------------------
   await prisma.dispute.createMany({
     data: [
-      { id: "ds-417", caseNumber: "DSP-2026-00417", parcelId: "p-142", parcelDagNo: "CS-142/3", type: "boundary", status: "under-review", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-07-15T10:30:00Z"), description: "The adjoining landholder has cultivated roughly 3 metres past the eastern boundary of dag CS-142/3. Requesting a survey to confirm the recorded demarcation.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Md. Karim Uddin", role: "respondent", userId: "usr-karim" }], assignedOfficerId: "usr-officer", evidenceDocumentIds: ["d-1"] },
-      { id: "ds-402", caseNumber: "DSP-2026-00402", parcelId: "p-205", parcelDagNo: "BS-205", type: "encroachment", status: "field-visit-scheduled", priority: "high", filedById: "usr-shanti", filedByName: "Shanti Rani Das", filedAt: new Date("2026-07-08T13:00:00Z"), description: "An unauthorised structure has been raised on the north-west corner of the orchard. Requesting encroachment verification and removal.", parties: [{ name: "Shanti Rani Das", role: "claimant", userId: "usr-shanti" }, { name: "Unknown occupant", role: "respondent" }], assignedOfficerId: "usr-officer2", assignedAgentId: "usr-agent", evidenceDocumentIds: ["d-5", "d-10"] },
-      { id: "ds-388", caseNumber: "DSP-2026-00388", parcelId: "p-176", parcelDagNo: "CS-176", type: "fraud", status: "in-mediation", priority: "high", filedById: "usr-karim", filedByName: "Md. Karim Uddin", filedAt: new Date("2026-06-25T09:45:00Z"), description: "Two conflicting sale deeds (dolil) presented for the same dag. Suspected forged signature on the second deed. Referred for mediation.", parties: [{ name: "Md. Karim Uddin", role: "claimant", userId: "usr-karim" }, { name: "Sohel Rana", role: "respondent" }], assignedMediatorId: "usr-mediator", evidenceDocumentIds: ["d-6", "d-11"] },
+      { id: "ds-417", caseNumber: "DSP-2026-00417", parcelId: "p-142", parcelDagNo: "CS-142/3", type: "boundary", status: "under-land-office-review", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-07-15T10:30:00Z"), description: "The adjoining landholder has cultivated roughly 3 metres past the eastern boundary of dag CS-142/3. Requesting a survey to confirm the recorded demarcation.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Md. Karim Uddin", role: "respondent", userId: "usr-karim" }], assignedOfficerId: "usr-officer", evidenceDocumentIds: ["d-1"] },
+      { id: "ds-402", caseNumber: "DSP-2026-00402", parcelId: "p-205", parcelDagNo: "BS-205", type: "encroachment", status: "field-verified", priority: "high", filedById: "usr-shanti", filedByName: "Shanti Rani Das", filedAt: new Date("2026-07-08T13:00:00Z"), description: "An unauthorised structure has been raised on the north-west corner of the orchard. Requesting encroachment verification and removal.", parties: [{ name: "Shanti Rani Das", role: "claimant", userId: "usr-shanti" }, { name: "Unknown occupant", role: "respondent" }], assignedOfficerId: "usr-officer2", assignedAgentId: "usr-agent", evidenceDocumentIds: ["d-5", "d-10"] },
+      { id: "ds-388", caseNumber: "DSP-2026-00388", parcelId: "p-176", parcelDagNo: "CS-176", type: "fraud", status: "forwarded-to-settlement", priority: "high", filedById: "usr-karim", filedByName: "Md. Karim Uddin", filedAt: new Date("2026-06-25T09:45:00Z"), description: "Two conflicting sale deeds (dolil) presented for the same dag. Suspected forged signature on the second deed. Referred for mediation.", parties: [{ name: "Md. Karim Uddin", role: "claimant", userId: "usr-karim" }, { name: "Sohel Rana", role: "respondent" }], assignedMediatorId: "usr-mediator", evidenceDocumentIds: ["d-6", "d-11"] },
       // Referred to mediation but not yet listed for hearing — fills the
       // mediator's "to convene" board.
-      { id: "ds-381", caseNumber: "DSP-2026-00381", parcelId: "p-092", parcelDagNo: "RS-92/4", type: "easement", status: "resolved", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-06-18T07:20:00Z"), description: "Right of way across the northern strip of dag RS-92/4 blocked after the neighbouring owner raised a boundary wall. Referred for mediation.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Sohel Rana", role: "respondent" }], assignedMediatorId: "usr-mediator", evidenceDocumentIds: [], resolution: "The recorded access path was confirmed and reopened by agreement." },
-      { id: "ds-370", caseNumber: "DSP-2026-00370", parcelId: "p-311", parcelDagNo: "RS-311/2", type: "ownership", status: "resolved", priority: "low", filedById: "usr-karim", filedByName: "Md. Karim Uddin", filedAt: new Date("2026-05-30T10:00:00Z"), description: "Clerical mismatch in the recorded owner name resolved after document verification.", parties: [{ name: "Md. Karim Uddin", role: "claimant", userId: "usr-karim" }], assignedOfficerId: "usr-officer", evidenceDocumentIds: ["d-7"], resolution: "Owner name corrected in the khatian after verification of khajna receipts and NID. No competing claim found." },
+      { id: "ds-381", caseNumber: "DSP-2026-00381", parcelId: "p-092", parcelDagNo: "RS-92/4", type: "easement", status: "decided", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-06-18T07:20:00Z"), description: "Right of way across the northern strip of dag RS-92/4 blocked after the neighbouring owner raised a boundary wall. Referred for mediation.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Sohel Rana", role: "respondent" }], assignedMediatorId: "usr-mediator", evidenceDocumentIds: [], resolution: "The recorded access path was confirmed and reopened by agreement." },
+      { id: "ds-370", caseNumber: "DSP-2026-00370", parcelId: "p-311", parcelDagNo: "RS-311/2", type: "ownership", status: "decided", priority: "low", filedById: "usr-karim", filedByName: "Md. Karim Uddin", filedAt: new Date("2026-05-30T10:00:00Z"), description: "Clerical mismatch in the recorded owner name resolved after document verification.", parties: [{ name: "Md. Karim Uddin", role: "claimant", userId: "usr-karim" }], assignedOfficerId: "usr-officer", evidenceDocumentIds: ["d-7"], resolution: "Owner name corrected in the khatian after verification of khajna receipts and NID. No competing claim found." },
       { id: "ds-355", caseNumber: "DSP-2026-00355", parcelId: "p-088", parcelDagNo: "RS-88", type: "inheritance", status: "submitted", priority: "medium", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-07-22T08:15:00Z"), description: "Requesting formal recognition of the Faraiz inheritance share for dag RS-88 following the passing of the recorded owner.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }], evidenceDocumentIds: ["d-3"] },
       { id: "ds-340", caseNumber: "DSP-2026-00340", parcelId: "p-205", parcelDagNo: "BS-205", type: "boundary", status: "hearing-scheduled", priority: "medium", filedById: "usr-shanti", filedByName: "Shanti Rani Das", filedAt: new Date("2026-06-12T09:00:00Z"), description: "Boundary overlap between dag BS-205 and the adjacent khas (government) land line pending tribunal hearing.", parties: [{ name: "Shanti Rani Das", role: "claimant", userId: "usr-shanti" }, { name: "Upazila Land Office", role: "respondent" }], assignedMediatorId: "usr-mediator", hearingDate: new Date("2026-07-30T05:30:00Z"), evidenceDocumentIds: ["d-5"] },
-      { id: "ds-430", caseNumber: "DSP-2026-00430", parcelId: "p-403", parcelDagNo: "RS-403", type: "boundary", status: "field-visit-scheduled", priority: "high", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-09-06T09:00:00Z"), description: "The field agent found a boundary occupation on the southern edge during measurement.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Adjacent occupier", role: "respondent" }], assignedOfficerId: "usr-officer", assignedAgentId: "usr-agent", evidenceDocumentIds: ["d-16"] },
+      { id: "ds-430", caseNumber: "DSP-2026-00430", parcelId: "p-403", parcelDagNo: "RS-403", type: "boundary", status: "field-verified", priority: "high", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-09-06T09:00:00Z"), description: "The field agent found a boundary occupation on the southern edge during measurement.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Adjacent occupier", role: "respondent" }], assignedOfficerId: "usr-officer", assignedAgentId: "usr-agent", evidenceDocumentIds: ["d-16"] },
       { id: "ds-888", caseNumber: "DSP-2026-00888", parcelId: "p-888", parcelDagNo: "RS-888", type: "easement", status: "submitted", priority: "low", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-08-01T10:30:00Z"), description: "Dispute over fishing rights.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Local Fisherman", role: "respondent" }], assignedOfficerId: "usr-officer", evidenceDocumentIds: [] },
-      { id: "ds-999", caseNumber: "DSP-2026-00999", parcelId: "p-999", parcelDagNo: "BS-999", type: "boundary", status: "in-mediation", priority: "high", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-08-15T10:30:00Z"), description: "Neighbor encroaching on commercial plot.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Shop Owner", role: "respondent" }], assignedMediatorId: "usr-mediator", evidenceDocumentIds: [] },
+      { id: "ds-999", caseNumber: "DSP-2026-00999", parcelId: "p-999", parcelDagNo: "BS-999", type: "boundary", status: "forwarded-to-settlement", priority: "high", filedById: "usr-ayesha", filedByName: "Ayesha Siddika", filedAt: new Date("2026-08-15T10:30:00Z"), description: "Neighbor encroaching on commercial plot.", parties: [{ name: "Ayesha Siddika", role: "claimant", userId: "usr-ayesha" }, { name: "Shop Owner", role: "respondent" }], assignedMediatorId: "usr-mediator", evidenceDocumentIds: [] },
     ] as Prisma.DisputeCreateManyInput[],
   });
 
@@ -241,9 +253,9 @@ async function main(): Promise<void> {
       { id: "de-1", disputeId: "ds-417", at: new Date("2026-07-15T10:30:00Z"), type: "filed", title: "Dispute filed", content: { code: "filed" }, description: "Boundary dispute submitted by Ayesha Siddika.", actorId: "usr-ayesha", actorName: "Ayesha Siddika" },
       { id: "de-2", disputeId: "ds-417", at: new Date("2026-07-16T09:10:00Z"), type: "assigned", title: "Assigned to Sub-Registrar", content: { code: "assigned", to: "Sub-Registrar" }, description: "Case routed to Nasrin Akter, Debidwar Upazila.", actorName: "System" },
       { id: "de-3", disputeId: "ds-417", at: new Date("2026-07-17T14:00:00Z"), type: "document-added", title: "Evidence added", content: { code: "evidence-added" }, description: "Khatian for dag CS-142/3 attached as evidence.", actorId: "usr-ayesha", actorName: "Ayesha Siddika" },
-      { id: "de-4", disputeId: "ds-417", at: new Date("2026-07-21T09:00:00Z"), type: "status-change", title: "Moved to Under review", content: { code: "status-change", status: "under-review" }, description: "Officer began reviewing submitted records.", actorId: "usr-officer", actorName: "Nasrin Akter" },
+      { id: "de-4", disputeId: "ds-417", at: new Date("2026-07-21T09:00:00Z"), type: "status-change", title: "Moved to Under review", content: { code: "status-change", status: "under-land-office-review" }, description: "Officer began reviewing submitted records.", actorId: "usr-officer", actorName: "Nasrin Akter" },
       { id: "de-5", disputeId: "ds-388", at: new Date("2026-06-25T09:45:00Z"), type: "filed", title: "Dispute filed", content: { code: "filed" }, actorId: "usr-karim", actorName: "Md. Karim Uddin" },
-      { id: "de-6", disputeId: "ds-388", at: new Date("2026-07-02T11:00:00Z"), type: "status-change", title: "Referred to mediation", content: { code: "status-change", status: "in-mediation" }, actorName: "System" },
+      { id: "de-6", disputeId: "ds-388", at: new Date("2026-07-02T11:00:00Z"), type: "status-change", title: "Forwarded to Settlement Office", content: { code: "status-change", status: "forwarded-to-settlement" }, actorName: "System" },
       { id: "de-7", disputeId: "ds-388", at: new Date("2026-07-19T11:30:00Z"), type: "hearing", title: "First hearing held", content: { code: "hearing-held", ordinal: 1 }, description: "Both parties presented deeds. Handwriting examination ordered.", actorId: "usr-mediator", actorName: "Shahida Khatun" },
       { id: "de-8", disputeId: "ds-888", at: new Date("2026-08-01T10:30:00Z"), type: "filed", title: "Dispute filed", content: { code: "filed" }, actorId: "usr-ayesha", actorName: "Ayesha Siddika" },
       { id: "de-9", disputeId: "ds-999", at: new Date("2026-08-15T10:30:00Z"), type: "filed", title: "Dispute filed", content: { code: "filed" }, actorId: "usr-ayesha", actorName: "Ayesha Siddika" },
@@ -428,7 +440,7 @@ async function main(): Promise<void> {
   // --- Notifications ---------------------------------------------------------
   await prisma.appNotification.createMany({
     data: [
-      { id: "n-1", userId: "usr-ayesha", at: new Date("2026-07-21T09:05:00Z"), severity: "info", title: "Dispute moved to Under review", body: "Case DSP-2026-00417 is now being reviewed by the Sub-Registrar.", content: { code: "dispute-status", caseNumber: "DSP-2026-00417", status: "under-review" }, read: false, href: "/disputes/ds-417" },
+      { id: "n-1", userId: "usr-ayesha", at: new Date("2026-07-21T09:05:00Z"), severity: "info", title: "Dispute moved to Under review", body: "Case DSP-2026-00417 is now being reviewed by the Sub-Registrar.", content: { code: "dispute-status", caseNumber: "DSP-2026-00417", status: "under-land-office-review" }, read: false, href: "/disputes/ds-417" },
       { id: "n-2", userId: "usr-ayesha", at: new Date("2026-07-18T11:25:00Z"), severity: "success", title: "Document verified", body: "Your khatian for dag CS-142/3 passed verification.", content: { code: "document-verified", dagNo: "CS-142/3" }, read: false, href: "/documents" },
       { id: "n-3", userId: "usr-ayesha", at: new Date("2026-07-22T08:20:00Z"), severity: "critical", title: "Action needed: affidavit unclear", body: "The warish (inheritance) affidavit for dag RS-88 needs a clearer re-scan to continue OCR.", content: { code: "document-unclear", dagNo: "RS-88" }, read: false, href: "/documents" },
       { id: "n-4", userId: "usr-ayesha", at: new Date("2026-07-20T16:10:00Z"), severity: "info", title: "Field survey scheduled", body: "A boundary survey for dag CS-142/3 has been scheduled.", content: { code: "survey-scheduled", dagNo: "CS-142/3" }, read: true, href: "/disputes/ds-417" },
@@ -437,7 +449,7 @@ async function main(): Promise<void> {
       { id: "n-7", userId: "usr-officer", at: new Date("2026-07-21T09:02:00Z"), severity: "warning", title: "New dispute assigned", body: "DSP-2026-00417 requires review.", content: { code: "dispute-assigned", caseNumber: "DSP-2026-00417" }, read: false, href: "/disputes" },
       { id: "n-101", userId: "usr-ayesha", at: new Date("2026-08-21T09:05:00Z"), severity: "info", title: "Dispute submitted successfully", body: "Case DSP-2026-00888 has been received.", content: { code: "dispute-status", caseNumber: "DSP-2026-00888", status: "submitted" }, read: false, href: "/disputes/ds-888" },
       { id: "n-102", userId: "usr-ayesha", at: new Date("2026-08-18T11:25:00Z"), severity: "critical", title: "Document OCR failed", body: "Your khatian for dag RS-888 failed processing.", content: { code: "document-failed", dagNo: "RS-888" }, read: false, href: "/documents" },
-      { id: "n-103", userId: "usr-ayesha", at: new Date("2026-08-22T08:20:00Z"), severity: "warning", title: "Mediation scheduled", body: "Mediation for DSP-2026-00999 is set.", content: { code: "dispute-status", caseNumber: "DSP-2026-00999", status: "in-mediation" }, read: false, href: "/disputes/ds-999" },
+      { id: "n-103", userId: "usr-ayesha", at: new Date("2026-08-22T08:20:00Z"), severity: "warning", title: "Forwarded to Settlement Office", body: "Dispute for DSP-2026-00999 is set.", content: { code: "dispute-status", caseNumber: "DSP-2026-00999", status: "forwarded-to-settlement" }, read: false, href: "/disputes/ds-999" },
     ] as Prisma.AppNotificationCreateManyInput[],
   });
 
@@ -457,7 +469,7 @@ async function main(): Promise<void> {
     { id: "au-1", entityType: "parcel", entityId: "p-142", action: "create", actorId: "usr-officer", actorName: "Nasrin Akter", payload: { dagNo: "CS-142/3", khatianNo: "512" }, createdAt: "2015-07-20T00:00:00Z" },
     { id: "au-2", entityType: "document", entityId: "d-1", action: "upload", actorId: "usr-ayesha", actorName: "Ayesha Siddika", payload: { fileName: "khatian-142-512.pdf" }, createdAt: "2026-07-18T11:20:00Z" },
     { id: "au-3", entityType: "dispute", entityId: "ds-417", action: "create", actorId: "usr-ayesha", actorName: "Ayesha Siddika", payload: { type: "boundary", parcelDagNo: "CS-142/3" }, createdAt: "2026-07-15T10:30:00Z" },
-    { id: "au-4", entityType: "dispute", entityId: "ds-417", action: "status-change", actorId: "usr-officer", actorName: "Nasrin Akter", payload: { from: "submitted", to: "under-review" }, createdAt: "2026-07-21T09:00:00Z" },
+    { id: "au-4", entityType: "dispute", entityId: "ds-417", action: "status-change", actorId: "usr-officer", actorName: "Nasrin Akter", payload: { from: "submitted", to: "under-land-office-review" }, createdAt: "2026-07-21T09:00:00Z" },
     { id: "au-5", entityType: "mutation", entityId: "m-1192", action: "create", actorId: "usr-ayesha", actorName: "Ayesha Siddika", payload: { type: "inheritance", parcelDagNo: "RS-88" }, createdAt: "2026-07-14T10:00:00Z" },
     { id: "au-6", entityType: "mutation", entityId: "m-1180", action: "approve", actorId: "usr-officer", actorName: "Nasrin Akter", payload: { toOwnerName: "Iqbal Enterprise" }, createdAt: "2026-06-30T10:00:00Z" },
     { id: "au-7", entityType: "hearing", entityId: "h-3", action: "ruling", actorId: "usr-mediator", actorName: "Shahida Khatun", payload: { ruling: "Name correction upheld." }, createdAt: "2026-06-18T05:30:00Z" },
@@ -502,7 +514,48 @@ async function main(): Promise<void> {
     prevHash = hash;
   }
 
-  console.log("Seed complete.");
+  // --- Grievances ---
+  console.log("Seeding grievances...");
+  const grvId = `grv-${crypto.randomUUID()}`;
+  await prisma.grievance.create({
+    data: {
+      id: grvId,
+      caseNumber: "GRV-2026-01001",
+      category: "delay",
+      status: "under-review",
+      description: "My land acquisition payment has been delayed for 6 months despite all documents being submitted.",
+      filedById: "usr-karim",
+      filedByName: "Karim Mia",
+      assignedOfficerId: "usr-officer",
+      slaDeadline: new Date("2026-08-01T10:00:00Z"),
+      createdAt: new Date("2026-07-20T10:00:00Z"),
+      updatedAt: new Date("2026-07-22T10:00:00Z"),
+    },
+  });
+
+  await prisma.grievanceEvent.createMany({
+    data: [
+      {
+        id: `ge-${crypto.randomUUID()}`,
+        grievanceId: grvId,
+        at: new Date("2026-07-20T10:00:00Z"),
+        type: "filed",
+        title: "Grievance filed",
+        actorId: "usr-karim",
+      },
+      {
+        id: `ge-${crypto.randomUUID()}`,
+        grievanceId: grvId,
+        at: new Date("2026-07-22T10:00:00Z"),
+        type: "status-change",
+        title: "Status updated",
+        description: "Status changed to under-review",
+        actorId: "usr-officer",
+      },
+    ],
+  });
+
+  console.log("Done seeding dummy data.");
 }
 
 main()

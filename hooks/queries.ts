@@ -42,6 +42,14 @@ import type {
   MutationVerificationChecklist,
   MediationOutcome,
   LandRecordDetail,
+  Grievance,
+  GrievanceDetail,
+  GrievanceStatus,
+  KhasLandPlot,
+  AcquisitionAppealDecision,
+  AcquisitionAppealOutcome,
+  LandListingStatus,
+  LandListingInquiryStatus,
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
 import type { FieldProfileUpdate } from "@/lib/field-profile";
@@ -198,6 +206,18 @@ export function useUpdateDisputeStatus(id: string) {
       qc.invalidateQueries({ queryKey: ["dispute", id] });
       qc.invalidateQueries({ queryKey: ["disputes"] });
       invalidateRecordViews(qc);
+    },
+  });
+}
+
+/** Land Office assigns a field agent to a dispute under review. */
+export function useAssignDisputeAgent(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (agentId: string) =>
+      api.post<Dispute>(`/disputes/${id}/assign-agent`, { agentId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dispute", id] });
     },
   });
 }
@@ -488,6 +508,7 @@ export function useApplyLeaseSettlement() {
       termYears: number;
       purpose: string;
       paymentMethod: string;
+      khasPlotId?: string;
     }) => {
       const { paymentMethod, ...applyBody } = body;
       const created = await api.post<ServiceApplication>("/lease-settlement/apply", applyBody);
@@ -506,37 +527,47 @@ export function useApplyLeaseSettlement() {
 export function useIssueAcquisitionNotice() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { parcelId: string; purpose: string; awardAmount: number }) =>
+    mutationFn: (body: { parcelId: string; purpose: string; assignedFieldAgentId: string }) =>
       api.post<ServiceApplication>("/acquisition/notice", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
   });
 }
 
-export function useFileAcquisitionObjection(id: string) {
+export function useSubmitAcquisitionFieldReview(id: string) {
   const { invalidate } = useServiceApplicationWrite(id);
   return useMutation({
-    mutationFn: (objectionText: string) =>
-      api.patch<ServiceApplication>(`/acquisition/${id}/object`, { objectionText }),
+    mutationFn: (body: { awardAmount: number; reviewNotes: string }) =>
+      api.patch<ServiceApplication>(`/acquisition/${id}/field-review`, body),
     onSuccess: invalidate,
   });
 }
 
-// --- Land information bank --------------------------------------------------
-// Read-only: parcels with an approved acquisition notice — the only land
-// this system actually knows the government holds an interest in. No apply
-// or decide hooks; there's nothing here to submit.
-export interface LandInfoBankEntry {
-  application: ServiceApplication;
-  parcel: Parcel;
-}
-
-export function useLandInfoBank(params: ListParams = {}) {
-  return useQuery({
-    queryKey: ["land-info-bank", params],
-    queryFn: () => api.get<Paginated<LandInfoBankEntry>>(`/land-info-bank${qs(params)}`),
-    placeholderData: keepPreviousData,
+export function useAcceptAcquisition(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: () => api.patch<ServiceApplication>(`/acquisition/${id}/accept`, {}),
+    onSuccess: invalidate,
   });
 }
+
+export function useFileAcquisitionAppeal(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: (body: { outcome: AcquisitionAppealOutcome; reason: string; requestedAmount?: number }) =>
+      api.patch<ServiceApplication>(`/acquisition/${id}/appeal`, body),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDecideAcquisitionAppeal(id: string) {
+  const { invalidate } = useServiceApplicationWrite(id);
+  return useMutation({
+    mutationFn: (body: { decision: AcquisitionAppealDecision; awardAmount?: number; note?: string }) =>
+      api.patch<ServiceApplication>(`/acquisition/${id}/appeal-decision`, body),
+    onSuccess: invalidate,
+  });
+}
+
 
 // --- Appointments ------------------------------------------------------------
 // No fee, so no pay step — booking lands straight in under-review. An
@@ -1029,15 +1060,6 @@ export function useInviteUser() {
   });
 }
 
-/** A new temporary password for somebody locked out — shown once, same as an invitation. */
-export function useResetUserPassword(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.post<{ temporaryPassword: string }>(`/users/${id}/password-reset`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
-  });
-}
-
 /** Suspend/reactivate, or reassign jurisdiction — the two account actions
  * that need no real auth system behind them. */
 export function useUpdateUser(id: string) {
@@ -1065,5 +1087,294 @@ export function useUpdatePolicies() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["policies"] });
     },
+  });
+}
+
+// --- Grievances -----------------------------------------------------------
+
+export function useGrievances(params?: ListParams) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["grievances", role, params],
+    queryFn: () => api.get<Grievance[]>(`/grievances${qs(params || {})}`),
+  });
+}
+
+export function useGrievance(id: string) {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["grievances", id, role],
+    queryFn: () => api.get<GrievanceDetail>(`/grievances/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useFileGrievance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) => api.post<Grievance>("/grievances", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["grievances"] }),
+  });
+}
+
+export function useUpdateGrievanceStatus(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { status: GrievanceStatus }) =>
+      api.patch<Grievance>(`/grievances/${id}/status`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grievances"] });
+      qc.invalidateQueries({ queryKey: ["grievances", id] });
+    },
+  });
+}
+
+export function useResolveGrievance(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { resolutionNote: string; dismissed?: boolean }) =>
+      api.patch<Grievance>(`/grievances/${id}/resolve`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grievances"] });
+      qc.invalidateQueries({ queryKey: ["grievances", id] });
+    },
+  });
+}
+
+export function useRateGrievance(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { rating: number }) =>
+      api.patch<Grievance>(`/grievances/${id}/rate`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grievances"] });
+      qc.invalidateQueries({ queryKey: ["grievances", id] });
+    },
+  });
+}
+
+// --- Khas Land -----------------------------------------------------------
+
+export function useKhasLandPlots(params: { landUse?: string; status?: string } = {}) {
+  return useQuery({
+    queryKey: ["khas-land-plots", params],
+    queryFn: () => api.get<Paginated<KhasLandPlot>>(`/khas-land-plots${qs(params)}`),
+  });
+}
+
+// --- Assistant (citizen help chatbot) ---------------------------------------
+// Read-only for the citizen's own data, and it never files or pays anything —
+// see apps/api/src/assistant. One running conversation per citizen, cleared
+// with reset rather than a conversation list.
+
+export interface AssistantMessageRow {
+  id: string;
+  role: "user" | "model";
+  content: string;
+  createdAt: string;
+}
+
+export interface AssistantSuggestedAction {
+  href: string;
+  label: string;
+}
+
+export function useAssistantConversation() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["assistant-conversation"],
+    queryFn: () => api.get<{ id: string; messages: AssistantMessageRow[] }>("/assistant/conversation"),
+    enabled: role === "citizen",
+  });
+}
+
+export function useSendAssistantMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { message: string; locale: "en" | "bn" }) =>
+      api.post<{ message: AssistantMessageRow; suggestedActions: AssistantSuggestedAction[] }>(
+        "/assistant/message",
+        body,
+      ),
+    onSuccess: (result, variables) => {
+      qc.setQueryData<{ id: string; messages: AssistantMessageRow[] }>(["assistant-conversation"], (prev) => {
+        if (!prev) return prev;
+        const userMessage: AssistantMessageRow = {
+          id: `${result.message.id}-user`,
+          role: "user",
+          content: variables.message,
+          createdAt: result.message.createdAt,
+        };
+        return { ...prev, messages: [...prev.messages, userMessage, result.message] };
+      });
+    },
+  });
+}
+
+export function useResetAssistantConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post("/assistant/reset"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assistant-conversation"] }),
+  });
+}
+
+// --- Land marketplace --------------------------------------------------
+// Browse, list, and express interest. Accepting an inquiry only moves the
+// listing to "under-transfer" and hands back the buyer's id/name — the
+// caller deep-links into /mutations/new to actually file the transfer.
+// See apps/api/src/land-listings.
+
+interface PersonSummary {
+  id: string;
+  name: string;
+}
+
+interface ParcelSummary {
+  id: string;
+  ulpin: string | null;
+  dagNo: string;
+  khatianNo: string;
+  title: string;
+  landUse: string;
+  area: unknown;
+  jurisdictionId: string;
+}
+
+export interface LandListingSummary {
+  id: string;
+  parcelId: string;
+  sellerId: string;
+  askingPriceBdt: number;
+  description: string;
+  status: LandListingStatus;
+  createdAt: string;
+  updatedAt: string;
+  parcel: ParcelSummary;
+  seller: PersonSummary;
+}
+
+export interface LandListingInquiryRow {
+  id: string;
+  listingId: string;
+  buyerId: string;
+  message?: string | null;
+  status: LandListingInquiryStatus;
+  createdAt: string;
+  updatedAt: string;
+  buyer: PersonSummary;
+}
+
+export interface LandListingWithInquiries extends LandListingSummary {
+  inquiries: LandListingInquiryRow[];
+}
+
+export interface MyLandListingInquiryRow extends LandListingInquiryRow {
+  listing: LandListingSummary;
+}
+
+export function useLandListings(params: ListParams = {}) {
+  return useQuery({
+    queryKey: ["land-listings", params],
+    queryFn: () => api.get<Paginated<LandListingSummary>>(`/land-listings${qs(params)}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useMyLandListings() {
+  return useQuery({
+    queryKey: ["land-listings", "mine"],
+    queryFn: () => api.get<LandListingWithInquiries[]>("/land-listings/mine"),
+  });
+}
+
+export function useLandListing(id: string) {
+  return useQuery({
+    queryKey: ["land-listing", id],
+    queryFn: () => api.get<LandListingWithInquiries>(`/land-listings/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useMyLandListingInquiries() {
+  return useQuery({
+    queryKey: ["land-listing-inquiries", "mine"],
+    queryFn: () => api.get<MyLandListingInquiryRow[]>("/land-listings/inquiries/mine"),
+  });
+}
+
+function useInvalidateLandListings() {
+  const qc = useQueryClient();
+  return (id?: string) => {
+    qc.invalidateQueries({ queryKey: ["land-listings"] });
+    if (id) qc.invalidateQueries({ queryKey: ["land-listing", id] });
+    qc.invalidateQueries({ queryKey: ["land-listing-inquiries", "mine"] });
+  };
+}
+
+export function useCreateLandListing() {
+  const invalidate = useInvalidateLandListings();
+  return useMutation({
+    mutationFn: (body: { parcelId: string; askingPriceBdt: number; description: string }) =>
+      api.post<LandListingSummary>("/land-listings", body),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useWithdrawLandListing(id: string) {
+  const invalidate = useInvalidateLandListings();
+  return useMutation({
+    mutationFn: () => api.patch<LandListingSummary>(`/land-listings/${id}/withdraw`, {}),
+    onSuccess: () => invalidate(id),
+  });
+}
+
+export function useReactivateLandListing(id: string) {
+  const invalidate = useInvalidateLandListings();
+  return useMutation({
+    mutationFn: () => api.patch<LandListingSummary>(`/land-listings/${id}/reactivate`, {}),
+    onSuccess: () => invalidate(id),
+  });
+}
+
+export function useCreateLandListingInquiry(listingId: string) {
+  const invalidate = useInvalidateLandListings();
+  return useMutation({
+    mutationFn: (body: { message?: string }) =>
+      api.post<LandListingInquiryRow>(`/land-listings/${listingId}/inquiries`, body),
+    onSuccess: () => invalidate(listingId),
+  });
+}
+
+export function useAcceptLandListingInquiry(listingId: string) {
+  const invalidate = useInvalidateLandListings();
+  return useMutation({
+    mutationFn: (inquiryId: string) =>
+      api.patch<{ inquiry: LandListingInquiryRow; buyerId: string }>(
+        `/land-listings/${listingId}/inquiries/${inquiryId}/accept`,
+        {},
+      ),
+    onSuccess: () => invalidate(listingId),
+  });
+}
+
+export function useDeclineLandListingInquiry(listingId: string) {
+  const invalidate = useInvalidateLandListings();
+  return useMutation({
+    mutationFn: (inquiryId: string) =>
+      api.patch<{ inquiry: LandListingInquiryRow; buyerId: string }>(
+        `/land-listings/${listingId}/inquiries/${inquiryId}/decline`,
+        {},
+      ),
+    onSuccess: () => invalidate(listingId),
+  });
+}
+
+export function useWithdrawLandListingInquiry(listingId: string) {
+  const invalidate = useInvalidateLandListings();
+  return useMutation({
+    mutationFn: (inquiryId: string) =>
+      api.patch<LandListingInquiryRow>(`/land-listings/${listingId}/inquiries/${inquiryId}/withdraw`, {}),
+    onSuccess: () => invalidate(listingId),
   });
 }

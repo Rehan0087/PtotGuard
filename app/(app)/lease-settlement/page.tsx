@@ -16,6 +16,7 @@ import {
   Smartphone,
   Sprout,
   X,
+  FileText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -27,6 +28,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
@@ -38,8 +45,11 @@ import {
   useApplyLeaseSettlement,
   useServiceApplications,
   useServiceApplicationDecision,
+  useKhasLandPlots,
 } from "@/hooks/queries";
-import type { PaymentMethod, ServiceApplication } from "@/lib/types";
+import type { PaymentMethod, ServiceApplication, KhasLandPlot } from "@/lib/types";
+import { KhasLandMap } from "@/components/khas-land-map";
+import { PaymentConfirmationDialog } from "@/components/payment-confirmation-dialog";
 
 type LandUse = "agricultural" | "non-agricultural";
 
@@ -86,7 +96,7 @@ export default function LeaseSettlementPage() {
 
 // --- Citizen -----------------------------------------------------------------
 
-function ApplyForm({ onDone }: { onDone: () => void }) {
+function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlot?: KhasLandPlot }) {
   const t = useT();
   const f = useFmt();
   const schema = useMemo(() => makeSchema(t), [t]);
@@ -102,9 +112,9 @@ function ApplyForm({ onDone }: { onDone: () => void }) {
   } = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
     defaultValues: {
-      landUse: "agricultural",
-      locationDescription: "",
-      areaDecimals: "",
+      landUse: prefilledPlot ? (prefilledPlot.landUse === "agricultural" ? "agricultural" : "non-agricultural") : "agricultural",
+      locationDescription: prefilledPlot ? `${prefilledPlot.mouza}, ${prefilledPlot.upazila} (Dag No: ${prefilledPlot.dagNo})` : "",
+      areaDecimals: prefilledPlot ? String(prefilledPlot.areaDecimals) : "",
       termYears: "",
       purpose: "",
       paymentMethod: "bkash",
@@ -117,10 +127,7 @@ function ApplyForm({ onDone }: { onDone: () => void }) {
 
   const fee = policy
     ? {
-        amount:
-          landUse === "agricultural"
-            ? policy.leaseSettlementAgriculturalFeeBdt
-            : policy.leaseSettlementNonAgriculturalFeeBdt,
+        amount: policy.leaseSettlementApplicationFeeBdt ?? 20,
         currency: "BDT" as const,
       }
     : null;
@@ -134,6 +141,7 @@ function ApplyForm({ onDone }: { onDone: () => void }) {
         termYears: Number(values.termYears),
         purpose: values.purpose,
         paymentMethod: values.paymentMethod,
+        khasPlotId: prefilledPlot?.id,
       },
       {
         onSuccess: (application) => {
@@ -298,13 +306,55 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
   const t = useT();
   const f = useFmt();
   const s = useStatusMeta();
+  const [busy, setBusy] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const details = application.details as {
     landUse?: LandUse;
     locationDescription?: string;
     areaDecimals?: number;
     termYears?: number;
+    leaseFeeAmount?: number;
+    leaseFeePaidAt?: string;
+    leaseExpiresAt?: string;
   };
   const isAgricultural = details.landUse === "agricultural";
+
+  async function handlePayLease(method: PaymentMethod) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/lease-settlement/${application.id}/pay-lease`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentMethod: method }),
+      });
+      if (!res.ok) throw new Error("Failed to pay lease");
+      toast.success("Lease fee paid successfully");
+      setPaymentDialogOpen(false);
+      window.location.reload();
+    } catch (e) {
+      toast.error("Payment failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRenewLease() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/lease-settlement/${application.id}/renew`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error("Failed to renew lease");
+      toast.success("Lease renewed for 1 year");
+      window.location.reload();
+    } catch (e) {
+      toast.error("Renewal failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Card className="gap-3 px-5">
@@ -326,14 +376,157 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
             {application.feeAmount != null ? (
               <>
                 {" · "}
-                <span className="tabular">{f.money({ amount: application.feeAmount, currency: "BDT" })}</span>
+                <span className="tabular">{f.money({ amount: application.feeAmount, currency: "BDT" })} (Application Fee)</span>
               </>
             ) : null}
           </div>
+          {details.leaseExpiresAt && (
+            <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-1">
+              Active until: {f.date(details.leaseExpiresAt)}
+            </div>
+          )}
         </div>
-        <StatusMetaBadge meta={s.serviceApplication[application.status]} />
+        <div className="flex flex-col items-end gap-2">
+          <StatusMetaBadge meta={s.serviceApplication[application.status]} />
+          {application.status === "approved" && !details.leaseFeePaidAt && details.leaseFeeAmount && (
+            <Button size="sm" onClick={() => setPaymentDialogOpen(true)} disabled={busy}>
+              Pay Lease Fee ({f.money({ amount: details.leaseFeeAmount, currency: "BDT" })})
+            </Button>
+          )}
+          {details.leaseFeePaidAt && (
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setReceiptOpen(true)}>
+                <FileText className="mr-2 size-3" />
+                View Receipt
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleRenewLease} disabled={busy}>
+                {busy && <Loader2 className="mr-2 size-3 animate-spin" />}
+                Renew Lease
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {details.leaseFeeAmount && (
+        <PaymentConfirmationDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          amount={f.money({ amount: details.leaseFeeAmount, currency: "BDT" })}
+          defaultMethod="bkash"
+          busy={busy}
+          onConfirm={handlePayLease}
+        />
+      )}
+
+      {details.leaseFeePaidAt && (
+        <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Lease Payment Receipt</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4 text-sm">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Application No:</span>
+                <span className="font-medium">{application.applicationNo}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Payment Date:</span>
+                <span className="font-medium">{f.date(details.leaseFeePaidAt)}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Amount Paid:</span>
+                <span className="font-medium">{f.money({ amount: details.leaseFeeAmount ?? 0, currency: "BDT" })}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-muted-foreground">Valid Until:</span>
+                <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                  {details.leaseExpiresAt ? f.date(details.leaseExpiresAt) : "N/A"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                This is a system generated receipt and does not require a physical signature. It serves as validation for one year of land lease.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
+  );
+}
+
+function NewApplicationFlow({ onDone }: { onDone: () => void }) {
+  const t = useT();
+  const { data } = useKhasLandPlots({ status: "available" });
+  const [selectedPlot, setSelectedPlot] = useState<KhasLandPlot | undefined>();
+  const [showForm, setShowForm] = useState(false);
+  const plots = data?.items ?? [];
+
+  if (showForm) {
+    return (
+      <div className="space-y-4">
+        {selectedPlot ? (
+          <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+            <div className="text-sm">
+              <span className="font-medium">Selected Plot:</span> {selectedPlot.dagNo} ({selectedPlot.mouza}, {selectedPlot.upazila}) — {selectedPlot.areaDecimals} decimals
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>
+              Back to Map
+            </Button>
+          </div>
+        ) : null}
+        <ApplyForm onDone={onDone} prefilledPlot={selectedPlot} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4 space-y-4">
+        <div className="text-sm text-muted-foreground font-medium flex justify-between items-center">
+          <span>Select an available plot from the map or list, or skip to apply manually:</span>
+          <Button variant="secondary" size="sm" onClick={() => {
+            setSelectedPlot(undefined);
+            setShowForm(true);
+          }}>
+            Skip Map Selection
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <KhasLandMap plots={plots} selectedId={selectedPlot?.id} onSelect={setSelectedPlot} className="h-96" />
+          </div>
+          
+          <div className="flex flex-col gap-2 overflow-y-auto max-h-96 pr-1">
+            <div className="text-sm font-medium mb-1">Available Plots</div>
+            {plots.map((plot) => (
+              <div 
+                key={plot.id} 
+                onClick={() => setSelectedPlot(plot)}
+                className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedPlot?.id === plot.id ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}
+              >
+                <div className="font-medium text-sm">Dag No: {plot.dagNo}</div>
+                <div className="text-xs text-muted-foreground">{plot.mouza}, {plot.upazila}</div>
+                <div className="text-xs text-muted-foreground mt-1 capitalize">{plot.areaDecimals} decimals • {plot.landUse}</div>
+                
+                {selectedPlot?.id === plot.id && (
+                  <Button size="sm" className="w-full mt-3" onClick={() => setShowForm(true)}>
+                    Apply for this Plot
+                  </Button>
+                )}
+              </div>
+            ))}
+            
+            {plots.length === 0 && (
+              <div className="text-sm text-muted-foreground italic p-4 text-center border rounded-lg border-dashed">
+                No plots currently available.
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -362,7 +555,7 @@ function CitizenLeaseSettlement() {
         )}
       </PageHeader>
 
-      {applying ? <ApplyForm onDone={() => setApplying(false)} /> : null}
+      {applying ? <NewApplicationFlow onDone={() => setApplying(false)} /> : null}
 
       {isLoading ? (
         <div className="space-y-3">
@@ -376,7 +569,12 @@ function CitizenLeaseSettlement() {
             icon={Sprout}
             title={t.pages.leaseSettlement.emptyTitle}
             description={t.pages.leaseSettlement.emptyBody}
-          />
+          >
+            <Button onClick={() => setApplying(true)}>
+              <Plus className="size-4 mr-2" />
+              {t.pages.leaseSettlement.newRequest}
+            </Button>
+          </EmptyState>
         )
       ) : (
         <div className="space-y-3">

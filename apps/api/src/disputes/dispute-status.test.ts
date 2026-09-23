@@ -73,7 +73,7 @@ describe("moving a dispute along", () => {
   it("refuses an unauthenticated move", async () => {
     await request(app.getHttpServer())
       .patch("/disputes/ds-1/status")
-      .send({ status: "under-review" })
+      .send({ status: "under-land-office-review" })
       .expect(401);
   });
 
@@ -81,7 +81,7 @@ describe("moving a dispute along", () => {
     await request(app.getHttpServer())
       .patch("/disputes/ds-1/status")
       .set("authorization", bearer("usr-ayesha", "citizen"))
-      .send({ status: "under-review" })
+      .send({ status: "under-land-office-review" })
       .expect(403);
   });
 
@@ -89,10 +89,10 @@ describe("moving a dispute along", () => {
     await request(app.getHttpServer())
       .patch("/disputes/ds-1/status")
       .set("authorization", bearer("usr-officer", "land-office"))
-      .send({ status: "under-review" })
+      .send({ status: "under-land-office-review" })
       .expect(200);
 
-    expect(dispute.status).toBe("under-review");
+    expect(dispute.status).toBe("under-land-office-review");
   });
 
   it("sends listing through the hearing, not a status write", async () => {
@@ -109,17 +109,17 @@ describe("moving a dispute along", () => {
     const response = await request(app.getHttpServer())
       .patch("/disputes/ds-1/status")
       .set("authorization", bearer("usr-mediator", "mediator"))
-      .send({ status: "resolved" })
+      .send({ status: "decided" })
       .expect(422);
 
-    expect(response.body.reason).toMatchObject({ code: "resolve-via-ruling" });
+    expect(response.body.reason).toMatchObject({ code: "decide-via-ruling" });
   });
 
   it("refuses a jump that skips review", async () => {
     const response = await request(app.getHttpServer())
       .patch("/disputes/ds-1/status")
       .set("authorization", bearer("usr-mediator", "mediator"))
-      .send({ status: "in-mediation" })
+      .send({ status: "forwarded-to-settlement" })
       .expect(422);
 
     expect(response.body.reason).toMatchObject({ code: "illegal-transition" });
@@ -130,7 +130,7 @@ describe("moving a dispute along", () => {
     const response = await request(app.getHttpServer())
       .patch("/disputes/ds-1/status")
       .set("authorization", bearer("usr-mediator", "mediator"))
-      .send({ status: "under-review" })
+      .send({ status: "under-land-office-review" })
       .expect(422);
 
     expect(response.body.reason).toMatchObject({ code: "already-closed" });
