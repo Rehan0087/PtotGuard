@@ -530,6 +530,56 @@ export interface AssistantMessageMock {
 export const assistantMessages: AssistantMessageMock[] = [];
 
 // ---------------------------------------------------------------------------
+// Land marketplace — browse, list, express interest. See lib/mocks/handlers.ts
+// for how a listing hands off into the Mutation ("sale") flow once accepted.
+// ---------------------------------------------------------------------------
+export interface LandListingMock {
+  id: string;
+  parcelId: string;
+  sellerId: string;
+  askingPriceBdt: number;
+  description: string;
+  status: "active" | "under-transfer" | "withdrawn";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LandListingInquiryMock {
+  id: string;
+  listingId: string;
+  buyerId: string;
+  message?: string;
+  status: "open" | "accepted" | "declined" | "withdrawn";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const landListings: LandListingMock[] = [
+  {
+    id: "ll-1",
+    parcelId: "p-092",
+    sellerId: "usr-ayesha",
+    askingPriceBdt: 1_500_000,
+    description: "Roadside residential plot in Rajamehar, close to the bazar and paved road access.",
+    status: "active",
+    createdAt: "2026-09-10T09:00:00Z",
+    updatedAt: "2026-09-10T09:00:00Z",
+  },
+];
+
+export const landListingInquiries: LandListingInquiryMock[] = [
+  {
+    id: "lli-1",
+    listingId: "ll-1",
+    buyerId: "usr-karim",
+    message: "Interested — is the boundary survey up to date?",
+    status: "open",
+    createdAt: "2026-09-12T10:00:00Z",
+    updatedAt: "2026-09-12T10:00:00Z",
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Audit ledger seed (hashes are computed by the handler to form the chain)
 // ---------------------------------------------------------------------------
 export const auditSeed: Omit<AuditEvent, "prevHash" | "hash">[] = [

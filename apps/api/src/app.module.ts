@@ -30,6 +30,7 @@ import { OcrModule } from "./ocr/ocr.module";
 import { GrievancesModule } from "./grievances/grievances.module";
 import { KhasLandPlotsModule } from "./khas-land-plots/khas-land-plots.module";
 import { AssistantModule } from "./assistant/assistant.module";
+import { LandListingsModule } from "./land-listings/land-listings.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
@@ -65,6 +66,7 @@ import { AssistantModule } from "./assistant/assistant.module";
     GrievancesModule,
     KhasLandPlotsModule,
     AssistantModule,
+    LandListingsModule,
   ],
 
   controllers: [HealthController],

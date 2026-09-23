@@ -102,6 +102,8 @@ model User {
   notifications                AppNotification[]
   auditActions                 AuditEvent[]
   assistantConversation        AssistantConversation?
+  landListingsSold             LandListing[]             @relation("LandListingSeller")
+  landListingInquiriesMade     LandListingInquiry[]      @relation("LandListingBuyer")
 
   @@index([jurisdictionId])
   @@map("users")
@@ -148,6 +150,7 @@ model Parcel {
   mutations           Mutation[]
   serviceApplications ServiceApplication[]
   fieldReports        FieldReport[]
+  landListings        LandListing[]
 
   /// Scoped to the jurisdiction, not global. A dag number only carries meaning
   /// within its mouza — two mouzas can each legitimately hold a dag 142 /
@@ -500,6 +503,49 @@ model AssistantMessage {
 
   @@index([conversationId])
   @@map("assistant_messages")
+}
+
+// --- Land marketplace --------------------------------------------------
+
+/// A parcel its owner has put up for sale. Browsing and inquiries happen
+/// here; the actual transfer is the existing Mutation ("sale") flow,
+/// kicked off once the seller accepts a buyer.
+model LandListing {
+  id             String   @id
+  parcelId       String
+  parcel         Parcel   @relation(fields: [parcelId], references: [id])
+  sellerId       String
+  seller         User     @relation("LandListingSeller", fields: [sellerId], references: [id])
+  askingPriceBdt Int
+  description    String
+  /// LandListingStatus: "active" | "under-transfer" | "withdrawn"
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  inquiries LandListingInquiry[]
+
+  @@index([parcelId])
+  @@index([sellerId])
+  @@index([status])
+  @@map("land_listings")
+}
+
+model LandListingInquiry {
+  id        String      @id
+  listingId String
+  listing   LandListing @relation(fields: [listingId], references: [id])
+  buyerId   String
+  buyer     User        @relation("LandListingBuyer", fields: [buyerId], references: [id])
+  message   String?
+  /// LandListingInquiryStatus: "open" | "accepted" | "declined" | "withdrawn"
+  status    String      @default("open")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@map("land_listing_inquiries")
 }
 
 // --- Field reports ----------------------------------------------------------
