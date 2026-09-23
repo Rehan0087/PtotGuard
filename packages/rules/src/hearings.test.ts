@@ -115,7 +115,7 @@ function dispute(over: Partial<Dispute> = {}): Dispute {
     parcelId: "p-1",
     parcelDagNo: "CS-1",
     type: "boundary",
-    status: "in-mediation",
+    status: "forwarded-to-settlement",
     priority: "medium",
     filedById: "usr-1",
     filedByName: "Aleya Begum",
@@ -145,7 +145,7 @@ describe("disputesNeedingHearing", () => {
     expect(disputesNeedingHearing([dispute()], [theirs])).toEqual([]);
   });
 
-  it.each(["submitted", "under-review", "field-visit-scheduled"] as const)(
+  it.each(["submitted", "under-land-office-review", "field-verified"] as const)(
     "leaves a %s case with the land office",
     (status) => {
       // Referral is the officer's decision, not the mediator's.
@@ -153,7 +153,7 @@ describe("disputesNeedingHearing", () => {
     },
   );
 
-  it.each(["resolved", "rejected", "withdrawn"] as const)(
+  it.each(["decided", "rejected", "withdrawn"] as const)(
     "never asks for a hearing on a %s case",
     (status) => {
       expect(disputesNeedingHearing([dispute({ status })], [])).toEqual([]);
