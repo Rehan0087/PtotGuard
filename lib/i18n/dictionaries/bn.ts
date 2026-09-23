@@ -155,7 +155,7 @@ export const bn: Dictionary = {
     revenueCases: "রাজস্ব মামলা",
     leaseSettlement: "বন্দোবস্ত",
     acquisition: "অধিগ্রহণ ও হুকুমদখল",
-    infoBank: "ভূমি তথ্য ব্যাংক",
+
     appointments: "অ্যাপয়েন্টমেন্ট",
     payments: "পরিশোধ",
     profile: "প্রোফাইল",
@@ -690,18 +690,7 @@ export const bn: Dictionary = {
       queueEmptyBody: "পর্যালোচনার জন্য কোনো রাজস্ব মামলা অপেক্ষায় নেই।",
     },
 
-    landInfoBank: {
-      description: "ঐতিহাসিক ভূমি অধিগ্রহণ, বন্দোবস্ত এবং আইনি সিদ্ধান্ত অনুসন্ধান করুন।",
-      purposeLabel: "উদ্দেশ্য / বিবরণ",
-      awardLabel: "ক্ষতিপূরণ / বন্দোবস্ত",
-      decidedLabel: (when: string) => `নিষ্পন্ন হয়েছে ${when}`,
-      searchPlaceholder: "দাগ, খতিয়ান বা নাম দিয়ে অনুসন্ধান করুন...",
-      noResultsTitle: "কোনো মিলে যাওয়া রেকর্ড পাওয়া যায়নি",
-      noResultsBody: "আপনার অনুসন্ধানের সাথে মিলে যাওয়া কোনো ভূমি তথ্য ব্যাংকের রেকর্ড আমরা খুঁজে পাইনি।",
-      emptyTitle: "ভূমি তথ্য ব্যাংক খালি",
-      emptyBody: "এই মুহূর্তে কোনো ঐতিহাসিক রেকর্ড উপলব্ধ নেই।",
-      resultCount: (count: number) => `${count} টি রেকর্ড দেখাচ্ছে`,
-    },
+
 
     cases: {
       description: "শুনানি, বিবেচনা ও রায়ের জন্য আপনার কাছে পাঠানো বিরোধসমূহ।",
@@ -1900,8 +1889,7 @@ export const bn: Dictionary = {
         landAdminBody: "রেকর্ডের সহিমোহরি নকল এবং রেকর্ড সংশোধন।",
         revenueCases: "রাজস্ব মামলা",
         revenueCasesBody: "রাজস্ব আদালতে মামলা দায়ের করুন ও অগ্রগতি দেখুন।",
-        infoBank: "ভূমি তথ্য ব্যাংক",
-        infoBankBody: "রেকর্ডভুক্ত খাস, অধিগ্রহণকৃত ও সরকারি জমি দেখুন।",
+
       },
     },
 

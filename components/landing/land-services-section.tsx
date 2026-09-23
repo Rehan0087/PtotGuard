@@ -102,16 +102,7 @@ export function LandServicesSection() {
       icon: Scale,
       href: "/portal?service=revenue-cases"
     },
-    {
-      id: "infoBank",
-      titleBn: "ভূমি তথ্য ব্যাংক",
-      titleEn: "Land Information Bank",
-      barColor: "bg-[#00cec9]",
-      iconBg: "bg-[#e0f7fa]",
-      iconColor: "text-[#00cec9]",
-      icon: Landmark,
-      href: "/portal?service=info-bank"
-    },
+
     {
       id: "techGrievance",
       titleBn: "কারিগরি ও অভিযোগ প্রতিকার ব্যবস্থাপনা",

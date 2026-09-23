@@ -16,7 +16,7 @@ import { LandAdminModule } from "./land-admin/land-admin.module";
 import { RevenueCasesModule } from "./revenue-cases/revenue-cases.module";
 import { LeaseSettlementModule } from "./lease-settlement/lease-settlement.module";
 import { AcquisitionModule } from "./acquisition/acquisition.module";
-import { LandInfoBankModule } from "./land-info-bank/land-info-bank.module";
+
 import { AppointmentsModule } from "./appointments/appointments.module";
 import { InheritanceModule } from "./inheritance/inheritance.module";
 import { FieldReportsModule } from "./field-reports/field-reports.module";
@@ -50,7 +50,7 @@ import { KhasLandPlotsModule } from "./khas-land-plots/khas-land-plots.module";
     RevenueCasesModule,
     LeaseSettlementModule,
     AcquisitionModule,
-    LandInfoBankModule,
+
     AppointmentsModule,
     InheritanceModule,
     FieldReportsModule,

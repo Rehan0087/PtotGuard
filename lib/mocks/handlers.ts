@@ -2591,49 +2591,6 @@ export const handlers = [
     return HttpResponse.json(application);
   }),
 
-  // Land information bank -------------------------------------------------------
-  // Read-only: parcels with an approved acquisition notice. No khas-land
-  // inventory exists in this system, so this shows only what actually
-  // happened — nothing applied for, paid, or decided. Mirrors
-  // land-info-bank.controller.ts.
-  http.get(`${API}/land-info-bank`, async ({ request }) => {
-    await latency();
-    const url = new URL(request.url);
-    const q = url.searchParams.get("q")?.trim().toLowerCase();
-
-    const entries = db.serviceApplications
-      .filter((a) => a.serviceType === "acquisition" && a.status === "approved")
-      .sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))
-      .map((application) => ({
-        application,
-        parcel: (() => {
-          const parcel = db.parcels.find((p) => p.id === application.parcelId);
-          if (!parcel) return undefined;
-          return {
-            ...parcel,
-            registryStatus: recordRegistryStatus(
-              db.mutations.filter((mutation) => mutation.parcelId === parcel.id),
-              db.disputes.filter((dispute) => dispute.parcelId === parcel.id && !isClosed(dispute.status)).length,
-              db.documents.some((document) => document.parcelId === parcel.id && document.verificationStatus === "flagged"),
-            ),
-          };
-        })(),
-      }))
-      .filter((e): e is { application: (typeof db.serviceApplications)[number]; parcel: NonNullable<typeof e.parcel> } =>
-        Boolean(e.parcel),
-      )
-      .filter((e) => {
-        if (!q) return true;
-        const purpose = String((e.application.details as { purpose?: string })?.purpose ?? "");
-        return (
-          e.parcel.dagNo.toLowerCase().includes(q) ||
-          e.parcel.title.toLowerCase().includes(q) ||
-          purpose.toLowerCase().includes(q)
-        );
-      });
-
-    return HttpResponse.json(paginate(entries, url));
-  }),
 
   // Appointment booking -----------------------------------------------------
   // "Office" is a real upazila-level jurisdiction, the same one every other
