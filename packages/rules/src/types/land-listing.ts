@@ -6,7 +6,7 @@ import type { ID, ISODateString } from "./common";
  * Mutation ("sale") flow. See land-listings.ts for the gates.
  */
 
-export type LandListingStatus = "active" | "under-transfer" | "withdrawn";
+export type LandListingStatus = "active" | "under-transfer" | "sold" | "withdrawn";
 
 export type LandListingInquiryStatus = "open" | "accepted" | "declined" | "withdrawn";
 

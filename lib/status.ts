@@ -128,6 +128,7 @@ export const grievanceStatusTone: Record<GrievanceStatus, StatusTone> = {
 export const landListingStatusTone: Record<LandListingStatus, StatusTone> = {
   active: "verified",
   "under-transfer": "review",
+  sold: "neutral",
   withdrawn: "draft",
 };
 

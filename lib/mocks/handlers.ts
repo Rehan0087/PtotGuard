@@ -67,6 +67,7 @@ import {
   listingTransition,
   canDecideInquiry,
   canWithdrawInquiry,
+  listingAfterMutationDecision,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
@@ -1554,6 +1555,26 @@ export const handlers = [
         ...(approving ? (note ? { note } : {}) : { reason }),
       },
     });
+    // Mirrors MutationsController.settleMarketplaceListing().
+    if (mutation.type === "sale" && mutation.toOwnerId) {
+      const listing = db.landListings.find(
+        (l) =>
+          l.parcelId === mutation.parcelId &&
+          l.status === "under-transfer" &&
+          inquiriesFor(l.id).some((i) => i.buyerId === mutation.toOwnerId && i.status === "accepted"),
+      );
+      if (listing) {
+        const outcome = listingAfterMutationDecision(approving);
+        listing.status = outcome.listing;
+        listing.updatedAt = new Date().toISOString();
+        for (const inquiry of inquiriesFor(listing.id)) {
+          if (inquiry.buyerId === mutation.toOwnerId && inquiry.status === "accepted") {
+            inquiry.status = outcome.acceptedInquiry;
+            inquiry.updatedAt = listing.updatedAt;
+          }
+        }
+      }
+    }
     return HttpResponse.json(mutation);
   }),
 

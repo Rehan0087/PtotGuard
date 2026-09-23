@@ -539,7 +539,7 @@ export interface LandListingMock {
   sellerId: string;
   askingPriceBdt: number;
   description: string;
-  status: "active" | "under-transfer" | "withdrawn";
+  status: "active" | "under-transfer" | "sold" | "withdrawn";
   createdAt: string;
   updatedAt: string;
 }

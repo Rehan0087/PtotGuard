@@ -356,30 +356,32 @@ function MyListingCard({ listing }: { listing: LandListingWithInquiries }) {
         <InquiryRow listing={listing} />
       </div>
 
-      <div className="flex items-center gap-2 border-t border-border pt-3">
-        {listing.status !== "withdrawn" ? (
-          <Button size="xs" variant="outline" disabled={withdraw.isPending} onClick={() => withdraw.mutate()}>
-            {t.pages.marketplace.withdrawListing}
-          </Button>
-        ) : (
-          <Button size="xs" variant="outline" disabled={reactivate.isPending} onClick={() => reactivate.mutate()}>
-            {t.pages.marketplace.reactivateListing}
-          </Button>
-        )}
-        {listing.status === "under-transfer" ? (
-          <Button
-            size="xs"
-            nativeButton={false}
-            render={
-              <Link
-                href={`/mutations/new?parcelId=${listing.parcelId}`}
-              />
-            }
-          >
-            {t.pages.marketplace.continueToMutation}
-          </Button>
-        ) : null}
-      </div>
+      {listing.status === "sold" ? null : (
+        <div className="flex items-center gap-2 border-t border-border pt-3">
+          {listing.status !== "withdrawn" ? (
+            <Button size="xs" variant="outline" disabled={withdraw.isPending} onClick={() => withdraw.mutate()}>
+              {t.pages.marketplace.withdrawListing}
+            </Button>
+          ) : (
+            <Button size="xs" variant="outline" disabled={reactivate.isPending} onClick={() => reactivate.mutate()}>
+              {t.pages.marketplace.reactivateListing}
+            </Button>
+          )}
+          {listing.status === "under-transfer" ? (
+            <Button
+              size="xs"
+              nativeButton={false}
+              render={
+                <Link
+                  href={`/mutations/new?parcelId=${listing.parcelId}`}
+                />
+              }
+            >
+              {t.pages.marketplace.continueToMutation}
+            </Button>
+          ) : null}
+        </div>
+      )}
     </Card>
   );
 }

@@ -3,6 +3,7 @@ import {
   canDecideInquiry,
   canListParcel,
   canWithdrawInquiry,
+  listingAfterMutationDecision,
   listingNextStatuses,
   listingTransition,
 } from "./land-listings";
@@ -115,5 +116,31 @@ describe("canWithdrawInquiry", () => {
     const result = canWithdrawInquiry("accepted");
     expect(result.canWithdraw).toBe(false);
     expect(result.blocker).toEqual({ code: "inquiry-not-open", status: "accepted" });
+  });
+});
+
+describe("sold listings", () => {
+  it("refuses any move out of sold", () => {
+    for (const to of ["active", "withdrawn", "under-transfer"] as const) {
+      expect(listingTransition("sold", to).blockers).toEqual([{ code: "already-sold" }]);
+    }
+  });
+
+  it("refuses a seller marking their own listing sold — only an approved transfer does that", () => {
+    expect(listingTransition("under-transfer", "sold").blockers).toEqual([{ code: "sold-via-mutation" }]);
+  });
+
+  it("offers no moves from sold", () => {
+    expect(listingNextStatuses("sold")).toEqual([]);
+  });
+});
+
+describe("listingAfterMutationDecision", () => {
+  it("marks the listing sold when the transfer is approved", () => {
+    expect(listingAfterMutationDecision(true)).toEqual({ listing: "sold", acceptedInquiry: "accepted" });
+  });
+
+  it("puts the listing back on the market and drops the buyer's interest when rejected", () => {
+    expect(listingAfterMutationDecision(false)).toEqual({ listing: "active", acceptedInquiry: "declined" });
   });
 });

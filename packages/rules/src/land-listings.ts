@@ -36,13 +36,21 @@ export function canListParcel(
   return { canList: blockers.length === 0, blockers };
 }
 
+/**
+ * `sold` is terminal and reached only by the land office approving the
+ * transfer (see listingAfterMutationDecision) — never by the seller, and
+ * never undone: the parcel has a new owner, who lists it afresh if they sell.
+ */
 const LISTING_ALLOWED: Record<LandListingStatus, LandListingStatus[]> = {
   active: ["under-transfer", "withdrawn"],
   "under-transfer": ["active", "withdrawn"],
+  sold: [],
   withdrawn: ["active"],
 };
 
 export type ListingTransitionBlocker =
+  | { code: "already-sold" }
+  | { code: "sold-via-mutation" }
   | { code: "same-status"; status: LandListingStatus }
   | { code: "illegal-transition"; from: LandListingStatus; to: LandListingStatus };
 
@@ -53,7 +61,9 @@ export interface ListingTransitionReview {
 
 export function listingTransition(from: LandListingStatus, to: LandListingStatus): ListingTransitionReview {
   const blockers: ListingTransitionBlocker[] = [];
-  if (to === from) blockers.push({ code: "same-status", status: from });
+  if (from === "sold") blockers.push({ code: "already-sold" });
+  else if (to === "sold") blockers.push({ code: "sold-via-mutation" });
+  else if (to === from) blockers.push({ code: "same-status", status: from });
   else if (!LISTING_ALLOWED[from].includes(to)) blockers.push({ code: "illegal-transition", from, to });
 
   return { canChange: blockers.length === 0, blockers };
@@ -85,4 +95,19 @@ export function canWithdrawInquiry(inquiryStatus: LandListingInquiryStatus): {
 } {
   if (inquiryStatus !== "open") return { canWithdraw: false, blocker: { code: "inquiry-not-open", status: inquiryStatus } };
   return { canWithdraw: true };
+}
+
+/**
+ * What the land office's decision on the resulting sale mutation does to
+ * the listing it came from. Approval moved ownership, so the listing is
+ * sold; rejection means the deal fell through, so the listing is back on
+ * the market and the buyer's accepted interest no longer stands.
+ */
+export function listingAfterMutationDecision(approved: boolean): {
+  listing: LandListingStatus;
+  acceptedInquiry: LandListingInquiryStatus;
+} {
+  return approved
+    ? { listing: "sold", acceptedInquiry: "accepted" }
+    : { listing: "active", acceptedInquiry: "declined" };
 }

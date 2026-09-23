@@ -16,6 +16,7 @@ import type { Request } from "express";
 import type { Prisma } from "@prisma/client";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
+  listingAfterMutationDecision,
   mutationActionGate,
   mutationDocumentGate,
   mutationObjectionSummary,
@@ -493,6 +494,10 @@ export class MutationsController {
         });
       }
 
+      if (mutation.type === "sale") {
+        await this.settleMarketplaceListing(tx, mutation, approving, actor.id, now);
+      }
+
       await this.audit.append(tx, {
         entityType: "mutation",
         entityId: updated.id,
@@ -659,6 +664,69 @@ export class MutationsController {
       }
       throw new ValidationError(gate.hold?.code === "wrong-status" || !gate.hold
         ? { code: "wrong-status", expected } : gate.hold, "status");
+    }
+  }
+
+  /**
+   * A sale filed from a marketplace listing settles that listing once the
+   * land office decides. Matched by parcel plus the buyer whose interest the
+   * seller accepted, so a sale the seller filed by hand after agreeing on the
+   * marketplace settles too; a sale unrelated to any listing finds none.
+   */
+  private async settleMarketplaceListing(
+    tx: Prisma.TransactionClient,
+    mutation: { parcelId: string; toOwnerId: string | null; mutationNumber: string },
+    approved: boolean,
+    actorId: string,
+    now: Date,
+  ) {
+    if (!mutation.toOwnerId) return;
+    const listing = await tx.landListing.findFirst({
+      where: {
+        parcelId: mutation.parcelId,
+        status: "under-transfer",
+        inquiries: { some: { buyerId: mutation.toOwnerId, status: "accepted" } },
+      },
+      include: { inquiries: { where: { buyerId: mutation.toOwnerId, status: "accepted" } } },
+    });
+    if (!listing) return;
+
+    const outcome = listingAfterMutationDecision(approved);
+    await tx.landListing.update({ where: { id: listing.id }, data: { status: outcome.listing } });
+    await tx.landListingInquiry.updateMany({
+      where: { id: { in: listing.inquiries.map((i) => i.id) } },
+      data: { status: outcome.acceptedInquiry },
+    });
+    await this.audit.append(tx, {
+      entityType: "land-listing",
+      entityId: listing.id,
+      action: "status-change",
+      actorId,
+      payload: { from: "under-transfer", to: outcome.listing, mutationNumber: mutation.mutationNumber },
+    });
+
+    const notices = approved
+      ? [
+          { userId: listing.sellerId, title: "Listing sold", body: `The land office approved the transfer (${mutation.mutationNumber}). Your listing is marked sold.` },
+          { userId: mutation.toOwnerId, title: "Purchase approved", body: `The land office approved the transfer (${mutation.mutationNumber}). The parcel is now recorded in your name.` },
+        ]
+      : [
+          { userId: listing.sellerId, title: "Listing back on the market", body: `The land office rejected the transfer (${mutation.mutationNumber}), so your listing is active again.` },
+          { userId: mutation.toOwnerId, title: "Purchase did not go through", body: `The land office rejected the transfer (${mutation.mutationNumber}). The listing has been reopened to other buyers.` },
+        ];
+    for (const notice of notices) {
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: notice.userId,
+          at: now,
+          severity: approved ? "success" : "warning",
+          title: notice.title,
+          body: notice.body,
+          read: false,
+          href: `/marketplace/${listing.id}`,
+        },
+      });
     }
   }
 

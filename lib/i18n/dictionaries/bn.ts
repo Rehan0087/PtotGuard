@@ -204,6 +204,7 @@ export const bn: Dictionary = {
     landListing: {
       active: "তালিকাভুক্ত",
       "under-transfer": "হস্তান্তরাধীন",
+      sold: "বিক্রীত",
       withdrawn: "প্রত্যাহৃত",
     },
     landListingInquiry: {

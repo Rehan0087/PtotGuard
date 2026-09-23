@@ -225,6 +225,7 @@ export const en = {
     landListing: {
       active: "Listed",
       "under-transfer": "Under transfer",
+      sold: "Sold",
       withdrawn: "Withdrawn",
     },
     landListingInquiry: {
