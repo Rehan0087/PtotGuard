@@ -10,7 +10,6 @@ import {
   Sprout,
   Building2,
   Scale,
-  FileStack,
   FileText,
   CalendarClock,
   Receipt,
@@ -34,7 +33,7 @@ const SERVICES: Service[] = [
   { navKey: "acquisition", icon: Landmark, href: "/acquisition", iconColor: "text-pink-600 border-pink-600" },
   { navKey: "myProperties", icon: MapPin, href: "/properties", iconColor: "text-blue-500 border-blue-500" },
   { navKey: "leaseSettlement", icon: Sprout, href: "/lease-settlement", iconColor: "text-green-500 border-green-500" },
-  { navKey: "infoBank", icon: FileStack, href: "/land-info-bank", iconColor: "text-indigo-500 border-indigo-500" },
+
   { navKey: "inheritance", icon: GitBranch, href: "/inheritance", iconColor: "text-purple-500 border-purple-500" },
   { navKey: "myDocuments", icon: FileText, href: "/documents", iconColor: "text-sky-500 border-sky-500" },
   { navKey: "disputes", icon: Scale, href: "/disputes", iconColor: "text-red-500 border-red-500" },

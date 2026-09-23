@@ -175,7 +175,7 @@ export const en = {
     revenueCases: "Revenue cases",
     leaseSettlement: "Lease & settlement",
     acquisition: "Acquisition & requisition",
-    infoBank: "Land information bank",
+
     appointments: "Appointments",
     payments: "Payments",
     profile: "Profile",
@@ -720,18 +720,7 @@ export const en = {
       queueEmptyBody: "There are no revenue cases waiting for review.",
     },
 
-    landInfoBank: {
-      description: "Search and view historic land acquisitions, settlements, and legal precedents.",
-      purposeLabel: "Purpose / Description",
-      awardLabel: "Award / Settlement",
-      decidedLabel: (when: string) => `Decided on ${when}`,
-      searchPlaceholder: "Search parcels by dag, khatian, or title...",
-      noResultsTitle: "No matching records",
-      noResultsBody: "We couldn't find any land info bank records matching your search.",
-      emptyTitle: "Land Info Bank is empty",
-      emptyBody: "There are no historic records available at this time.",
-      resultCount: (count: number) => `Showing ${count} record${count === 1 ? "" : "s"}`,
-    },
+
 
     cases: {
       description: "Disputes referred to you for hearing, deliberation, and ruling.",
@@ -1972,8 +1961,7 @@ export const en = {
         landAdminBody: "Certified copies of records, and corrections to what is on file.",
         revenueCases: "Revenue cases",
         revenueCasesBody: "File and follow a case before the revenue court.",
-        infoBank: "Land information bank",
-        infoBankBody: "Browse khas, acquired, and government land on record.",
+
       },
     },
 
