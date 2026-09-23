@@ -307,6 +307,19 @@ export const bn: Dictionary = {
     }),
   },
 
+  assistant: {
+    launcherLabel: "PlotGuard সহকারীর সাথে কথা বলুন",
+    panelTitle: "PlotGuard সহকারী",
+    greeting:
+      "নমস্কার! আপনার জমি, আবেদন বা বিরোধ সম্পর্কে, অথবা যেকোনো PlotGuard সেবা কীভাবে কাজ করে তা জিজ্ঞাসা করুন।",
+    placeholder: "আপনার প্রশ্ন লিখুন…",
+    send: "পাঠান",
+    reset: "নতুন করে শুরু করুন",
+    thinking: "ভাবছে…",
+    errorGeneric: "কিছু একটা সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+    errorRateLimited: "আপনি অনেকগুলো বার্তা পাঠিয়েছেন — কিছুক্ষণ পর আবার চেষ্টা করুন।",
+  },
+
   disputeEvents: {
     filed: "বিরোধ দাখিল হয়েছে",
     assigned: (to: string) => `${to}-কে বরাদ্দ করা হয়েছে`,

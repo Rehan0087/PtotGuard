@@ -1155,3 +1155,60 @@ export function useKhasLandPlots(params: { landUse?: string; status?: string } =
     queryFn: () => api.get<Paginated<KhasLandPlot>>(`/khas-land-plots${qs(params)}`),
   });
 }
+
+// --- Assistant (citizen help chatbot) ---------------------------------------
+// Read-only for the citizen's own data, and it never files or pays anything —
+// see apps/api/src/assistant. One running conversation per citizen, cleared
+// with reset rather than a conversation list.
+
+export interface AssistantMessageRow {
+  id: string;
+  role: "user" | "model";
+  content: string;
+  createdAt: string;
+}
+
+export interface AssistantSuggestedAction {
+  href: string;
+  label: string;
+}
+
+export function useAssistantConversation() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["assistant-conversation"],
+    queryFn: () => api.get<{ id: string; messages: AssistantMessageRow[] }>("/assistant/conversation"),
+    enabled: role === "citizen",
+  });
+}
+
+export function useSendAssistantMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { message: string; locale: "en" | "bn" }) =>
+      api.post<{ message: AssistantMessageRow; suggestedActions: AssistantSuggestedAction[] }>(
+        "/assistant/message",
+        body,
+      ),
+    onSuccess: (result, variables) => {
+      qc.setQueryData<{ id: string; messages: AssistantMessageRow[] }>(["assistant-conversation"], (prev) => {
+        if (!prev) return prev;
+        const userMessage: AssistantMessageRow = {
+          id: `${result.message.id}-user`,
+          role: "user",
+          content: variables.message,
+          createdAt: result.message.createdAt,
+        };
+        return { ...prev, messages: [...prev.messages, userMessage, result.message] };
+      });
+    },
+  });
+}
+
+export function useResetAssistantConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post("/assistant/reset"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assistant-conversation"] }),
+  });
+}

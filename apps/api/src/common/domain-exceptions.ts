@@ -74,3 +74,9 @@ export class ForbiddenError extends DomainError {
     );
   }
 }
+
+export class TooManyRequestsError extends DomainError {
+  constructor(message = "Too many requests") {
+    super({ error: "too_many_requests", message } satisfies ErrorBody, HttpStatus.TOO_MANY_REQUESTS);
+  }
+}

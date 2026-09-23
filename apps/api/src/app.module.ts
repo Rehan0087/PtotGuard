@@ -29,6 +29,7 @@ import { LandOfficeDashboardModule } from "./land-office-dashboard/land-office-d
 import { OcrModule } from "./ocr/ocr.module";
 import { GrievancesModule } from "./grievances/grievances.module";
 import { KhasLandPlotsModule } from "./khas-land-plots/khas-land-plots.module";
+import { AssistantModule } from "./assistant/assistant.module";
 
 /**
  * The root module. Domain modules (parcels, disputes, mutations, …) hang off
@@ -63,6 +64,7 @@ import { KhasLandPlotsModule } from "./khas-land-plots/khas-land-plots.module";
     OcrModule,
     GrievancesModule,
     KhasLandPlotsModule,
+    AssistantModule,
   ],
 
   controllers: [HealthController],

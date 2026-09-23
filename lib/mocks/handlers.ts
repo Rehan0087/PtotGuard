@@ -4343,6 +4343,79 @@ export const handlers = [
     return HttpResponse.json(n);
   }),
 
+  // Assistant (citizen help chatbot) --------------------------------------
+  // Simulated: keyword matching against the same mock data, not a real
+  // model. Proves the UI contract (shapes), not the model's intelligence —
+  // see apps/api/src/assistant for the real Gemini-backed version.
+  http.get(`${API}/assistant/conversation`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const messages = db.assistantMessages.filter((m) => m.userId === me.id);
+    return HttpResponse.json({ id: `conv-${me.id}`, messages });
+  }),
+
+  http.post(`${API}/assistant/message`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const body = (await request.json()) as { message: string; locale: "en" | "bn" };
+
+    const userMessage: db.AssistantMessageMock = {
+      id: crypto.randomUUID(),
+      userId: me.id,
+      role: "user",
+      content: body.message,
+      createdAt: new Date().toISOString(),
+    };
+    db.assistantMessages.push(userMessage);
+
+    const text = body.message.toLowerCase();
+    let reply = "This is a mock reply — ask about your tax, mutations, or disputes to see it look something up.";
+    const suggestedActions: { href: string; label: string }[] = [];
+
+    if (text.includes("tax")) {
+      const applications = db.serviceApplications.filter(
+        (a) => a.applicantId === me.id && a.serviceType === "land-tax",
+      );
+      reply = applications.length
+        ? `You have ${applications.length} land tax application(s). Most recent status: ${applications[0].status}.`
+        : "You have no land tax applications on file.";
+      suggestedActions.push({ href: "/land-tax", label: "Go to Land Tax" });
+    } else if (text.includes("dispute")) {
+      const disputes = db.disputes.filter((d) => d.filedById === me.id);
+      reply = disputes.length
+        ? `You have ${disputes.length} dispute(s) filed. Most recent status: ${disputes[0].status}.`
+        : "You have no disputes on file.";
+      suggestedActions.push({ href: "/disputes/new", label: "File a dispute" });
+    } else if (text.includes("mutation") || text.includes("namjari")) {
+      const mutations = db.mutations.filter(
+        (m) => m.requestedById === me.id || m.fromOwnerId === me.id || m.toOwnerId === me.id,
+      );
+      reply = mutations.length
+        ? `You have ${mutations.length} mutation filing(s). Most recent status: ${mutations[0].status}.`
+        : "You have no mutation filings on file.";
+      suggestedActions.push({ href: "/mutations/new", label: "File a mutation" });
+    }
+
+    const modelMessage: db.AssistantMessageMock = {
+      id: crypto.randomUUID(),
+      userId: me.id,
+      role: "model",
+      content: reply,
+      createdAt: new Date().toISOString(),
+    };
+    db.assistantMessages.push(modelMessage);
+
+    return HttpResponse.json({ message: modelMessage, suggestedActions });
+  }),
+
+  http.post(`${API}/assistant/reset`, async ({ request }) => {
+    const me = currentUser(request);
+    const remaining = db.assistantMessages.filter((m) => m.userId !== me.id);
+    db.assistantMessages.length = 0;
+    db.assistantMessages.push(...remaining);
+    return HttpResponse.json({ ok: true });
+  }),
+
   // Admin ------------------------------------------------------------------
   /** Mirrors UsersController.search() — the mutation wizard's recipient picker. */
   http.get(`${API}/users/search`, async ({ request }) => {

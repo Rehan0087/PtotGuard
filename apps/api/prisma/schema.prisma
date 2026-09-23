@@ -101,6 +101,7 @@ model User {
   grievanceEvents              GrievanceEvent[]
   notifications                AppNotification[]
   auditActions                 AuditEvent[]
+  assistantConversation        AssistantConversation?
 
   @@index([jurisdictionId])
   @@map("users")
@@ -466,6 +467,39 @@ model ServiceApplicationEvent {
 
   @@index([applicationId])
   @@map("service_application_events")
+}
+
+// --- Assistant ----------------------------------------------------------
+
+/// One running thread per citizen — not a conversation list. Reset clears
+/// its messages rather than starting a second row.
+model AssistantConversation {
+  id        String   @id
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AssistantMessage[]
+
+  @@map("assistant_conversations")
+}
+
+model AssistantMessage {
+  id             String                @id
+  conversationId String
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id])
+  /// AssistantMessageRole: "user" | "model" — matches the Gemini SDK's own
+  /// role names, so stored history replays into startChat() unchanged.
+  role           String
+  content        String
+  /// Tool names invoked to produce this reply — support/debugging only,
+  /// never shown to the citizen. Empty for user messages.
+  toolCalls      Json?
+  createdAt      DateTime              @default(now())
+
+  @@index([conversationId])
+  @@map("assistant_messages")
 }
 
 // --- Field reports ----------------------------------------------------------

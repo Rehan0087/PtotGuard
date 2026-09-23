@@ -329,6 +329,19 @@ export const en = {
     }),
   },
 
+  assistant: {
+    launcherLabel: "Chat with the PlotGuard assistant",
+    panelTitle: "PlotGuard Assistant",
+    greeting:
+      "Hi! Ask me about your parcels, applications, or disputes, or how any PlotGuard service works.",
+    placeholder: "Type your question…",
+    send: "Send",
+    reset: "Start over",
+    thinking: "Thinking…",
+    errorGeneric: "Something went wrong. Please try again.",
+    errorRateLimited: "You've sent a lot of messages — please wait a few minutes and try again.",
+  },
+
   disputeEvents: {
     filed: "Dispute filed",
     assigned: (to: string) => `Assigned to ${to}`,

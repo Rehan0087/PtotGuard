@@ -515,6 +515,21 @@ export const notifications: AppNotification[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Assistant (citizen help chatbot) — one running conversation per user,
+// simulated with keyword matching in the handler since there is no real
+// model to call in mock mode. See apps/api/src/assistant for the real one.
+// ---------------------------------------------------------------------------
+export interface AssistantMessageMock {
+  id: string;
+  userId: string;
+  role: "user" | "model";
+  content: string;
+  createdAt: string;
+}
+
+export const assistantMessages: AssistantMessageMock[] = [];
+
+// ---------------------------------------------------------------------------
 // Audit ledger seed (hashes are computed by the handler to form the chain)
 // ---------------------------------------------------------------------------
 export const auditSeed: Omit<AuditEvent, "prevHash" | "hash">[] = [
