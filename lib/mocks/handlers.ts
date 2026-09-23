@@ -1841,6 +1841,9 @@ export const handlers = [
     const paid = db.serviceApplications
       .filter((application) => application.serviceType === "land-tax" && application.paidAt && application.parcelId && parcelIds.has(application.parcelId))
       .sort((a, b) => (b.paidAt ?? "").localeCompare(a.paidAt ?? ""));
+    const activeRevenueCaseParcels = new Set(db.serviceApplications
+      .filter((application) => application.serviceType === "revenue-case" && application.parcelId && !["approved", "rejected", "withdrawn"].includes(application.status))
+      .map((application) => application.parcelId));
     const payments = paid.flatMap((application) => {
       const parcel = db.parcels.find((candidate) => candidate.id === application.parcelId);
       const owner = parcel ? db.users.find((candidate) => candidate.id === parcel.ownerId) : undefined;
@@ -1884,6 +1887,7 @@ export const handlers = [
         assessment,
         status: assessment.exemption ? "exempt" as const : settled !== null && settled >= year ? "paid" as const : "due" as const,
         latestPayment: payments.find((payment) => payment.parcelId === parcel.id) ?? null,
+        hasActiveRevenueCase: activeRevenueCaseParcels.has(parcel.id),
       };
     });
     const currentPayments = payments.filter((payment) => payment.assessmentYear === year);
@@ -2030,12 +2034,11 @@ export const handlers = [
     return HttpResponse.json(application, { status: 201 });
   }),
 
-  http.post(`${API}/land-tax/collect`, async ({ request }) => {
+  http.post(`${API}/land-tax/notify`, async ({ request }) => {
     await latency();
     const officer = currentUser(request);
     if (!isActiveLandOffice(officer)) return forbidden("Land Office Staff access required.");
-    const body = (await request.json()) as { parcelId: string; paymentMethod: string };
-    if (!["bkash", "nagad", "card"].includes(body.paymentMethod)) return badRequest("Invalid payment method");
+    const body = (await request.json()) as { parcelId: string };
     const parcel = db.parcels.find((candidate) => candidate.id === body.parcelId);
     if (!parcel || !coveredJurisdictionIds(officer).has(parcel.jurisdictionId)) return notFound("Parcel not found");
 
@@ -2055,45 +2058,27 @@ export const handlers = [
     if (assessment.total <= 0) return conflict("Nothing is due on this holding.");
 
     const now = new Date().toISOString();
-    const count = db.serviceApplications.filter((application) => application.serviceType === "land-tax").length;
-    const application = {
-      id: `sa-${Date.now()}`,
-      applicationNo: `LDT-${year}-${String(1000 + count).padStart(6, "0")}`,
-      serviceType: "land-tax" as const,
-      status: "approved" as const,
-      parcelId: parcel.id,
-      applicantId: parcel.ownerId,
-      assignedOfficerId: officer.id,
-      details: { assessmentYear: year, decimals: assessment.decimals, arrears: assessment.arrears, currentYearDue: assessment.currentYearDue, years: assessment.years },
-      documentIds: [],
-      feeAmount: assessment.total,
-      paymentMethod: body.paymentMethod as never,
-      transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
-      paidAt: now,
-      submittedAt: now,
-      decidedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    };
-    db.serviceApplications.unshift(application);
-    db.serviceApplicationEvents.push({
-      id: `sae-${Date.now()}`,
-      applicationId: application.id,
+    const notification = {
+      id: `n-${Date.now()}`,
+      userId: parcel.ownerId,
       at: now,
-      type: "payment-recorded",
-      title: "Land development tax collected by land office",
-      actorId: officer.id,
-      actorName: officer.name,
-    });
+      severity: "warning" as const,
+      title: "Land tax payment due",
+      body: `Land development tax of BDT ${assessment.total} is due for dag ${parcel.dagNo} for ${year}.`,
+      content: { code: "land-tax-reminder" as const, dagNo: parcel.dagNo, assessmentYear: year, amount: assessment.total },
+      read: false,
+      href: "/land-tax",
+    };
+    db.notifications.unshift(notification);
     await appendAudit({
-      entityType: "service-application",
-      entityId: application.id,
-      action: "payment",
+      entityType: "parcel",
+      entityId: parcel.id,
+      action: "tax-reminder-sent",
       actorId: officer.id,
       actorName: officer.name,
-      payload: { applicationNo: application.applicationNo, serviceType: "land-tax", parcelDagNo: parcel.dagNo, assessmentYear: year, amount: application.feeAmount },
+      payload: { ownerId: parcel.ownerId, assessmentYear: year, amount: assessment.total },
     });
-    return HttpResponse.json(application, { status: 201 });
+    return HttpResponse.json(notification, { status: 201 });
   }),
 
   http.patch(`${API}/lease-settlement/:id/pay-lease`, async ({ request, params }) => {
@@ -2226,24 +2211,27 @@ export const handlers = [
     return HttpResponse.json(application, { status: 201 });
   }),
 
-  // Revenue cases (misc. cases + appeals before AC Land / ADC Revenue) --------
+  // Revenue cases filed by the land office for unpaid land tax ----------------
   // "Hearing" here is a status plus a date in `details`, not the Dispute-only
   // Hearing model (mandatory disputeId FK, built for mediator-run mediation).
   // Mirrors revenue-cases.controller.ts.
   http.post(`${API}/revenue-cases/file`, async ({ request }) => {
     await latency();
-    const me = currentUser(request);
+    const officer = currentUser(request);
+    if (!isActiveLandOffice(officer)) return forbidden("Land Office Staff access required.");
     const body = (await request.json()) as {
       parcelId: string;
-      caseType: "miscellaneous" | "appeal";
       grounds: string;
-      againstReference?: string;
-      documentIds?: string[];
     };
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
-    // Same answer for "no such parcel" and "not yours" as land-admin's own
-    // apply handler: filing a case is the owner's to do.
-    if (!parcel || parcel.ownerId !== me.id) return notFound("Parcel not found");
+    if (!parcel || !coveredJurisdictionIds(officer).has(parcel.jurisdictionId)) return notFound("Parcel not found");
+    const active = db.serviceApplications.some((a) => a.serviceType === "revenue-case" && a.parcelId === parcel.id && !["approved", "rejected", "withdrawn"].includes(a.status));
+    if (active) return conflict("An active revenue case already exists for this holding.");
+    const year = new Date().getUTCFullYear();
+    const paid = db.serviceApplications.filter((a) => a.serviceType === "land-tax" && a.parcelId === parcel.id && a.paidAt);
+    const settled = paidThroughYear(paid, parcel.id);
+    const assessment = assessLandTax({ area: parcel.area, landUse: parcel.landUse, assessmentYear: year, paidThroughYear: settled, liableFromYear: new Date(parcel.registeredAt).getUTCFullYear() }, landTaxRates());
+    if (assessment.total <= 0 || (settled !== null && settled >= year)) return conflict("A revenue case can only be filed for outstanding land tax.");
 
     const now = new Date().toISOString();
     const count = db.serviceApplications.filter((a) => a.serviceType === "revenue-case").length;
@@ -2253,14 +2241,17 @@ export const handlers = [
       serviceType: "revenue-case" as const,
       status: "submitted" as const,
       parcelId: parcel.id,
-      applicantId: me.id,
+      applicantId: parcel.ownerId,
+      assignedOfficerId: officer.id,
       details: {
-        caseType: body.caseType,
+        caseType: "tax-default",
         grounds: body.grounds,
-        againstReference: body.againstReference,
+        assessmentYear: year,
+        amountDue: assessment.total,
+        paidThroughYear: settled,
+        dagNo: parcel.dagNo,
       },
-      documentIds: body.documentIds ?? [],
-      feeAmount: db.policies.revenueCaseFilingFeeBdt,
+      documentIds: [],
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -2271,13 +2262,15 @@ export const handlers = [
       entityType: "service-application",
       entityId: application.id,
       action: "create",
-      actorId: me.id,
-      actorName: me.name,
+      actorId: officer.id,
+      actorName: officer.name,
       payload: {
         applicationNo: application.applicationNo,
         serviceType: "revenue-case",
         parcelDagNo: parcel.dagNo,
-        caseType: body.caseType,
+        caseType: "tax-default",
+        ownerId: parcel.ownerId,
+        amountDue: assessment.total,
       },
     });
     db.serviceApplicationEvents.push({
@@ -2285,22 +2278,43 @@ export const handlers = [
       applicationId: application.id,
       at: now,
       type: "submitted",
-      title: body.caseType === "appeal" ? "Appeal case filed" : "Miscellaneous case filed",
-      actorId: me.id,
+      title: "Revenue case filed for unpaid land tax",
+      actorId: officer.id,
     });
+
+    db.notifications.unshift({ id: `n-${Date.now()}`, userId: parcel.ownerId, at: now, severity: "critical", title: "Revenue case filed for unpaid land tax", body: `The land office filed case ${application.applicationNo} for BDT ${assessment.total} due on dag ${parcel.dagNo}.`, content: { code: "revenue-case-filed", caseNumber: application.applicationNo, dagNo: parcel.dagNo, amount: assessment.total }, read: false, href: "/revenue-cases" });
 
     return HttpResponse.json(application, { status: 201 });
   }),
 
+  http.patch(`${API}/revenue-cases/:id/assign`, async ({ params, request }) => {
+    await latency();
+    const officer = currentUser(request);
+    if (!isActiveLandOffice(officer)) return forbidden("Land Office Staff access required.");
+    const application = db.serviceApplications.find((item) => item.id === params.id);
+    const { mediatorId } = (await request.json()) as { mediatorId: string };
+    const mediator = db.users.find((user) => user.id === mediatorId && user.role === "mediator" && user.status === "active");
+    if (!application || application.serviceType !== "revenue-case" || application.assignedOfficerId !== officer.id) return notFound("Revenue case not found");
+    if (!mediator) return notFound("Settlement officer not found");
+    if (application.assignedMediatorId) return conflict("This case has already been assigned.");
+    const now = new Date().toISOString();
+    application.assignedMediatorId = mediator.id;
+    application.status = "under-review";
+    application.updatedAt = now;
+    await appendAudit({ entityType: "service-application", entityId: application.id, action: "assigned", actorId: officer.id, actorName: officer.name, payload: { applicationNo: application.applicationNo, mediatorId: mediator.id } });
+    db.serviceApplicationEvents.push({ id: `sae-${Date.now()}`, applicationId: application.id, at: now, type: "status-change", title: `Assigned to ${mediator.name}`, actorId: officer.id });
+    db.notifications.unshift({ id: `n-${Date.now()}`, userId: mediator.id, at: now, severity: "warning", title: "Revenue case assigned", body: `${application.applicationNo} requires your review.`, read: false, href: "/cases" });
+    return HttpResponse.json(application);
+  }),
+
   http.patch(`${API}/revenue-cases/:id/schedule-hearing`, async ({ params, request }) => {
     await latency();
-    const denied = requireRole(request, "land-office");
+    const denied = requireRole(request, "mediator");
     if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
-    if (!application.paidAt) {
-      return unprocessable({ status: { code: "not-paid" } });
-    }
+    if (application.serviceType !== "revenue-case") return notFound("Revenue case not found");
+    if (application.assignedMediatorId !== currentUser(request).id) return notFound("Revenue case not found");
     if (application.status === "approved" || application.status === "rejected") {
       return conflict("This case has already been decided.");
     }
@@ -2328,8 +2342,33 @@ export const handlers = [
       title: "Hearing scheduled",
       actorId: me.id,
     });
+    db.notifications.unshift({
+      id: `n-${Date.now()}`,
+      userId: application.applicantId,
+      at: now,
+      severity: "info",
+      title: "Revenue case hearing scheduled",
+      body: `A hearing was scheduled for ${application.applicationNo}.`,
+      read: false,
+      href: "/revenue-cases",
+    });
 
     return HttpResponse.json(application);
+  }),
+
+  http.post(`${API}/revenue-cases/:id/notify-citizen`, async ({ params, request }) => {
+    await latency();
+    const denied = requireRole(request, "mediator");
+    if (denied) return denied;
+    const me = currentUser(request);
+    const application = db.serviceApplications.find((item) => item.id === params.id);
+    if (!application || application.serviceType !== "revenue-case" || application.assignedMediatorId !== me.id) return notFound("Revenue case not found");
+    if (["approved", "rejected", "withdrawn"].includes(application.status)) return conflict("This case has already been decided.");
+    const now = new Date().toISOString();
+    const notification = { id: `n-${Date.now()}`, userId: application.applicantId, at: now, severity: "warning" as const, title: "Settlement officer requested contact", body: `Please contact the settlement office regarding revenue case ${application.applicationNo}.`, read: false, href: "/revenue-cases" };
+    db.notifications.unshift(notification);
+    await appendAudit({ entityType: "service-application", entityId: application.id, action: "citizen-notified", actorId: me.id, actorName: me.name, payload: { applicationNo: application.applicationNo } });
+    return HttpResponse.json(notification, { status: 201 });
   }),
 
   // Lease & settlement (khas land settlement applications) --------------------
@@ -2789,7 +2828,10 @@ export const handlers = [
     const status = url.searchParams.get("status");
     const me = currentUser(request);
     let items = db.serviceApplications.slice();
-    if (scope === "mine") items = items.filter((a) => a.applicantId === me.id);
+    if (serviceType === "revenue-case" && me.role === "citizen") items = items.filter((a) => a.applicantId === me.id);
+    else if (serviceType === "revenue-case" && me.role === "land-office") items = items.filter((a) => a.assignedOfficerId === me.id && !a.assignedMediatorId);
+    else if (serviceType === "revenue-case" && me.role === "mediator") items = items.filter((a) => a.assignedMediatorId === me.id);
+    else if (scope === "mine") items = items.filter((a) => a.applicantId === me.id);
     else if (scope === "assigned") items = items.filter((a) => a.assignedOfficerId === me.id);
     if (serviceType) items = items.filter((a) => a.serviceType === serviceType);
     if (status) items = items.filter((a) => a.status === status);
@@ -2797,10 +2839,15 @@ export const handlers = [
     return HttpResponse.json(paginate(items, url));
   }),
 
-  http.get(`${API}/service-applications/:id`, async ({ params }) => {
+  http.get(`${API}/service-applications/:id`, async ({ params, request }) => {
     await latency();
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
+    if (application.serviceType === "revenue-case") {
+      const me = currentUser(request);
+      const allowed = me.role === "admin" || (me.role === "citizen" && application.applicantId === me.id) || (me.role === "land-office" && application.assignedOfficerId === me.id && !application.assignedMediatorId) || (me.role === "mediator" && application.assignedMediatorId === me.id);
+      if (!allowed) return notFound("Service application not found");
+    }
     return HttpResponse.json({
       application,
       timeline: db.serviceApplicationEvents
@@ -2933,10 +2980,12 @@ export const handlers = [
 
   http.patch(`${API}/service-applications/:id/decision`, async ({ params, request }) => {
     await latency();
-    const denied = requireRole(request, "land-office");
-    if (denied) return denied;
+    const me = currentUser(request);
+    if (me.role !== "land-office" && me.role !== "mediator") return forbidden("Land Office Staff or Settlement Officer access required.");
     const application = db.serviceApplications.find((a) => a.id === params.id);
     if (!application) return notFound("Service application not found");
+    if (application.serviceType === "revenue-case" && application.assignedMediatorId !== me.id) return notFound("Service application not found");
+    if (application.serviceType !== "revenue-case" && me.role !== "land-office") return notFound("Service application not found");
     if (application.serviceType === "acquisition") {
       return conflict("Use the acquisition workflow to decide this request.");
     }
@@ -2953,7 +3002,6 @@ export const handlers = [
     application.decidedAt = now;
     application.updatedAt = now;
 
-    const me = currentUser(request);
     await appendAudit({
       entityType: "service-application",
       entityId: application.id,
@@ -2969,6 +3017,22 @@ export const handlers = [
       type: "decided",
       title: decision === "approve" ? "Application approved" : "Application rejected",
       actorId: me.id,
+    });
+    db.notifications.unshift({
+      id: `n-${Date.now()}`,
+      userId: application.applicantId,
+      at: now,
+      severity: application.serviceType === "revenue-case"
+        ? (decision === "approve" ? "critical" : "success")
+        : (decision === "approve" ? "success" : "critical"),
+      title: application.serviceType === "revenue-case"
+        ? (decision === "approve" ? "Revenue case upheld" : "Revenue case dismissed")
+        : (decision === "approve" ? "Application approved" : "Application rejected"),
+      body: application.serviceType === "revenue-case"
+        ? `Revenue case ${application.applicationNo} has been ${decision === "approve" ? "upheld" : "dismissed"}.`
+        : `Your application ${application.applicationNo} has been ${decision}d.`,
+      read: false,
+      href: application.serviceType === "revenue-case" ? "/revenue-cases" : "/portal",
     });
 
     return HttpResponse.json(application);

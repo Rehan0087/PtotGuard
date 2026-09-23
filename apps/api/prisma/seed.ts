@@ -70,8 +70,8 @@ async function main(): Promise<void> {
       // District-level, so she covers every upazila and mouza beneath Cumilla.
       { id: "usr-agent3", name: "Farhana Yeasmin", email: "f.yeasmin@minland.gov.bd", phone: "+8801611-3xxxxx", role: "field-agent", jurisdictionId: "j-cumilla", title: "District Survey Officer", status: "active", createdAt: new Date("2021-07-11T09:00:00Z") },
       { id: "usr-agent4", name: "Mizanur Rahman", email: "m.rahman@minland.gov.bd", role: "field-agent", jurisdictionId: "j-debidwar", title: "Survey Amin", status: "suspended", createdAt: new Date("2023-02-08T09:00:00Z") },
-      { id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@landtribunal.gov.bd", role: "mediator", jurisdictionId: "j-cumilla", title: "Land Tribunal Mediator (Retd. Judge)", status: "active", createdAt: new Date("2020-09-01T09:00:00Z") },
-      { id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@landtribunal.gov.bd", role: "mediator", jurisdictionId: "j-cumilla", title: "Land Tribunal Mediator", status: "active", createdAt: new Date("2021-03-15T09:00:00Z") },
+      { id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@landtribunal.gov.bd", role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer (Retd. Judge)", status: "active", createdAt: new Date("2020-09-01T09:00:00Z") },
+      { id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@landtribunal.gov.bd", role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer", status: "active", createdAt: new Date("2021-03-15T09:00:00Z") },
       { id: "usr-admin", name: "Registry Administrator", email: "admin@plotguard.gov.bd", role: "admin", jurisdictionId: "j-cumilla", title: "Registry Administrator", status: "active", createdAt: new Date("2020-01-01T09:00:00Z") },
       // Legacy owners referenced only from ownership history — never sign in.
       { id: "usr-legacy-1", name: "Abdul Jalil Sarkar", email: "legacy-1@example.bd", role: "citizen", jurisdictionId: "j-rajamehar", status: "invited", createdAt: new Date("1998-03-01T00:00:00Z") },

@@ -25,7 +25,7 @@ import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import type { Dictionary } from "@/lib/i18n";
 import {
-  useCollectLandTax,
+  useNotifyLandTax,
   useLandTaxCollection,
   useLandTaxHoldings,
   usePayLandTax,
@@ -249,21 +249,19 @@ const collectionStatusClasses: Record<LandTaxCollectionStatus, string> = {
 function CollectionRow({ holding }: { holding: LandTaxCollectionHolding }) {
   const t = useT();
   const f = useFmt();
-  const collect = useCollectLandTax();
-  const [paying, setPaying] = useState(false);
+  const notify = useNotifyLandTax();
   const labels = t.pages.landTax.officer;
 
-  function submit(paymentMethod: PaymentMethod) {
-    collect.mutate(
-      { parcelId: holding.parcelId, paymentMethod },
+  function sendReminder() {
+    notify.mutate(
+      { parcelId: holding.parcelId },
       {
-        onSuccess: (application) => {
-          setPaying(false);
-          toast.success(labels.collectedTitle, {
-            description: labels.collectedBody(holding.dagNo, application.transactionId ?? ""),
+        onSuccess: () => {
+          toast.success(labels.reminderSentTitle, {
+            description: labels.reminderSentBody(holding.ownerName, holding.dagNo),
           });
         },
-        onError: () => toast.error(labels.failedTitle, { description: labels.failedBody }),
+        onError: () => toast.error(labels.reminderFailedTitle, { description: labels.reminderFailedBody }),
       },
     );
   }
@@ -297,18 +295,8 @@ function CollectionRow({ holding }: { holding: LandTaxCollectionHolding }) {
       </td>
       <td className="px-4 py-3 text-right">
         {holding.status === "due" ? (
-          <Button size="sm" onClick={() => setPaying(true)}>{labels.collect}</Button>
+          <Button size="sm" disabled={notify.isPending} onClick={sendReminder}>{labels.sendReminder}</Button>
         ) : null}
-        <PaymentConfirmationDialog
-          open={paying}
-          amount={f.money({ amount: holding.assessment.total, currency: "BDT" })}
-          defaultMethod="bkash"
-          busy={collect.isPending}
-          onOpenChange={(open) => {
-            if (!open && !collect.isPending) setPaying(false);
-          }}
-          onConfirm={submit}
-        />
       </td>
     </tr>
   );
