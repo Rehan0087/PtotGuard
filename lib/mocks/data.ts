@@ -120,12 +120,12 @@ export const users: User[] = [
   },
   {
     id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@landtribunal.gov.bd",
-    role: "mediator", jurisdictionId: "j-cumilla", title: "Land Tribunal Mediator (Retd. Judge)", status: "active",
+    role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer (Retd. Judge)", status: "active",
     createdAt: "2020-09-01T09:00:00Z",
   },
   {
     id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@landtribunal.gov.bd",
-    role: "mediator", jurisdictionId: "j-cumilla", title: "Land Tribunal Mediator", status: "active",
+    role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer", status: "active",
     createdAt: "2021-03-15T09:00:00Z",
   },
   {

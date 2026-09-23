@@ -90,6 +90,7 @@ model User {
   mutationsRejected            Mutation[]                @relation("MutationRejector")
   serviceApplicationsFiled     ServiceApplication[]      @relation("ServiceApplicant")
   serviceApplicationsAsOfficer ServiceApplication[]      @relation("ServiceApplicationOfficer")
+  serviceApplicationsAsMediator ServiceApplication[]     @relation("ServiceApplicationMediator")
   serviceApplicationEvents     ServiceApplicationEvent[]
   fieldReportsAssigned         FieldReport[]
   fieldSurveySessions          FieldSurveySession[]
@@ -418,6 +419,8 @@ model ServiceApplication {
   applicant         User      @relation("ServiceApplicant", fields: [applicantId], references: [id])
   assignedOfficerId String?
   assignedOfficer   User?     @relation("ServiceApplicationOfficer", fields: [assignedOfficerId], references: [id])
+  assignedMediatorId String?
+  assignedMediator   User?     @relation("ServiceApplicationMediator", fields: [assignedMediatorId], references: [id])
   /// The one place each service's own fields live — see ServiceType.
   details           Json      @default("{}")
   documentIds       String[]
@@ -438,6 +441,7 @@ model ServiceApplication {
   @@index([parcelId])
   @@index([applicantId])
   @@index([assignedOfficerId])
+  @@index([assignedMediatorId])
   @@index([status])
   @@index([serviceType])
   @@map("service_applications")

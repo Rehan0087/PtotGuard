@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Gavel, CalendarClock, Users, ArrowRight, Scale } from "lucide-react";
+import { Gavel, CalendarClock, Users, ArrowRight, Scale, Bell, Check, Ban, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -14,12 +14,48 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCreateHearing, useDisputes, useHearings } from "@/hooks/queries";
+import { useCreateHearing, useDisputes, useHearings, useNotifyRevenueCaseCitizen, useScheduleHearing, useServiceApplicationDecision, useServiceApplications } from "@/hooks/queries";
 import { disputesNeedingHearing } from "@plotguard/rules";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
-import type { Dispute } from "@/lib/types";
+import type { Dispute, ServiceApplication } from "@/lib/types";
+
+type RevenueCaseDetails = { grounds?: string; hearingAt?: string; amountDue?: number; dagNo?: string; ownerName?: string };
+
+function RevenueCaseWorkCard({ application }: { application: ServiceApplication }) {
+  const t = useT();
+  const f = useFmt();
+  const s = useStatusMeta();
+  const schedule = useScheduleHearing(application.id);
+  const notify = useNotifyRevenueCaseCitizen(application.id);
+  const decision = useServiceApplicationDecision(application.id);
+  const details = application.details as RevenueCaseDetails;
+  const [when, setWhen] = useState("");
+  const closed = ["approved", "rejected", "withdrawn"].includes(application.status);
+
+  return <Card className="gap-3 px-4">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div><IdChip icon={Scale}>{application.applicationNo}</IdChip><div className="mt-1 text-sm font-medium">{details.ownerName}</div><div className="text-xs text-muted-foreground">{details.dagNo}</div></div>
+      <StatusMetaBadge meta={s.serviceApplication[application.status]} />
+    </div>
+    {details.amountDue != null ? <div className="text-sm text-destructive">{t.pages.revenueCases.amountDue(f.money({ amount: details.amountDue, currency: "BDT" }))}</div> : null}
+    {details.grounds ? <p className="rounded-md bg-muted/40 p-3 text-sm">{details.grounds}</p> : null}
+    {details.hearingAt ? <div className="text-sm text-marker">{t.pages.revenueCases.hearingAtLabel(f.dateTime(details.hearingAt))}</div> : null}
+    {!closed ? <div className="space-y-3 border-t border-border pt-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1"><Label htmlFor={`revenue-when-${application.id}`} className="text-xs">{t.pages.revenueCases.hearingDateLabel}</Label><Input id={`revenue-when-${application.id}`} type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="w-56" /></div>
+        <Button size="sm" disabled={!when || schedule.isPending} onClick={() => schedule.mutate(new Date(when).toISOString(), { onSuccess: () => toast.success(t.pages.revenueCases.hearingScheduledTitle) })}><CalendarClock className="size-3.5" />{t.pages.revenueCases.scheduleHearing}</Button>
+        <Button size="sm" variant="outline" disabled={notify.isPending} onClick={() => notify.mutate(undefined, { onSuccess: () => toast.success(t.pages.revenueCases.citizenNotifiedTitle) })}><Bell className="size-3.5" />{t.pages.revenueCases.notifyCitizen}</Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={decision.isPending} onClick={() => decision.mutate("approve")}><Check className="size-3.5" />{t.pages.revenueCases.uphold}</Button>
+        <Button size="sm" variant="outline" disabled={decision.isPending} onClick={() => decision.mutate("reject")}><Ban className="size-3.5" />{t.pages.revenueCases.dismiss}</Button>
+        {(schedule.isPending || notify.isPending || decision.isPending) ? <Loader2 className="size-4 animate-spin self-center text-muted-foreground" /> : null}
+      </div>
+    </div> : null}
+  </Card>;
+}
 
 /** A week out, mid-morning — in the format a datetime-local input wants. */
 function defaultHearingDate() {
@@ -99,7 +135,9 @@ export default function CasesPage() {
   // Deliberately every hearing, not just this mediator's: a case listed by a
   // colleague has been listed, and must not sit on anyone's board as pending.
   const { data: allHearings } = useHearings({ pageSize: 100 });
+  const { data: revenueData, isLoading: revenueLoading } = useServiceApplications({ serviceType: "revenue-case", pageSize: 100 });
   const cases = data?.items ?? [];
+  const revenueCases = revenueData?.items ?? [];
 
   // Referral is the officer's call; this is only what has already been sent
   // to mediation and not yet listed. See lib/hearings.ts.
@@ -115,6 +153,8 @@ export default function CasesPage() {
         title={t.nav.cases}
         description={t.pages.cases.description}
       />
+
+      {revenueLoading ? <Skeleton className="h-32 rounded-xl" /> : revenueCases.length > 0 ? <section className="space-y-3"><div><h2 className="text-sm font-medium text-foreground">{t.pages.revenueCases.assignedTaxCases}</h2><p className="text-xs text-muted-foreground">{t.pages.revenueCases.assignedTaxCasesBody}</p></div>{revenueCases.map((item) => <RevenueCaseWorkCard key={item.id} application={item} />)}</section> : null}
 
       {toConvene.length > 0 ? (
         <section className="space-y-3">
@@ -138,13 +178,13 @@ export default function CasesPage() {
             <Skeleton key={i} className="h-28 rounded-xl" />
           ))}
         </div>
-      ) : cases.length === 0 ? (
+      ) : cases.length === 0 && revenueCases.length === 0 ? (
         <EmptyState
           icon={Gavel}
           title={t.pages.cases.emptyTitle}
           description={t.pages.cases.emptyBody}
         />
-      ) : (
+      ) : cases.length > 0 ? (
         <div className="space-y-3">
           {cases.map((c) => (
             <Card key={c.id} className="gap-3 px-4">
@@ -188,7 +228,7 @@ export default function CasesPage() {
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

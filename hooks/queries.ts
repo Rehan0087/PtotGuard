@@ -430,26 +430,15 @@ export function useApplyLandAdmin() {
   });
 }
 
-// --- Revenue cases (misc. cases + appeals before AC Land / ADC Revenue) ----
-// Same "apply and pay in one step" shape as useApplyLandAdmin(). Scheduling
-// a hearing and deciding are two separate officer actions afterward — the
-// first is the one bespoke endpoint this service needed beyond filing;
-// deciding reuses useServiceApplicationDecision untouched.
+// --- Revenue cases (land-office filings for unpaid tax) --------------------
 export function useFileRevenueCase() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: {
       parcelId: string;
-      caseType: "miscellaneous" | "appeal";
       grounds: string;
-      againstReference?: string;
-      paymentMethod: string;
     }) => {
-      const { paymentMethod, ...fileBody } = body;
-      const created = await api.post<ServiceApplication>("/revenue-cases/file", fileBody);
-      return api.patch<ServiceApplication>(`/service-applications/${created.id}/pay`, {
-        paymentMethod,
-      });
+      return api.post<ServiceApplication>("/revenue-cases/file", body);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
   });
@@ -464,6 +453,23 @@ export function useScheduleHearing(id: string) {
       qc.invalidateQueries({ queryKey: ["service-application", id] });
       qc.invalidateQueries({ queryKey: ["service-applications"] });
     },
+  });
+}
+
+export function useAssignRevenueCase(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mediatorId: string) =>
+      api.patch<ServiceApplication>(`/revenue-cases/${id}/assign`, { mediatorId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-applications"] }),
+  });
+}
+
+export function useNotifyRevenueCaseCitizen(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<AppNotification>(`/revenue-cases/${id}/notify-citizen`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 }
 
@@ -816,15 +822,13 @@ export function useLandOfficerDashboard() {
   });
 }
 
-export function useCollectLandTax() {
+export function useNotifyLandTax() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { parcelId: string; paymentMethod: string }) =>
-      api.post<ServiceApplication>("/land-tax/collect", body),
+    mutationFn: (body: { parcelId: string }) =>
+      api.post<AppNotification>("/land-tax/notify", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["land-tax-collection"] });
-      qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
-      qc.invalidateQueries({ queryKey: ["service-applications"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

@@ -45,6 +45,10 @@ export function useNotificationText() {
           return t.notifications["survey-scheduled"](c.dagNo);
         case "mutation-verification":
           return t.notifications["mutation-verification"](c.mutationNumber, c.dagNo);
+        case "land-tax-reminder":
+          return t.notifications["land-tax-reminder"](c.dagNo, c.assessmentYear, c.amount);
+        case "revenue-case-filed":
+          return t.notifications["revenue-case-filed"](c.caseNumber, c.dagNo, c.amount);
         case "welcome":
           return t.notifications.welcome();
         default:
