@@ -34,6 +34,12 @@ export const LAND_OFFICER_RESPONSIBILITIES: readonly LandOfficerResponsibility[]
     iconColor: "text-orange-500 border-orange-500",
   },
   {
+    navKey: "disputes",
+    icon: Scale,
+    href: "/disputes",
+    iconColor: "text-red-500 border-red-500",
+  },
+  {
     navKey: "taxCollection",
     icon: Banknote,
     href: "/land-tax",
