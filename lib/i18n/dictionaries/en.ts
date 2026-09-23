@@ -2503,6 +2503,154 @@ export const en = {
       bySeller: (name: string) => `Listed by ${name}`,
     },
 
+    manual: {
+      heading: "User manual",
+      description:
+        "How to use PlotGuard as a citizen — from signing in to transferring land. Each section ends with a link to the screen it describes.",
+      contentsLabel: "In this manual",
+      openLabel: "Open",
+      sections: [
+        {
+          id: "getting-started",
+          title: "Getting started",
+          summary:
+            "Sign in with the email and password on your account. Everything a citizen can do starts from the Citizen Friendly Services page.",
+          steps: [
+            "Sign in from the Login button at the top of the home page.",
+            "Open Citizen Friendly Services in the left sidebar to see every service as a tile.",
+            "Switch between English and Bangla with the language button in the top bar — the whole app changes, including this manual.",
+            "The bell in the top bar shows notifications about your cases and applications. Click one to jump to the record.",
+            "The round chat button in the bottom-right corner opens the assistant, which can answer questions about your own records.",
+          ],
+          note: "Can't sign in? Contact your land office — staff can check your account.",
+          link: { href: "/portal", label: "Citizen Friendly Services" },
+        },
+        {
+          id: "bhumi-id",
+          title: "Your BhumiID (land ID)",
+          summary:
+            "Every parcel has a BhumiID — a unique code like ILR-CUM-DEB-000001. It names one plot anywhere in the country, even where two mouzas both have a dag 142.",
+          steps: [
+            "Open My properties to see each parcel you own with its BhumiID, dag and khatian numbers.",
+            "Use Search records to find any parcel by BhumiID, dag number, khatian number or owner name.",
+            "Open a parcel to see its map, ownership history, documents and any restrictions recorded on it.",
+            "Quote the BhumiID whenever you contact the land office — it removes any doubt about which plot you mean.",
+          ],
+          note: "A dag number only means something inside its mouza. The BhumiID adds the district and upazila, which makes it unique.",
+          link: { href: "/properties", label: "My properties" },
+        },
+        {
+          id: "namjari",
+          title: "Filing a mutation (namjari)",
+          summary:
+            "A mutation changes the recorded owner of a parcel after a sale, inheritance, gift, partition, or to correct an error. Only the current recorded owner can file one.",
+          steps: [
+            "Open Mutations and choose to file a new one. Pick the parcel you own.",
+            "Choose the type of transfer and pick the new owner by searching their registered account. Add the deed number and date if you have them.",
+            "Choose a payment method (bKash, Nagad or card) and pay the filing fee.",
+            "Review and submit. You receive an application number, and the case appears under Mutations.",
+            "The land office verifies your papers, then a field agent inspects the plot. There is an objection window during which others can object.",
+            "An officer approves or rejects the mutation. After approval, pay the DCR fee to complete it. The new owner is recorded at approval.",
+          ],
+          note: "A parcel under an injunction, attachment, acquisition notice or a non-transferable order cannot be transferred, so the filing is refused.",
+          link: { href: "/mutations", label: "Mutations" },
+        },
+        {
+          id: "faraiz",
+          title: "Inheritance calculator (Faraiz)",
+          summary:
+            "Estimate how an estate is shared among heirs under Faraiz (Islamic) or Hindu succession law, before starting an inheritance mutation.",
+          steps: [
+            "Open the Inheritance calculator and choose the succession law.",
+            "Enter the estate value and add each surviving heir with their relationship to the deceased.",
+            "Read each heir's share as a fraction and as an amount.",
+            "When the heirs agree, file an inheritance mutation from Mutations to record the new owners.",
+          ],
+          note: "The calculator gives an estimate for common cases. It is not a legal ruling — take disputed or unusual cases to the land office or a lawyer.",
+          link: { href: "/inheritance", label: "Inheritance calculator" },
+        },
+        {
+          id: "survey",
+          title: "Survey cycles explained",
+          summary:
+            "Bangladesh's land records were built through successive surveys. The letters before a dag number tell you which survey it comes from.",
+          steps: [
+            "CS (Cadastral Survey) — the first full survey, carried out under British rule. The oldest records.",
+            "SA (State Acquisition Survey) — carried out in the 1950s–60s after zamindari was abolished.",
+            "RS (Revisional Survey) — a later revision that updated the CS and SA records.",
+            "BS (Bangladesh Survey) — the most recent survey, carried out after independence and still under way in places.",
+            "Separately, when a mutation or dispute needs it, a field agent visits your plot to check its boundary on the ground.",
+          ],
+          note: "Records from different surveys can differ. If yours disagree, the land office decides which one applies.",
+          link: { href: "/search", label: "Search records" },
+        },
+        {
+          id: "land-tax",
+          title: "Paying land development tax",
+          summary:
+            "Land development tax is paid yearly for each holding. PlotGuard works out what you owe, including any arrears.",
+          steps: [
+            "Open Land development tax and pick a parcel.",
+            "Check the assessment — this year's amount plus any unpaid past years.",
+            "Choose a payment method and pay. Your receipt appears straight away.",
+          ],
+          note: "Small agricultural holdings below the exemption limit owe nothing.",
+          link: { href: "/land-tax", label: "Land development tax" },
+        },
+        {
+          id: "marketplace",
+          title: "Buying and selling on the land marketplace",
+          summary:
+            "List a parcel you own for sale, or find land other citizens are selling. The actual transfer still goes through a mutation.",
+          steps: [
+            "To sell, open Land marketplace, go to My listings and list a parcel with an asking price and description.",
+            "To buy, browse listings, open one and express interest, with an optional message to the seller.",
+            "The seller accepts one buyer. The listing moves to Under transfer and the seller is taken to a mutation form with the buyer already filled in.",
+            "When the land office approves the transfer, the listing is marked Sold. If it is rejected, the listing goes back on the market.",
+          ],
+          note: "A parcel with a blocking restriction cannot be listed, and a parcel can only have one open listing at a time.",
+          link: { href: "/marketplace", label: "Land marketplace" },
+        },
+        {
+          id: "disputes",
+          title: "Disputes and complaints",
+          summary:
+            "A dispute is a conflict over land with another person. A complaint (grievance) is about the service you received from the land office.",
+          steps: [
+            "To file a dispute, open Disputes, choose the parcel and the type of dispute, and describe what happened.",
+            "The land office reviews it, a field agent may visit, and the case can go to a settlement officer for a hearing.",
+            "To complain about a delay, staff conduct or corruption, open Complaints & Grievances. Complaints about staff go to an administrator, never to the officer involved.",
+            "When a complaint is resolved, you can rate how it was handled.",
+          ],
+          note: "Track every case from its own page. Each step is recorded with a date.",
+          link: { href: "/disputes", label: "Disputes" },
+        },
+        {
+          id: "payments",
+          title: "Payments and receipts",
+          summary: "Every fee you pay — mutation, land tax or any other service — is listed in one place.",
+          steps: [
+            "Pay by bKash, Nagad or card at the payment step of any service.",
+            "Open Payments to see everything you have paid, with reference numbers.",
+          ],
+          note: "Keep the reference number. The land office uses it to trace a payment.",
+          link: { href: "/payments", label: "Payments" },
+        },
+        {
+          id: "help",
+          title: "Getting more help",
+          summary: "If this manual doesn't answer your question, there are two more places to look.",
+          steps: [
+            "Read the Frequently Asked Questions page.",
+            "Ask the assistant (chat button, bottom right). It can look up your own parcels, applications and disputes.",
+            "Book an appointment with your land office from Appointments.",
+          ],
+          note: "Never share your password. Land office staff will not ask for it.",
+          link: { href: "/faq", label: "FAQ" },
+        },
+      ],
+    },
+
     // <<PAGES-END>>
   },
 
