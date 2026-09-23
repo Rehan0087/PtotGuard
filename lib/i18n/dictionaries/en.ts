@@ -2651,6 +2651,48 @@ export const en = {
       ],
     },
 
+    about: {
+      heading: "About PlotGuard",
+      description:
+        "A digital land-records and dispute-resolution service for citizens, land offices and settlement officers in Bangladesh.",
+      mission: {
+        title: "Our mission & vision",
+        body: [
+          "PlotGuard brings land services to citizens online. Records, transfers, tax, disputes and complaints all happen in one place, instead of across many offices and paper files.",
+          "Our goal is land records every citizen can trust. Every change is checked by the right officer, recorded with who made it and when, and visible to the owner. A transfer can't happen without the recorded owner filing it, and a plot under a court order can't change hands.",
+        ],
+        points: [
+          "Services open to every citizen, in Bangla and English",
+          "A permanent, tamper-evident record of every change",
+          "Clear rules applied the same way for everyone",
+          "Faster, fairer settlement of land disputes",
+        ],
+      },
+      structure: {
+        title: "Organizational structure",
+        intro:
+          "Land administration in Bangladesh runs from the Ministry of Land down to the union level. PlotGuard mirrors that chain.",
+        levels: [
+          { name: "Ministry of Land", detail: "Sets land policy and oversees land administration nationwide." },
+          { name: "Divisional Commissioner", detail: "Supervises land administration across the districts of a division and hears appeals." },
+          { name: "Deputy Commissioner (District)", detail: "Heads land administration in the district, including acquisition and revenue matters." },
+          { name: "Assistant Commissioner (Land), Upazila", detail: "Runs the upazila land office — mutations, land tax, and record corrections." },
+          { name: "Union Land Office", detail: "The office closest to citizens. Collects land development tax and handles local verification." },
+        ],
+      },
+      officers: {
+        title: "Officer directory",
+        intro:
+          "These are the officers you deal with in PlotGuard and what to contact each about. To reach a named officer, contact your upazila land office.",
+        roles: [
+          { name: "Land office officer", detail: "Verifies mutations, collects land tax, reviews documents and handles complaints about service." },
+          { name: "Field agent (surveyor)", detail: "Visits plots to check boundaries and inspect land for mutations and disputes." },
+          { name: "Settlement officer", detail: "Hears land disputes and revenue cases and issues rulings." },
+          { name: "Administrator", detail: "Manages accounts and fees, and reviews complaints about staff conduct." },
+        ],
+      },
+    },
+
     // <<PAGES-END>>
   },
 
