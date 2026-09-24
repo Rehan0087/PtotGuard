@@ -68,6 +68,8 @@ import {
   canDecideInquiry,
   canWithdrawInquiry,
   listingAfterMutationDecision,
+  routeGrievance,
+  type GrievanceCategory,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
@@ -443,6 +445,21 @@ function unprocessable(errors: Record<string, ({ code: string } & Record<string,
 /** A write refused because of the state of other records. See `unprocessable`. */
 function conflict(message: string, reason?: unknown) {
   return HttpResponse.json({ error: "conflict", message, reason }, { status: 409 });
+}
+
+/** Mirrors assertHandler() in GrievancesController, plus its not-decided guard. */
+function grievanceForHandler(id: string, request: Request) {
+  const denied = requireRole(request, "land-office", "admin");
+  if (denied) return denied;
+  const me = currentUser(request);
+  const grievance = db.grievances.find((g) => g.id === id);
+  if (!grievance) return notFound("Grievance not found");
+  const handles = me.role === "admin" || grievance.assignedOfficerId === me.id || grievance.escalatedToId === me.id;
+  if (!handles) return forbidden("This grievance is not assigned to you");
+  if (grievance.status === "resolved" || grievance.status === "dismissed") {
+    return conflict("This grievance has already been decided.");
+  }
+  return { grievance, me };
 }
 
 // --- Land marketplace helpers ------------------------------------------
@@ -4762,6 +4779,187 @@ export const handlers = [
     inquiry.status = "withdrawn";
     inquiry.updatedAt = new Date().toISOString();
     return HttpResponse.json(withInquiryJoins(inquiry));
+  }),
+
+  // Complaints & grievances ------------------------------------------------
+  // Mirrors GrievancesController. Service complaints route to the land office
+  // above the filer's mouza, conduct/corruption straight to an administrator
+  // (routeGrievance); only the officer it is routed to — or an admin — moves it.
+
+  http.get(`${API}/grievances`, async ({ request }) => {
+    await latency();
+    const me = currentUser(request);
+    const items = db.grievances
+      .filter((g) =>
+        me.role === "citizen"
+          ? g.filedById === me.id
+          : g.assignedOfficerId === me.id || g.escalatedToId === me.id,
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return HttpResponse.json(items);
+  }),
+
+  http.get(`${API}/grievances/:id`, async ({ params, request }) => {
+    await latency();
+    const me = currentUser(request);
+    const grievance = db.grievances.find((g) => g.id === params.id);
+    if (!grievance) return notFound("Grievance not found");
+    const involved = [grievance.filedById, grievance.assignedOfficerId, grievance.escalatedToId].includes(me.id);
+    if (!involved && me.role !== "admin") return forbidden("Not authorized to view this grievance");
+    const timeline = db.grievanceEvents
+      .filter((e) => e.grievanceId === grievance.id)
+      .sort((a, b) => a.at.localeCompare(b.at));
+    return HttpResponse.json({ grievance, timeline });
+  }),
+
+  http.post(`${API}/grievances`, async ({ request }) => {
+    await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
+    const me = currentUser(request);
+    const body = (await request.json()) as { category?: string; description?: string };
+    const categories: GrievanceCategory[] = ["technical", "delay", "staff-conduct", "corruption"];
+    if (!categories.includes(body.category as GrievanceCategory)) {
+      return unprocessable({ category: { code: "invalid-category" } });
+    }
+    const description = (body.description ?? "").trim();
+    if (description.length < 20 || description.length > 2000) {
+      return unprocessable({ description: { code: "invalid-length", min: 20, max: 2000 } });
+    }
+    const active = (role: string) => db.users.filter((u) => u.role === role && u.status === "active");
+    const { assignedOfficerId, escalatedToId } = routeGrievance(
+      body.category as GrievanceCategory,
+      me.jurisdictionId,
+      active("land-office"),
+      active("admin"),
+      db.jurisdictions,
+    );
+
+    const now = new Date();
+    const at = now.toISOString();
+    const deadline = new Date(now);
+    deadline.setDate(deadline.getDate() + 7);
+    const grievance = {
+      id: `grv-${crypto.randomUUID()}`,
+      caseNumber: `GRV-2026-${String(1000 + db.grievances.length).padStart(5, "0")}`,
+      category: body.category as GrievanceCategory,
+      status: "submitted" as const,
+      description,
+      filedById: me.id,
+      filedByName: me.name,
+      assignedOfficerId,
+      escalatedToId,
+      slaDeadline: deadline.toISOString(),
+      createdAt: at,
+      updatedAt: at,
+    };
+    db.grievances.unshift(grievance);
+    db.grievanceEvents.push({ id: `ge-${crypto.randomUUID()}`, grievanceId: grievance.id, at, type: "filed", title: "Grievance filed", actorId: me.id, actorName: me.name });
+    await appendAudit({ entityType: "grievance", entityId: grievance.id, action: "create", actorId: me.id, actorName: me.name, payload: { caseNumber: grievance.caseNumber, category: grievance.category } });
+    db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: me.id, at, severity: "success", title: "Grievance submitted", body: `Your complaint ${grievance.caseNumber} has been successfully submitted.`, read: false, href: `/grievances/${grievance.id}` });
+    const assignedTo = assignedOfficerId ?? escalatedToId;
+    if (assignedTo) {
+      db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: assignedTo, at, severity: "info", title: "New grievance assigned", body: `${grievance.caseNumber} requires your review.`, read: false, href: `/grievances/${grievance.id}` });
+    }
+    return HttpResponse.json(grievance, { status: 201 });
+  }),
+
+  http.patch(`${API}/grievances/:id/status`, async ({ params, request }) => {
+    await latency();
+    const found = grievanceForHandler(params.id as string, request);
+    if (found instanceof Response) return found;
+    const { grievance, me } = found;
+    const body = (await request.json()) as { status?: string };
+    if (body.status !== "under-review" && body.status !== "investigating") {
+      return unprocessable({ status: { code: "invalid-status" } });
+    }
+    const at = new Date().toISOString();
+    const from = grievance.status;
+    grievance.status = body.status;
+    grievance.updatedAt = at;
+    db.grievanceEvents.push({ id: `ge-${crypto.randomUUID()}`, grievanceId: grievance.id, at, type: "status-change", title: "Status updated", description: `Status changed to ${body.status}`, actorId: me.id, actorName: me.name });
+    await appendAudit({ entityType: "grievance", entityId: grievance.id, action: "status-change", actorId: me.id, actorName: me.name, payload: { from, to: body.status } });
+    db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: grievance.filedById, at, severity: "info", title: "Grievance status updated", body: `Complaint ${grievance.caseNumber} status was updated to ${body.status}.`, read: false, href: `/grievances/${grievance.id}` });
+    return HttpResponse.json(grievance);
+  }),
+
+  http.patch(`${API}/grievances/:id/resolve`, async ({ params, request }) => {
+    await latency();
+    const found = grievanceForHandler(params.id as string, request);
+    if (found instanceof Response) return found;
+    const { grievance, me } = found;
+    const body = (await request.json()) as { resolutionNote?: string; dismissed?: boolean };
+    const note = (body.resolutionNote ?? "").trim();
+    if (note.length < 10) return unprocessable({ resolutionNote: { code: "too-short", min: 10 } });
+    const outcome = body.dismissed ? "dismissed" : "resolved";
+    const at = new Date().toISOString();
+    Object.assign(grievance, { status: outcome, resolutionNote: note, resolvedAt: at, updatedAt: at });
+    db.grievanceEvents.push({ id: `ge-${crypto.randomUUID()}`, grievanceId: grievance.id, at, type: outcome, title: body.dismissed ? "Grievance dismissed" : "Grievance resolved", description: note, actorId: me.id, actorName: me.name });
+    await appendAudit({ entityType: "grievance", entityId: grievance.id, action: "ruling", actorId: me.id, actorName: me.name, payload: { outcome } });
+    db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: grievance.filedById, at, severity: body.dismissed ? "warning" : "success", title: `Grievance ${outcome}`, body: `Complaint ${grievance.caseNumber} has been ${outcome}.`, read: false, href: `/grievances/${grievance.id}` });
+    return HttpResponse.json(grievance);
+  }),
+
+  http.patch(`${API}/grievances/:id/rate`, async ({ params, request }) => {
+    await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
+    const me = currentUser(request);
+    const grievance = db.grievances.find((g) => g.id === params.id);
+    if (!grievance) return notFound("Grievance not found");
+    if (grievance.filedById !== me.id) return forbidden("Only the filer can rate the grievance");
+    if (grievance.status !== "resolved" && grievance.status !== "dismissed") {
+      return conflict("Grievance must be resolved or dismissed before rating.");
+    }
+    if (grievance.satisfactionRating != null) return conflict("Grievance has already been rated.");
+    const body = (await request.json()) as { rating?: number };
+    const rating = Number(body.rating);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return unprocessable({ rating: { code: "out-of-range", min: 1, max: 5 } });
+    }
+    const at = new Date().toISOString();
+    grievance.satisfactionRating = rating;
+    grievance.updatedAt = at;
+    db.grievanceEvents.push({ id: `ge-${crypto.randomUUID()}`, grievanceId: grievance.id, at, type: "rated", title: "Rating submitted", description: `Citizen rated resolution: ${rating} stars`, actorId: me.id, actorName: me.name });
+    await appendAudit({ entityType: "grievance", entityId: grievance.id, action: "update", actorId: me.id, actorName: me.name, payload: { satisfactionRating: rating } });
+    return HttpResponse.json(grievance);
+  }),
+
+  // Mirrors DocumentsController.runOcrNow(): runs the (simulated) reader now,
+  // then routes the document to fraud review if what was read disagrees with
+  // the register or the fraud score is over the policy threshold.
+  http.post(`${API}/documents/:id/run-ocr`, async ({ params, request }) => {
+    await latency();
+    const denied = requireRole(request, "land-office");
+    if (denied) return denied;
+    const me = currentUser(request);
+    const doc = db.documents.find((d) => d.id === params.id);
+    if (!doc) return notFound("Document not found");
+    const parcel = doc.parcelId ? db.parcels.find((p) => p.id === doc.parcelId) : undefined;
+    doc.ocrStatus = "extracted";
+    doc.fraudScore = 0.04;
+    doc.extractedFields = {
+      "Document type": doc.type.replace(/-/g, " "),
+      ...(parcel ? { "Dag No": parcel.dagNo, Khatian: parcel.khatianNo } : {}),
+      "Pages read": String(doc.pageCount ?? 1),
+    };
+    const review = extractionReview(doc, parcel);
+    const findings = review.issues
+      .filter((issue) => issue.kind === "mismatch")
+      .map((issue) => `${issue.field} does not match the registered record (${issue.scanned} vs ${issue.registered}).`);
+    const flagged = findings.length > 0 || review.mustEscalate || doc.fraudScore >= db.policies.fraudScoreThreshold;
+    doc.ocrFindings = findings;
+    doc.ocrModel = "mock-ocr";
+    doc.verificationStatus = flagged ? "flagged" : "unverified";
+    await appendAudit({ entityType: "document", entityId: doc.id, action: "status-change", actorId: me.id, actorName: me.name, payload: { fileName: doc.fileName, ocrStatus: doc.ocrStatus, routedToFraudReview: flagged, findingCount: findings.length } });
+    return HttpResponse.json(doc);
+  }),
+
+  http.get(`${API}/khas-land-plots/:id`, async ({ params }) => {
+    await latency();
+    const plot = db.khasLandPlots.find((p) => p.id === params.id);
+    if (!plot) return notFound("Khas land plot not found");
+    return HttpResponse.json(plot);
   }),
 
   // Admin ------------------------------------------------------------------

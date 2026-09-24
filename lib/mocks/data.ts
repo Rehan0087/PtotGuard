@@ -27,6 +27,8 @@ import type {
   AuditEvent,
   GeoPoint,
   GeoPolygon,
+  Grievance,
+  GrievanceEvent,
 } from "@/lib/types";
 import type { FieldSurveyGpsPoint } from "@/lib/types";
 import type { MockSyncReceipt } from "./field-survey-sync-contract";
@@ -901,6 +903,35 @@ export const landListingInquiries: LandListingInquiryMock[] = [
     createdAt: "2026-09-12T10:00:00Z",
     updatedAt: "2026-09-12T10:00:00Z",
   },
+];
+
+// ---------------------------------------------------------------------------
+// Complaints & grievances — one open and one resolved for Ayesha, routed the
+// way routeGrievance() does it: service complaints to the land office above
+// her mouza, conduct complaints straight to an administrator.
+// ---------------------------------------------------------------------------
+export const grievances: Grievance[] = [
+  {
+    id: "grv-1", caseNumber: "GRV-2026-01000", category: "delay", status: "under-review",
+    description: "My mutation application has been under primary verification for over six weeks without any update.",
+    filedById: "usr-ayesha", filedByName: "Ayesha Siddika", assignedOfficerId: "usr-officer",
+    slaDeadline: "2026-09-25T09:00:00Z", createdAt: "2026-09-18T09:00:00Z", updatedAt: "2026-09-19T10:00:00Z",
+  },
+  {
+    id: "grv-2", caseNumber: "GRV-2026-01001", category: "technical", status: "resolved",
+    description: "The land tax receipt download failed twice with an error after payment went through.",
+    filedById: "usr-ayesha", filedByName: "Ayesha Siddika", assignedOfficerId: "usr-officer",
+    resolutionNote: "The receipt service was restored and your receipt has been reissued.",
+    slaDeadline: "2026-09-10T08:00:00Z", resolvedAt: "2026-09-06T12:00:00Z",
+    createdAt: "2026-09-03T08:00:00Z", updatedAt: "2026-09-06T12:00:00Z",
+  },
+];
+
+export const grievanceEvents: GrievanceEvent[] = [
+  { id: "ge-1", grievanceId: "grv-1", at: "2026-09-18T09:00:00Z", type: "filed", title: "Grievance filed", actorId: "usr-ayesha", actorName: "Ayesha Siddika" },
+  { id: "ge-2", grievanceId: "grv-1", at: "2026-09-19T10:00:00Z", type: "status-change", title: "Status updated", description: "Status changed to under-review", actorId: "usr-officer", actorName: "Nasrin Akter" },
+  { id: "ge-3", grievanceId: "grv-2", at: "2026-09-03T08:00:00Z", type: "filed", title: "Grievance filed", actorId: "usr-ayesha", actorName: "Ayesha Siddika" },
+  { id: "ge-4", grievanceId: "grv-2", at: "2026-09-06T12:00:00Z", type: "resolved", title: "Grievance resolved", description: "The receipt service was restored and your receipt has been reissued.", actorId: "usr-officer", actorName: "Nasrin Akter" },
 ];
 
 // ---------------------------------------------------------------------------
