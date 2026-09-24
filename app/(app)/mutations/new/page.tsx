@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
@@ -132,6 +132,7 @@ export default function NewMutationPage() {
   const s = useStatusMeta();
   const schema = useMemo(() => makeSchema(t), [t]);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const parcelsQ = useParcels({ owner: "me", pageSize: 100 });
   const parcels = parcelsQ.data?.items ?? [];
@@ -149,10 +150,13 @@ export default function NewMutationPage() {
     formState: { errors },
   } = useForm<FormInput, unknown, FormValues>({
     resolver: standardSchemaResolver(schema),
+    // A marketplace listing hands off here once the seller accepts a
+    // buyer's interest — see /marketplace — pre-filling parcel and
+    // recipient via query params. Type already defaults to "sale".
     defaultValues: {
-      parcelId: "",
+      parcelId: searchParams.get("parcelId") ?? "",
       type: "sale",
-      toOwnerId: "",
+      toOwnerId: searchParams.get("toOwnerId") ?? "",
       deedNumber: "",
       deedDate: "",
       documentIds: [],
@@ -179,8 +183,9 @@ export default function NewMutationPage() {
   const documents = docsQ.data?.items ?? [];
 
   // Display-only — the form only ever submits toOwnerId, but the picked
-  // name is what the review step and a "change" chip need to show.
-  const [toOwnerName, setToOwnerName] = useState("");
+  // name is what the review step and a "change" chip need to show. Seeded
+  // from the marketplace deep link when present, same as toOwnerId above.
+  const [toOwnerName, setToOwnerName] = useState(() => searchParams.get("toOwnerName") ?? "");
 
   const needsRecipient = TYPES_WITH_RECIPIENT.includes(type);
   const needsDeed = TYPES_WITH_DEED.includes(type);

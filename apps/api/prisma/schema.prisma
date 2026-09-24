@@ -90,6 +90,7 @@ model User {
   mutationsRejected            Mutation[]                @relation("MutationRejector")
   serviceApplicationsFiled     ServiceApplication[]      @relation("ServiceApplicant")
   serviceApplicationsAsOfficer ServiceApplication[]      @relation("ServiceApplicationOfficer")
+  serviceApplicationsAsMediator ServiceApplication[]     @relation("ServiceApplicationMediator")
   serviceApplicationEvents     ServiceApplicationEvent[]
   fieldReportsAssigned         FieldReport[]
   fieldSurveySessions          FieldSurveySession[]
@@ -101,6 +102,9 @@ model User {
   grievanceEvents              GrievanceEvent[]
   notifications                AppNotification[]
   auditActions                 AuditEvent[]
+  assistantConversation        AssistantConversation?
+  landListingsSold             LandListing[]             @relation("LandListingSeller")
+  landListingInquiriesMade     LandListingInquiry[]      @relation("LandListingBuyer")
 
   @@index([jurisdictionId])
   @@map("users")
@@ -147,6 +151,7 @@ model Parcel {
   mutations           Mutation[]
   serviceApplications ServiceApplication[]
   fieldReports        FieldReport[]
+  landListings        LandListing[]
 
   /// Scoped to the jurisdiction, not global. A dag number only carries meaning
   /// within its mouza — two mouzas can each legitimately hold a dag 142 /
@@ -226,6 +231,10 @@ model LandDocument {
   fraudScore         Float?
   /// Record<string, string> pulled by OCR — see LandDocument.extractedFields.
   extractedFields    Json?
+  /// AI screening evidence. Advisory only; the officer owns the decision.
+  ocrFindings         Json?
+  /// Model identifier retained for audit/reproducibility.
+  ocrModel            String?
   thumbnailUrl       String?
 
   @@index([parcelId])
@@ -424,6 +433,8 @@ model ServiceApplication {
   applicant         User      @relation("ServiceApplicant", fields: [applicantId], references: [id])
   assignedOfficerId String?
   assignedOfficer   User?     @relation("ServiceApplicationOfficer", fields: [assignedOfficerId], references: [id])
+  assignedMediatorId String?
+  assignedMediator   User?     @relation("ServiceApplicationMediator", fields: [assignedMediatorId], references: [id])
   /// The one place each service's own fields live — see ServiceType.
   details           Json      @default("{}")
   documentIds       String[]
@@ -444,6 +455,7 @@ model ServiceApplication {
   @@index([parcelId])
   @@index([applicantId])
   @@index([assignedOfficerId])
+  @@index([assignedMediatorId])
   @@index([status])
   @@index([serviceType])
   @@map("service_applications")
@@ -466,6 +478,82 @@ model ServiceApplicationEvent {
 
   @@index([applicationId])
   @@map("service_application_events")
+}
+
+// --- Assistant ----------------------------------------------------------
+
+/// One running thread per citizen — not a conversation list. Reset clears
+/// its messages rather than starting a second row.
+model AssistantConversation {
+  id        String   @id
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AssistantMessage[]
+
+  @@map("assistant_conversations")
+}
+
+model AssistantMessage {
+  id             String                @id
+  conversationId String
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id])
+  /// AssistantMessageRole: "user" | "model" — matches the Gemini SDK's own
+  /// role names, so stored history replays into startChat() unchanged.
+  role           String
+  content        String
+  /// Tool names invoked to produce this reply — support/debugging only,
+  /// never shown to the citizen. Empty for user messages.
+  toolCalls      Json?
+  createdAt      DateTime              @default(now())
+
+  @@index([conversationId])
+  @@map("assistant_messages")
+}
+
+// --- Land marketplace --------------------------------------------------
+
+/// A parcel its owner has put up for sale. Browsing and inquiries happen
+/// here; the actual transfer is the existing Mutation ("sale") flow,
+/// kicked off once the seller accepts a buyer.
+model LandListing {
+  id             String   @id
+  parcelId       String
+  parcel         Parcel   @relation(fields: [parcelId], references: [id])
+  sellerId       String
+  seller         User     @relation("LandListingSeller", fields: [sellerId], references: [id])
+  askingPriceBdt Int
+  description    String
+  /// LandListingStatus: "active" | "under-transfer" | "withdrawn"
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  inquiries LandListingInquiry[]
+
+  @@index([parcelId])
+  @@index([sellerId])
+  @@index([status])
+  @@map("land_listings")
+}
+
+model LandListingInquiry {
+  id        String      @id
+  listingId String
+  listing   LandListing @relation(fields: [listingId], references: [id])
+  buyerId   String
+  buyer     User        @relation("LandListingBuyer", fields: [buyerId], references: [id])
+  message   String?
+  /// LandListingInquiryStatus: "open" | "accepted" | "declined" | "withdrawn"
+  status    String      @default("open")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@map("land_listing_inquiries")
 }
 
 // --- Field reports ----------------------------------------------------------

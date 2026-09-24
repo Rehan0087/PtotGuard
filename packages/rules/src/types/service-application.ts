@@ -72,6 +72,7 @@ export interface ServiceApplication {
   parcelId?: ID;
   applicantId: ID;
   assignedOfficerId?: ID;
+  assignedMediatorId?: ID;
   details: Record<string, unknown>;
   documentIds: ID[];
   /** BDT, no paisa — same convention as Policy.mutationFeeBdt. */

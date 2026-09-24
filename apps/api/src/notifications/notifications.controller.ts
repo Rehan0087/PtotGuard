@@ -1,4 +1,5 @@
-import { Controller, Get, HttpCode, Param, Post, Req } from "@nestjs/common";
+import { Controller, Get, HttpCode, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { AccessTokenGuard } from "../auth/access-token.guard";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotFoundError } from "../common/domain-exceptions";
@@ -26,6 +27,7 @@ export class NotificationsController {
    */
   // 200, not Nest's default 201 for POST: marking read creates nothing, and
   // the mock these routes mirror answers 200. Same for read-all below.
+  @UseGuards(AccessTokenGuard)
   @Post(":id/read")
   @HttpCode(200)
   async markRead(@Param("id") id: string, @Req() req: Request) {
@@ -37,6 +39,7 @@ export class NotificationsController {
     return this.prisma.appNotification.update({ where: { id }, data: { read: true } });
   }
 
+  @UseGuards(AccessTokenGuard)
   @Post("read-all")
   @HttpCode(200)
   async markAllRead(@Req() req: Request) {

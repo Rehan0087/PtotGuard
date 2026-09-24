@@ -833,9 +833,74 @@ export const notifications: AppNotification[] = [
   { id: "n-2", userId: "usr-ayesha", at: "2026-07-18T11:25:00Z", severity: "success", title: "Document verified", body: "Your khatian for dag CS-142/3 passed verification.", content: { code: "document-verified", dagNo: "CS-142/3" }, read: false, href: "/documents" },
   { id: "n-3", userId: "usr-ayesha", at: "2026-07-22T08:20:00Z", severity: "critical", title: "Action needed: affidavit unclear", body: "The warish (inheritance) affidavit for dag RS-88 needs a clearer re-scan to continue OCR.", content: { code: "document-unclear", dagNo: "RS-88" }, read: false, href: "/documents" },
   { id: "n-4", userId: "usr-ayesha", at: "2026-07-20T16:10:00Z", severity: "info", title: "Field survey scheduled", body: "A boundary survey for dag CS-142/3 has been scheduled.", content: { code: "survey-scheduled", dagNo: "CS-142/3" }, read: true, href: "/disputes/ds-417" },
-  { id: "n-5", userId: "usr-ayesha", at: "2026-07-14T10:05:00Z", severity: "info", title: "Namjari in verification", body: "Inheritance mutation MUT-2026-01192 for dag RS-88 is being verified.", content: { code: "mutation-verification", mutationNumber: "MUT-2026-01192", dagNo: "RS-88" }, read: true, href: "/inheritance" },
+  { id: "n-5", userId: "usr-ayesha", at: "2026-07-14T10:05:00Z", severity: "info", title: "Namjari in verification", body: "Inheritance mutation MUT-2026-01192 for dag RS-88 is being verified.", content: { code: "mutation-verification", mutationNumber: "MUT-2026-01192", dagNo: "RS-88" }, read: true, href: "/mutations?mutation=m-1192" },
   { id: "n-6", userId: "usr-ayesha", at: "2026-07-10T08:05:00Z", severity: "success", title: "Welcome to PlotGuard", body: "Your account is active. You can now search records and track disputes.", content: { code: "welcome" }, read: true },
   { id: "n-7", userId: "usr-officer", at: "2026-07-21T09:02:00Z", severity: "warning", title: "New dispute assigned", body: "DSP-2026-00417 requires review.", content: { code: "dispute-assigned", caseNumber: "DSP-2026-00417" }, read: false, href: "/disputes" },
+];
+
+// ---------------------------------------------------------------------------
+// Assistant (citizen help chatbot) — one running conversation per user,
+// simulated with keyword matching in the handler since there is no real
+// model to call in mock mode. See apps/api/src/assistant for the real one.
+// ---------------------------------------------------------------------------
+export interface AssistantMessageMock {
+  id: string;
+  userId: string;
+  role: "user" | "model";
+  content: string;
+  createdAt: string;
+}
+
+export const assistantMessages: AssistantMessageMock[] = [];
+
+// ---------------------------------------------------------------------------
+// Land marketplace — browse, list, express interest. See lib/mocks/handlers.ts
+// for how a listing hands off into the Mutation ("sale") flow once accepted.
+// ---------------------------------------------------------------------------
+export interface LandListingMock {
+  id: string;
+  parcelId: string;
+  sellerId: string;
+  askingPriceBdt: number;
+  description: string;
+  status: "active" | "under-transfer" | "sold" | "withdrawn";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LandListingInquiryMock {
+  id: string;
+  listingId: string;
+  buyerId: string;
+  message?: string;
+  status: "open" | "accepted" | "declined" | "withdrawn";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const landListings: LandListingMock[] = [
+  {
+    id: "ll-1",
+    parcelId: "p-092",
+    sellerId: "usr-ayesha",
+    askingPriceBdt: 1_500_000,
+    description: "Roadside residential plot in Rajamehar, close to the bazar and paved road access.",
+    status: "active",
+    createdAt: "2026-09-10T09:00:00Z",
+    updatedAt: "2026-09-10T09:00:00Z",
+  },
+];
+
+export const landListingInquiries: LandListingInquiryMock[] = [
+  {
+    id: "lli-1",
+    listingId: "ll-1",
+    buyerId: "usr-karim",
+    message: "Interested — is the boundary survey up to date?",
+    status: "open",
+    createdAt: "2026-09-12T10:00:00Z",
+    updatedAt: "2026-09-12T10:00:00Z",
+  },
 ];
 
 // ---------------------------------------------------------------------------

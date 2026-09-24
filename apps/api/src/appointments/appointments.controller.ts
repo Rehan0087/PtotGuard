@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, HttpCode, Param, Patch, Post, Req } from "@nestjs/common";
+import { Body, Controller, HttpCode, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -31,6 +34,8 @@ export class AppointmentsController {
     private readonly audit: AuditService,
   ) {}
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post("book")
   @HttpCode(201)
   async book(@Body() body: BookAppointmentDto, @Req() req: Request) {
@@ -104,6 +109,8 @@ export class AppointmentsController {
    * updates the time on offer. Callable again while still under review, the
    * same "correct the date without a separate endpoint" shape as revenue
    * cases' own schedule-hearing(). */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office")
   @Patch(":id/reschedule")
   async reschedule(
     @Param("id") id: string,

@@ -67,6 +67,8 @@ function fixture(status = "submitted") {
     landDocument: { findMany: vi.fn().mockResolvedValue([document]) },
     fieldReport: { findFirst: vi.fn().mockResolvedValue({ id: "fr-1", status: "completed", reviewedAt: now, disputeFound: false }) },
     appNotification: { create: vi.fn().mockResolvedValue({}) },
+    landListing: { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn().mockResolvedValue({}) },
+    landListingInquiry: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
   };
   const prisma = {
     ...tx,
@@ -178,6 +180,24 @@ describe("mutation workflow writes", () => {
     }));
   });
 
+  it("keeps a submitted mutation blocked until the officer verifies every OCR document", async () => {
+    const f = fixture();
+    f.tx.landDocument.findMany.mockResolvedValue([
+      { ...document, verificationStatus: "unverified" },
+    ]);
+
+    const error = await f.controller.startVerification("m-1", request())
+      .catch((caught) => caught as ValidationError);
+
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).getResponse()).toMatchObject({
+      error: "validation_failed",
+      field: "documentIds",
+      reason: { code: "documents-not-verified", documentIds: ["doc-1"] },
+    });
+    noWrites(f);
+  });
+
   it("persists all verification evidence and opens the policy-defined objection window", async () => {
     const f = fixture("under-primary-verification");
     await f.controller.completeVerification("m-1", checks, request());
@@ -265,6 +285,32 @@ describe("mutation workflow writes", () => {
     expect(f.tx.ownershipRecord.create).toHaveBeenCalledWith({ data: expect.objectContaining({ parcelId: "p-1", ownerId: "usr-new", ownerName: "New owner", acquisitionType: "purchase", fromDate: now, mutationId: "m-1", documentId: "doc-1" }) });
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ action: "approve", actorId: "usr-officer",
       payload: expect.objectContaining({ previousStatus: "field-verification-complete", newStatus: "awaiting-dcr-payment", note: "Cleared", actorRole: "land-office" }) }));
+  });
+  it("marks the marketplace listing sold when the sale is approved", async () => {
+    const f = fixture("field-verification-complete");
+    f.tx.landListing.findFirst.mockResolvedValue({ id: "ll-1", sellerId: "usr-old", inquiries: [{ id: "lli-1" }] });
+    await f.controller.decide("m-1", approveBody, request());
+    expect(f.tx.landListing.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { parcelId: "p-1", status: "under-transfer", inquiries: { some: { buyerId: "usr-new", status: "accepted" } } } }));
+    expect(f.tx.landListing.update).toHaveBeenCalledWith({ where: { id: "ll-1" }, data: { status: "sold" } });
+    expect(f.tx.landListingInquiry.updateMany).toHaveBeenCalledWith({ where: { id: { in: ["lli-1"] } }, data: { status: "accepted" } });
+    expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ entityType: "land-listing", entityId: "ll-1",
+      payload: expect.objectContaining({ to: "sold" }) }));
+    expect(f.tx.appNotification.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: "usr-new", title: "Purchase approved" }) });
+  });
+  it("puts the listing back on the market when the sale is rejected", async () => {
+    const f = fixture("field-verification-complete");
+    f.tx.landListing.findFirst.mockResolvedValue({ id: "ll-1", sellerId: "usr-old", inquiries: [{ id: "lli-1" }] });
+    await f.controller.decide("m-1", { decision: "reject", rejectionReason: "Deed mismatch" }, request());
+    expect(f.tx.landListing.update).toHaveBeenCalledWith({ where: { id: "ll-1" }, data: { status: "active" } });
+    expect(f.tx.landListingInquiry.updateMany).toHaveBeenCalledWith({ where: { id: { in: ["lli-1"] } }, data: { status: "declined" } });
+    expect(f.tx.appNotification.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: "usr-old", title: "Listing back on the market" }) });
+  });
+  it("leaves the marketplace alone for a sale that came from no listing", async () => {
+    const f = fixture("field-verification-complete");
+    await f.controller.decide("m-1", approveBody, request());
+    expect(f.tx.landListing.update).not.toHaveBeenCalled();
+    expect(f.tx.landListingInquiry.updateMany).not.toHaveBeenCalled();
   });
   it("uses read-committed isolation so the audit tail read gets a post-lock statement snapshot", async () => {
     const f = fixture("field-verification-complete");
@@ -411,8 +457,16 @@ describe("mutation read and filing compatibility", () => {
   });
   it("captures the registry owner on citizen filing", async () => {
     const f = fixture();
+    f.prisma.parcel.findUnique.mockResolvedValue({ id: "p-1", dagNo: "42", ownerId: "usr-ayesha", owner: { name: "Ayesha" }, jurisdictionId: "j-local" });
     await f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash" }, request("citizen"));
-    expect(f.tx.mutation.create).toHaveBeenCalledWith({ data: expect.objectContaining({ status: "submitted", fromOwnerId: "usr-old", fromOwnerName: "Old owner", requestedById: "usr-ayesha" }) });
+    expect(f.tx.mutation.create).toHaveBeenCalledWith({ data: expect.objectContaining({ status: "submitted", fromOwnerId: "usr-ayesha", fromOwnerName: "Ayesha", requestedById: "usr-ayesha" }) });
+  });
+  it("refuses a filing on a parcel the caller does not own, as not found", async () => {
+    const f = fixture();
+    await expect(
+      f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash" }, request("citizen")),
+    ).rejects.toMatchObject({ response: { error: "not_found" } });
+    expect(f.tx.mutation.create).not.toHaveBeenCalled();
   });
   it("derives detail from real users, documents, parcel and chronological audit events", async () => {
     const f = fixture("under-primary-verification");

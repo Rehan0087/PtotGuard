@@ -235,6 +235,7 @@ export interface LandTaxCollectionHolding extends LandTaxHolding {
   ownerName: string;
   status: LandTaxCollectionStatus;
   latestPayment: LandTaxPaymentRecord | null;
+  hasActiveRevenueCase: boolean;
 }
 
 export interface LandTaxCollection {

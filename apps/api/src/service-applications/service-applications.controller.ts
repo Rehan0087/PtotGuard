@@ -54,9 +54,14 @@ export class ServiceApplicationsController {
   @Get()
   async list(@Query() query: Record<string, string>, @Req() req: Request) {
     const me = currentUserId(req);
+    const actor = query.serviceType === "revenue-case"
+      ? await this.prisma.user.findUnique({ where: { id: me }, select: { role: true } })
+      : null;
     const where = {
-      ...(query.scope === "mine" ? { applicantId: me } : {}),
-      ...(query.scope === "assigned" ? { assignedOfficerId: me } : {}),
+      ...((actor?.role === "citizen" || query.scope === "mine") ? { applicantId: me } : {}),
+      ...(actor?.role === "land-office" ? { assignedOfficerId: me, assignedMediatorId: null } : {}),
+      ...(actor?.role === "mediator" ? { assignedMediatorId: me } : {}),
+      ...(!actor && query.scope === "assigned" ? { assignedOfficerId: me } : {}),
       ...(query.serviceType ? { serviceType: query.serviceType } : {}),
       ...(query.status ? { status: query.status } : {}),
     };
@@ -68,9 +73,18 @@ export class ServiceApplicationsController {
   }
 
   @Get(":id")
-  async detail(@Param("id") id: string) {
+  async detail(@Param("id") id: string, @Req() req: Request) {
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
     if (!application) throw new NotFoundError("Service application not found");
+    if (application.serviceType === "revenue-case") {
+      const me = currentUserId(req);
+      const actor = await this.prisma.user.findUnique({ where: { id: me }, select: { role: true } });
+      const allowed = actor?.role === "admin"
+        || (actor?.role === "citizen" && application.applicantId === me)
+        || (actor?.role === "land-office" && application.assignedOfficerId === me && !application.assignedMediatorId)
+        || (actor?.role === "mediator" && application.assignedMediatorId === me);
+      if (!allowed) throw new NotFoundError("Service application not found");
+    }
 
     const [timeline, parcel] = await Promise.all([
       this.prisma.serviceApplicationEvent.findMany({
@@ -85,6 +99,8 @@ export class ServiceApplicationsController {
 
   /** Starts a draft. No gate: a citizen may open one before deciding every
    * field, the same way a form draft is never refused for being incomplete. */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post()
   @HttpCode(201)
   async create(@Body() body: CreateServiceApplicationDto, @Req() req: Request) {
@@ -138,10 +154,15 @@ export class ServiceApplicationsController {
   /** draft → submitted. A citizen may revise a draft freely, so this is the
    * only transition guarded against direction rather than content: it just
    * cannot fire twice. */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Patch(":id/submit")
   async submit(@Param("id") id: string, @Req() req: Request) {
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
-    if (!application) throw new NotFoundError("Service application not found");
+    // Not found and not yours are the same answer — see land-admin's apply().
+    if (!application || application.applicantId !== currentUserId(req)) {
+      throw new NotFoundError("Service application not found");
+    }
     if (application.status !== "draft") {
       throw new ConflictError("This application has already been submitted.");
     }
@@ -183,10 +204,14 @@ export class ServiceApplicationsController {
    * payment recording. Must follow submit (an application still being
    * drafted has nothing to charge for yet) and can only happen once.
    */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Patch(":id/pay")
   async pay(@Param("id") id: string, @Body() body: RecordPaymentDto, @Req() req: Request) {
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
-    if (!application) throw new NotFoundError("Service application not found");
+    if (!application || application.applicantId !== currentUserId(req)) {
+      throw new NotFoundError("Service application not found");
+    }
     if (!application.submittedAt) {
       throw new ValidationError({ code: "not-submitted" }, "status");
     }
@@ -249,7 +274,7 @@ export class ServiceApplicationsController {
    * decision, checked before any rule since there is no rule content to
    * evaluate here yet — see the module doc comment for why. */
   @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles("land-office")
+  @Roles("land-office", "mediator")
   @Patch(":id/decision")
   async decide(
     @Param("id") id: string,
@@ -269,6 +294,13 @@ export class ServiceApplicationsController {
     }
 
     const actorId = currentUserId(req);
+    const actor = await this.prisma.user.findUnique({ where: { id: actorId }, select: { role: true } });
+    if (application.serviceType === "revenue-case" && application.assignedMediatorId !== actorId) {
+      throw new NotFoundError("Service application not found");
+    }
+    if (application.serviceType !== "revenue-case" && actor?.role !== "land-office") {
+      throw new NotFoundError("Service application not found");
+    }
     const status = body.decision === "approve" ? "approved" : "rejected";
 
     return this.prisma.$transaction(async (tx) => {
@@ -302,9 +334,15 @@ export class ServiceApplicationsController {
           id: `ntf-${randomUUID()}`,
           userId: updated.applicantId,
           at: now,
-          severity: body.decision === "approve" ? "success" : "critical",
-          title: body.decision === "approve" ? "Application approved" : "Application rejected",
-          body: `Your application ${updated.applicationNo} has been ${body.decision}d.`,
+          severity: updated.serviceType === "revenue-case"
+            ? (body.decision === "approve" ? "critical" : "success")
+            : (body.decision === "approve" ? "success" : "critical"),
+          title: updated.serviceType === "revenue-case"
+            ? (body.decision === "approve" ? "Revenue case upheld" : "Revenue case dismissed")
+            : (body.decision === "approve" ? "Application approved" : "Application rejected"),
+          body: updated.serviceType === "revenue-case"
+            ? `Revenue case ${updated.applicationNo} has been ${body.decision === "approve" ? "upheld" : "dismissed"}.`
+            : `Your application ${updated.applicationNo} has been ${body.decision}d.`,
           read: false,
           href: `/${updated.serviceType === "revenue-case" ? "revenue-cases" : updated.serviceType === "lease-settlement" ? "lease-settlement" : updated.serviceType === "land-admin" ? "land-admin" : "portal"}`,
         },

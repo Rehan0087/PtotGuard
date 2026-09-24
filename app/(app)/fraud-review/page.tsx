@@ -9,6 +9,7 @@ import {
   ScanLine,
   Ban,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -29,6 +30,7 @@ import {
   useReprocessDocument,
 } from "@/hooks/queries";
 import type { LandDocument } from "@/lib/types";
+import { documentPreviewUrl } from "@/lib/document-preview";
 
 /** 0..1 fraud score → risk band + bar treatment. The words come from `t`. */
 function scoreBand(score: number) {
@@ -56,6 +58,7 @@ function FraudCard({
   const score = doc.fraudScore;
   const band = score === undefined ? null : scoreBand(score);
   const busy = pendingId === doc.id;
+  const previewUrl = documentPreviewUrl(doc);
 
   return (
     <Card className="gap-4 px-5">
@@ -116,6 +119,19 @@ function FraudCard({
       </div>
 
       {/* AI-extracted findings */}
+      {doc.ocrFindings?.length ? (
+        <div className="rounded-lg bg-flagged-soft/70 p-3">
+          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-flagged">
+            <ShieldAlert className="size-4" />
+            {t.pages.fraudReview.aiFindings}
+          </div>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
+            {doc.ocrFindings.map((finding, index) => <li key={index}>{finding}</li>)}
+          </ul>
+        </div>
+      ) : null}
+
+      {/* AI-extracted fields */}
       {doc.extractedFields && Object.keys(doc.extractedFields).length > 0 ? (
         <dl className="grid gap-1.5 rounded-lg bg-muted/50 p-3 text-sm sm:grid-cols-2">
           {Object.entries(doc.extractedFields).map(([k, v]) => {
@@ -133,6 +149,12 @@ function FraudCard({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+        {previewUrl ? (
+          <Button size="sm" variant="outline" render={<a href={previewUrl} target="_blank" rel="noreferrer" />}>
+            <ExternalLink className="size-3.5" />
+            {t.common.open}
+          </Button>
+        ) : null}
         <Button size="sm" disabled={busy} onClick={() => onDecide(doc.id, "verify")}>
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
           {t.pages.fraudReview.clear}

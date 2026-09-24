@@ -8,6 +8,7 @@ import {
   Clock,
   FileSearch,
   FileText,
+  ExternalLink,
   Inbox,
   Loader2,
   MapPin,
@@ -38,6 +39,7 @@ import { useStatusMeta } from "@/lib/i18n/status";
 import type { Dictionary } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { LandDocument, Parcel } from "@/lib/types";
+import { documentPreviewUrl } from "@/lib/document-preview";
 
 // --- Pipeline stages -------------------------------------------------------
 
@@ -144,6 +146,7 @@ function ExtractionCard({ doc, parcel }: { doc: LandDocument; parcel?: Parcel })
   const reprocess = useReprocessDocument();
 
   const review = extractionReview(doc, parcel, keyed);
+  const previewUrl = documentPreviewUrl(doc);
   const busy = saveFields.isPending || decide.isPending || reprocess.isPending;
 
   const required = REQUIRED_FIELDS[doc.type] ?? [];
@@ -398,6 +401,12 @@ function ExtractionCard({ doc, parcel }: { doc: LandDocument; parcel?: Parcel })
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
+          {previewUrl ? (
+            <Button size="sm" variant="outline" render={<a href={previewUrl} target="_blank" rel="noreferrer" />}>
+              <ExternalLink className="size-3.5" />
+              {t.common.open}
+            </Button>
+          ) : null}
           {review.stage === "ready" ? (
             <>
               <Button size="sm" disabled={!review.canAccept || busy} onClick={accept}>

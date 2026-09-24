@@ -61,9 +61,10 @@ export type MutationDocumentFailure =
   | { code: "documents-not-verified"; documentIds: ID[] };
 
 /**
- * OCR/fraud clearance is the door into primary verification. Officer
- * verification is the door out of it. Keeping both checks here prevents the
- * real API and preview API from drifting apart.
+ * OCR completion, fraud clearance, and the officer's document decision are
+ * all required before a mutation may leave Submitted. The officer checklist
+ * remains a separate gate inside primary verification. Keeping both checks
+ * here prevents the real API and preview API from drifting apart.
  */
 export function mutationDocumentGate(
   documents: MutationDocumentState[],

@@ -1,14 +1,32 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { AccessTokenGuard } from "../auth/access-token.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError, ForbiddenError } from "../common/domain-exceptions";
-import { currentUserId } from "../auth/dev-current-user";
+import { currentUserId, type AuthenticatedRequest } from "../auth/dev-current-user";
 import { CreateGrievanceDto } from "./create-grievance.dto";
 import { UpdateGrievanceStatusDto } from "./update-grievance-status.dto";
 import { ResolveGrievanceDto } from "./resolve-grievance.dto";
 import { RateGrievanceDto } from "./rate-grievance.dto";
+
+/**
+ * Only the officer a grievance is routed to (or the supervisor it was
+ * escalated to) may move it — an admin may always step in. A staff-conduct
+ * complaint must never be closable by any other officer in the office.
+ */
+function assertHandler(
+  grievance: { assignedOfficerId: string | null; escalatedToId: string | null },
+  req: Request,
+): void {
+  const user = (req as AuthenticatedRequest).user;
+  if (user?.role === "admin") return;
+  if (user && (grievance.assignedOfficerId === user.id || grievance.escalatedToId === user.id)) return;
+  throw new ForbiddenError("This grievance is not assigned to you");
+}
 
 @Controller("grievances")
 export class GrievancesController {
@@ -61,6 +79,8 @@ export class GrievancesController {
     };
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Post()
   @HttpCode(201)
   async create(@Body() body: CreateGrievanceDto, @Req() req: Request) {
@@ -179,6 +199,8 @@ export class GrievancesController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office", "admin")
   @Patch(":id/status")
   async updateStatus(
     @Param("id") id: string,
@@ -187,6 +209,7 @@ export class GrievancesController {
   ) {
     const grievance = await this.prisma.grievance.findUnique({ where: { id } });
     if (!grievance) throw new NotFoundError("Grievance not found");
+    assertHandler(grievance, req);
 
     if (["resolved", "dismissed"].includes(grievance.status)) {
       throw new ConflictError("This grievance has already been decided.");
@@ -238,6 +261,8 @@ export class GrievancesController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("land-office", "admin")
   @Patch(":id/resolve")
   async resolve(
     @Param("id") id: string,
@@ -246,6 +271,7 @@ export class GrievancesController {
   ) {
     const grievance = await this.prisma.grievance.findUnique({ where: { id } });
     if (!grievance) throw new NotFoundError("Grievance not found");
+    assertHandler(grievance, req);
 
     if (["resolved", "dismissed"].includes(grievance.status)) {
       throw new ConflictError("This grievance has already been decided.");
@@ -303,6 +329,8 @@ export class GrievancesController {
     });
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   @Patch(":id/rate")
   async rate(
     @Param("id") id: string,

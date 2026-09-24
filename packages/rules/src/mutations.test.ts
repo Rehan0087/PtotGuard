@@ -387,7 +387,7 @@ describe("mutationActionGate", () => {
 
   it("locks a disputed mutation until mediation is decided", () => {
     expect(
-      mutationActionGate(mutation({ disputeId: "ds-1" }), "usr-officer", NOW, "in-mediation"),
+      mutationActionGate(mutation({ disputeId: "ds-1" }), "usr-officer", NOW, "forwarded-to-settlement"),
     ).toMatchObject({
       canApprove: false,
       canReject: false,
@@ -397,7 +397,7 @@ describe("mutationActionGate", () => {
 
   it("allows only approval after mediation resolves the dispute", () => {
     expect(
-      mutationActionGate(mutation({ disputeId: "ds-1" }), "usr-officer", NOW, "resolved"),
+      mutationActionGate(mutation({ disputeId: "ds-1" }), "usr-officer", NOW, "decided"),
     ).toMatchObject({ canApprove: true, canReject: false, hold: null });
   });
 

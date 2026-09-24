@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useT } from "@/lib/i18n/provider";
+import { useRole } from "@/hooks/queries";
 import { AppSidebar } from "./app-sidebar";
 import { Topbar } from "./topbar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { AssistantChatWidget } from "@/components/assistant/chat-widget";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const t = useT();
+  const role = useRole();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -35,6 +38,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <AppSidebar onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
+
+      {role === "citizen" && <AssistantChatWidget />}
     </div>
   );
 }
