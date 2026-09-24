@@ -359,7 +359,7 @@ function QueueCard({ application }: { application: ServiceApplication }) {
 
   function submit(choice: "approve" | "reject") {
     setBusy(choice);
-    decision.mutate(choice, {
+    decision.mutate({ decision: choice }, {
       onSuccess: () => {
         setBusy(null);
         toast.success(

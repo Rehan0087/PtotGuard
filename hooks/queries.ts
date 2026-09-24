@@ -398,6 +398,8 @@ function useServiceApplicationWrite(id: string) {
     invalidate: () => {
       qc.invalidateQueries({ queryKey: ["service-application", id] });
       qc.invalidateQueries({ queryKey: ["service-applications"] });
+      qc.invalidateQueries({ queryKey: ["khas-land-plots"] });
+      qc.invalidateQueries({ queryKey: ["parcels"] });
     },
   };
 }
@@ -414,8 +416,12 @@ export function usePayServiceApplication(id: string) {
 export function useServiceApplicationDecision(id: string) {
   const { invalidate } = useServiceApplicationWrite(id);
   return useMutation({
-    mutationFn: (decision: "approve" | "reject") =>
-      api.patch<ServiceApplication>(`/service-applications/${id}/decision`, { decision }),
+    mutationFn: ({ decision, decisionMessage }: { decision: "approve" | "reject"; decisionMessage?: string }) => {
+      const url = decisionMessage
+        ? `/service-applications/${id}/decision?message=${encodeURIComponent(decisionMessage)}`
+        : `/service-applications/${id}/decision`;
+      return api.patch<ServiceApplication>(url, { decision });
+    },
     onSuccess: invalidate,
   });
 }

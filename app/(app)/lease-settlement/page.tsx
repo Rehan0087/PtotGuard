@@ -26,13 +26,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api-client";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
@@ -115,6 +111,20 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
 
   // useWatch (vs watch()) keeps the component React-Compiler friendly.
   const landUse = useWatch({ control, name: "landUse" });
+  const areaDecimals = useWatch({ control, name: "areaDecimals" });
+  const termYears = useWatch({ control, name: "termYears" });
+
+  const estimatedLeaseFee = useMemo(() => {
+    if (prefilledPlot?.unitPricePerYear && areaDecimals) {
+      const yearly = Number(areaDecimals) * prefilledPlot.unitPricePerYear;
+      const years = Number(termYears) || 1;
+      return {
+        yearly: { amount: yearly, currency: "BDT" as const },
+        total: { amount: yearly * years, currency: "BDT" as const },
+      };
+    }
+    return null;
+  }, [prefilledPlot, areaDecimals, termYears]);
 
   const fee = policy
     ? {
@@ -254,11 +264,27 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
 
         <div className="space-y-2 border-t border-border pt-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">{t.pages.leaseSettlement.feeLabel}</span>
+            <span className="text-sm text-muted-foreground">{t.pages.leaseSettlement.feeLabel} (Application)</span>
             <span className="tabular font-heading text-lg font-semibold text-foreground">
               {fee ? f.money(fee) : "—"}
             </span>
           </div>
+          {estimatedLeaseFee && (
+            <div className="flex flex-col gap-2 mt-3 pt-3 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Estimated Yearly Lease Fee</span>
+                <span className="tabular font-heading text-lg font-semibold text-foreground">
+                  {f.money(estimatedLeaseFee.yearly)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-foreground">Total Estimated Lease Fee</span>
+                <span className="tabular font-heading text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {f.money(estimatedLeaseFee.total)}
+                </span>
+              </div>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">{t.pages.leaseSettlement.paymentNote}</p>
         </div>
 
@@ -299,18 +325,14 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
     leaseFeeAmount?: number;
     leaseFeePaidAt?: string;
     leaseExpiresAt?: string;
+    decisionMessage?: string;
   };
   const isAgricultural = details.landUse === "agricultural";
 
   async function handlePayLease(method: PaymentMethod) {
     setBusy(true);
     try {
-      const res = await fetch(`/api/lease-settlement/${application.id}/pay-lease`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentMethod: method }),
-      });
-      if (!res.ok) throw new Error("Failed to pay lease");
+      await api.patch(`/lease-settlement/${application.id}/pay-lease`, { paymentMethod: method });
       toast.success(t.pages.leaseSettlement.leaseFeePaidTitle);
       setPaymentDialogOpen(false);
       window.location.reload();
@@ -324,11 +346,7 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
   async function handleRenewLease() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/lease-settlement/${application.id}/renew`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!res.ok) throw new Error("Failed to renew lease");
+      await api.patch(`/lease-settlement/${application.id}/renew`, {});
       toast.success(t.pages.leaseSettlement.renewedTitle);
       window.location.reload();
     } catch {
@@ -367,6 +385,11 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
           {details.leaseExpiresAt && (
             <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-1">
               {t.pages.leaseSettlement.activeUntil}: {f.date(details.leaseExpiresAt)}
+            </div>
+          )}
+          {details.decisionMessage && (
+            <div className="mt-2 text-sm text-destructive font-medium border-t pt-2 border-border/50">
+              Note: {details.decisionMessage}
             </div>
           )}
         </div>
@@ -458,7 +481,10 @@ function NewApplicationFlow({ onDone }: { onDone: () => void }) {
             <div className="text-sm">
               <span className="font-medium">{t.pages.leaseSettlement.selectedPlot}:</span>{" "}
               {selectedPlot.dagNo} ({selectedPlot.mouza}, {selectedPlot.upazila}) —{" "}
-              {selectedPlot.areaDecimals} {t.pages.leaseSettlement.decimals}
+              {selectedPlot.areaDecimals} {t.pages.leaseSettlement.decimals} <br />
+              <span className="font-medium text-emerald-600 dark:text-emerald-400 mt-1 inline-block">
+                Total Price: ৳{selectedPlot.areaDecimals * (selectedPlot.unitPricePerYear ?? 0)} / year
+              </span>
             </div>
             <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>
               {t.pages.leaseSettlement.backToMap}
@@ -503,6 +529,10 @@ function NewApplicationFlow({ onDone }: { onDone: () => void }) {
                   {t.pages.leaseSettlement.landUse[
                     plot.landUse === "agricultural" ? "agricultural" : "nonAgricultural"
                   ]}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1 font-semibold">
+                  Unit Price: ৳{plot.unitPricePerYear} / year | Total: ৳{plot.areaDecimals * (plot.unitPricePerYear ?? 0)} / year
+                </div>
                 </div>
                 
                 {selectedPlot?.id === plot.id && (
@@ -605,9 +635,17 @@ function QueueCard({ application }: { application: ServiceApplication }) {
   const isAgricultural = details.landUse === "agricultural";
   const decided = CLOSED_STATUSES.has(application.status);
 
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectMessage, setRejectMessage] = useState("");
+
   function submit(choice: "approve" | "reject") {
     setBusy(choice);
-    decision.mutate(choice, {
+    const payload: { decision: "approve" | "reject"; decisionMessage?: string } = { decision: choice };
+    if (choice === "reject" && rejectMessage.trim().length > 0) {
+      payload.decisionMessage = rejectMessage;
+    }
+    
+    decision.mutate(payload, {
       onSuccess: () => {
         setBusy(null);
         toast.success(
@@ -616,7 +654,11 @@ function QueueCard({ application }: { application: ServiceApplication }) {
             : t.pages.leaseSettlement.rejectedTitle,
         );
       },
-      onError: () => setBusy(null),
+      onError: (err) => {
+        setBusy(null);
+        console.error("Decision mutation failed:", err);
+        toast.error("Failed to decide: " + (err as any).message);
+      },
     });
   }
 
@@ -676,14 +718,45 @@ function QueueCard({ application }: { application: ServiceApplication }) {
               size="sm"
               variant="destructive"
               disabled={decision.isPending}
-              onClick={() => submit("reject")}
+              onClick={() => setRejectDialogOpen(true)}
             >
-              {busy === "reject" ? <Loader2 className="size-3.5 animate-spin" /> : <Ban className="size-3.5" />}
+              <Ban className="size-3.5" />
               {t.pages.leaseSettlement.reject}
             </Button>
           </div>
         )}
       </div>
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Application</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium">Rejection Message (Optional)</label>
+            <Textarea
+              className="mt-2"
+              rows={3}
+              placeholder="Explain why this application is being rejected..."
+              value={rejectMessage}
+              onChange={(e) => setRejectMessage(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={decision.isPending}
+              onClick={() => {
+                submit("reject");
+                setRejectDialogOpen(false);
+              }}
+            >
+              {busy === "reject" ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              Confirm Reject
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

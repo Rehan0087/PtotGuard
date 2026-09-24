@@ -10,6 +10,8 @@ import {
   Query,
   Req,
   UseGuards,
+  ValidationPipe,
+  UsePipes
 } from "@nestjs/common";
 import type { Request } from "express";
 import type { ServiceType } from "@plotguard/rules";
@@ -276,10 +278,12 @@ export class ServiceApplicationsController {
   @UseGuards(AccessTokenGuard, RolesGuard)
   @Roles("land-office", "mediator")
   @Patch(":id/decision")
+  @UsePipes(new ValidationPipe({ whitelist: false, forbidNonWhitelisted: false, transform: true }))
   async decide(
     @Param("id") id: string,
     @Body() body: ServiceApplicationDecisionDto,
     @Req() req: Request,
+    @Query("message") message?: string,
   ) {
     const application = await this.prisma.serviceApplication.findUnique({ where: { id } });
     if (!application) throw new NotFoundError("Service application not found");
@@ -305,10 +309,77 @@ export class ServiceApplicationsController {
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
+      
+      const updatedDetails = application.details
+        ? { ...(application.details as any) }
+        : {};
+      
+      const rawDecisionMessage = message || req.body.decisionMessage;
+      if (rawDecisionMessage) {
+        (updatedDetails as any).decisionMessage = rawDecisionMessage;
+      }
+        
+      const updateData: any = { status, decidedAt: now };
+      if (rawDecisionMessage) {
+        updateData.details = updatedDetails;
+      }
+      
       const updated = await tx.serviceApplication.update({
         where: { id },
-        data: { status, decidedAt: now },
+        data: updateData,
       });
+
+      console.log("DECIDE START:", { status, serviceType: application.serviceType, khasPlotId: application.khasPlotId });
+      
+      if (application.serviceType === "lease-settlement" && application.khasPlotId) {
+        console.log("UPDATING KHAS PLOT STATUS");
+        if (status === "rejected") {
+          await tx.khasLandPlot.update({
+            where: { id: application.khasPlotId },
+            data: { status: "available" },
+          });
+        } else if (status === "approved") {
+          const plot = await tx.khasLandPlot.update({
+            where: { id: application.khasPlotId },
+            data: { status: "leased" },
+          });
+          const jurisdiction = await tx.jurisdiction.findFirst({
+            where: { name: plot.mouza, level: "mouza" },
+          });
+          const jur = jurisdiction || (await tx.jurisdiction.findFirst());
+          
+          if (jur) {
+            const parcelId = `p-${randomUUID()}`;
+            await tx.parcel.create({
+              data: {
+                id: parcelId,
+                dagNo: plot.dagNo,
+                khatianNo: `LEASE-${updated.applicationNo}`,
+                title: `Leased Khas Land (Dag ${plot.dagNo})`,
+                jurisdictionId: jur.id,
+                landUse: plot.landUse,
+                area: { value: plot.areaDecimals, unit: "decimal" },
+                ownerId: updated.applicantId,
+                ownershipType: "sole",
+                registryStatus: "registered",
+                centroid: (plot.centroidLat && plot.centroidLng) ? { lat: plot.centroidLat, lng: plot.centroidLng } : { lat: 23, lng: 90 },
+                boundary: plot.boundaryGeoJson ? JSON.parse(JSON.stringify(plot.boundaryGeoJson)) : undefined,
+                registeredAt: now,
+              }
+            });
+            await tx.ownershipRecord.create({
+              data: {
+                id: `or-${randomUUID()}`,
+                parcelId: parcelId,
+                ownerId: updated.applicantId,
+                ownerName: "Leaseholder",
+                acquisitionType: "grant",
+                fromDate: now,
+              }
+            });
+          }
+        }
+      }
 
       await this.audit.append(tx, {
         entityType: "service-application",

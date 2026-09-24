@@ -70,39 +70,39 @@ model User {
   passwordHash   String?
   createdAt      DateTime     @default(now())
 
-  parcelsOwned                 Parcel[]                  @relation("ParcelOwner")
-  ownershipRecords             OwnershipRecord[]
-  documentsOwned               LandDocument[]            @relation("DocumentOwner")
-  documentsUploaded            LandDocument[]            @relation("DocumentUploader")
-  disputesFiled                Dispute[]                 @relation("DisputeFiledBy")
-  disputesAsOfficer            Dispute[]                 @relation("DisputeOfficer")
-  disputesAsAgent              Dispute[]                 @relation("DisputeAgent")
-  disputesAsMediator           Dispute[]                 @relation("DisputeMediator")
-  disputesExecuted             Dispute[]                 @relation("DisputeExecutedBy")
-  disputeEvents                DisputeEvent[]
-  mutationsRequested           Mutation[]                @relation("MutationRequestedBy")
-  mutationsAsOfficer           Mutation[]                @relation("MutationOfficer")
-  mutationsAsFromOwner         Mutation[]                @relation("MutationFromOwner")
-  mutationsAsRecipient         Mutation[]                @relation("MutationToOwner")
-  mutationsVerificationStarted Mutation[]                @relation("MutationVerificationStarter")
-  mutationsVerified            Mutation[]                @relation("MutationVerifier")
-  mutationsApproved            Mutation[]                @relation("MutationApprover")
-  mutationsRejected            Mutation[]                @relation("MutationRejector")
-  serviceApplicationsFiled     ServiceApplication[]      @relation("ServiceApplicant")
-  serviceApplicationsAsOfficer ServiceApplication[]      @relation("ServiceApplicationOfficer")
-  serviceApplicationsAsMediator ServiceApplication[]     @relation("ServiceApplicationMediator")
-  serviceApplicationEvents     ServiceApplicationEvent[]
-  fieldReportsAssigned         FieldReport[]
-  fieldSurveySessions          FieldSurveySession[]
-  fieldSurveySyncReceipts      FieldSurveySyncReceipt[]
-  hearingsAsMediator           Hearing[]
-  grievancesFiled              Grievance[]               @relation("GrievanceFiler")
-  grievancesAsOfficer          Grievance[]               @relation("GrievanceOfficer")
-  grievancesEscalated          Grievance[]               @relation("GrievanceEscalated")
-  grievanceEvents              GrievanceEvent[]
-  notifications                AppNotification[]
-  auditActions                 AuditEvent[]
-  assistantConversation        AssistantConversation?
+  parcelsOwned                  Parcel[]                  @relation("ParcelOwner")
+  ownershipRecords              OwnershipRecord[]
+  documentsOwned                LandDocument[]            @relation("DocumentOwner")
+  documentsUploaded             LandDocument[]            @relation("DocumentUploader")
+  disputesFiled                 Dispute[]                 @relation("DisputeFiledBy")
+  disputesAsOfficer             Dispute[]                 @relation("DisputeOfficer")
+  disputesAsAgent               Dispute[]                 @relation("DisputeAgent")
+  disputesAsMediator            Dispute[]                 @relation("DisputeMediator")
+  disputesExecuted              Dispute[]                 @relation("DisputeExecutedBy")
+  disputeEvents                 DisputeEvent[]
+  mutationsRequested            Mutation[]                @relation("MutationRequestedBy")
+  mutationsAsOfficer            Mutation[]                @relation("MutationOfficer")
+  mutationsAsFromOwner          Mutation[]                @relation("MutationFromOwner")
+  mutationsAsRecipient          Mutation[]                @relation("MutationToOwner")
+  mutationsVerificationStarted  Mutation[]                @relation("MutationVerificationStarter")
+  mutationsVerified             Mutation[]                @relation("MutationVerifier")
+  mutationsApproved             Mutation[]                @relation("MutationApprover")
+  mutationsRejected             Mutation[]                @relation("MutationRejector")
+  serviceApplicationsFiled      ServiceApplication[]      @relation("ServiceApplicant")
+  serviceApplicationsAsOfficer  ServiceApplication[]      @relation("ServiceApplicationOfficer")
+  serviceApplicationsAsMediator ServiceApplication[]      @relation("ServiceApplicationMediator")
+  serviceApplicationEvents      ServiceApplicationEvent[]
+  fieldReportsAssigned          FieldReport[]
+  fieldSurveySessions           FieldSurveySession[]
+  fieldSurveySyncReceipts       FieldSurveySyncReceipt[]
+  hearingsAsMediator            Hearing[]
+  grievancesFiled               Grievance[]               @relation("GrievanceFiler")
+  grievancesAsOfficer           Grievance[]               @relation("GrievanceOfficer")
+  grievancesEscalated           Grievance[]               @relation("GrievanceEscalated")
+  grievanceEvents               GrievanceEvent[]
+  notifications                 AppNotification[]
+  auditActions                  AuditEvent[]
+  assistantConversation         AssistantConversation?
 
   @@index([jurisdictionId])
   @@map("users")
@@ -229,9 +229,9 @@ model LandDocument {
   /// Record<string, string> pulled by OCR — see LandDocument.extractedFields.
   extractedFields    Json?
   /// AI screening evidence. Advisory only; the officer owns the decision.
-  ocrFindings         Json?
+  ocrFindings        Json?
   /// Model identifier retained for audit/reproducibility.
-  ocrModel            String?
+  ocrModel           String?
   thumbnailUrl       String?
 
   @@index([parcelId])
@@ -412,40 +412,40 @@ model Mutation {
 // ServiceType in @plotguard/rules for why Mutation is not one of them.
 
 model ServiceApplication {
-  id                String    @id
-  applicationNo     String    @unique
+  id                 String        @id
+  applicationNo      String        @unique
   /// ServiceType: "land-tax" | "acquisition" | "lease-settlement"
   ///            | "land-admin" | "revenue-case" | "info-bank-request"
-  serviceType       String
+  serviceType        String
   /// ServiceApplicationStatus: "draft" | "submitted" | "payment-pending"
   ///   | "under-review" | "field-investigation" | "hearing-scheduled"
   ///   | "approved" | "rejected" | "withdrawn"
-  status            String    @default("draft")
+  status             String        @default("draft")
   /// Not every service is parcel-bound (e.g. an information-bank browse request).
-  parcelId          String?
-  parcel            Parcel?   @relation(fields: [parcelId], references: [id])
-  khasPlotId        String?
-  khasPlot          KhasLandPlot? @relation(fields: [khasPlotId], references: [id])
-  applicantId       String
-  applicant         User      @relation("ServiceApplicant", fields: [applicantId], references: [id])
-  assignedOfficerId String?
-  assignedOfficer   User?     @relation("ServiceApplicationOfficer", fields: [assignedOfficerId], references: [id])
+  parcelId           String?
+  parcel             Parcel?       @relation(fields: [parcelId], references: [id])
+  khasPlotId         String?
+  khasPlot           KhasLandPlot? @relation(fields: [khasPlotId], references: [id])
+  applicantId        String
+  applicant          User          @relation("ServiceApplicant", fields: [applicantId], references: [id])
+  assignedOfficerId  String?
+  assignedOfficer    User?         @relation("ServiceApplicationOfficer", fields: [assignedOfficerId], references: [id])
   assignedMediatorId String?
-  assignedMediator   User?     @relation("ServiceApplicationMediator", fields: [assignedMediatorId], references: [id])
+  assignedMediator   User?         @relation("ServiceApplicationMediator", fields: [assignedMediatorId], references: [id])
   /// The one place each service's own fields live — see ServiceType.
-  details           Json      @default("{}")
-  documentIds       String[]
+  details            Json          @default("{}")
+  documentIds        String[]
   /// BDT, no paisa — same convention as Policy.mutationFeeBdt.
-  feeAmount         Int?
+  feeAmount          Int?
   /// ServiceApplicationPaymentMethod: "bkash" | "nagad" | "card" — simulated,
   /// no gateway. See Mutation.paymentMethod's own note.
-  paymentMethod     String?
-  transactionId     String?
-  paidAt            DateTime?
-  submittedAt       DateTime?
-  decidedAt         DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  paymentMethod      String?
+  transactionId      String?
+  paidAt             DateTime?
+  submittedAt        DateTime?
+  decidedAt          DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   events ServiceApplicationEvent[]
 
@@ -513,38 +513,38 @@ model AssistantMessage {
 // --- Field reports ----------------------------------------------------------
 
 model FieldReport {
-  id              String                   @id
-  parcelId        String
-  parcel          Parcel                   @relation(fields: [parcelId], references: [id])
-  parcelDagNo     String
-  disputeId       String?
-  dispute         Dispute?                 @relation(fields: [disputeId], references: [id])
-  mutationId      String?
-  mutation        Mutation?                @relation(fields: [mutationId], references: [id])
+  id                 String                   @id
+  parcelId           String
+  parcel             Parcel                   @relation(fields: [parcelId], references: [id])
+  parcelDagNo        String
+  disputeId          String?
+  dispute            Dispute?                 @relation(fields: [disputeId], references: [id])
+  mutationId         String?
+  mutation           Mutation?                @relation(fields: [mutationId], references: [id])
   /// FieldReportPurpose: "boundary-survey" | "encroachment-check" | "possession-verify" | "measurement"
-  purpose         String
+  purpose            String
   /// FieldReportStatus: "assigned" | "accepted" | "en-route" | "in-progress" | "completed" | "cancelled"
-  status          String                   @default("assigned")
-  assignedAgentId String
-  assignedAgent   User                     @relation(fields: [assignedAgentId], references: [id])
-  assignedAt      DateTime                 @default(now())
-  acceptedAt      DateTime?
-  scheduledFor    DateTime
-  addressHint     String?
+  status             String                   @default("assigned")
+  assignedAgentId    String
+  assignedAgent      User                     @relation(fields: [assignedAgentId], references: [id])
+  assignedAt         DateTime                 @default(now())
+  acceptedAt         DateTime?
+  scheduledFor       DateTime
+  addressHint        String?
   /// GpsCapture[] — accumulate via POST .../media, never addressed singly.
-  gpsCaptures     Json                     @default("[]")
+  gpsCaptures        Json                     @default("[]")
   /// FieldPhoto[] — same reasoning as gpsCaptures.
-  photos          Json                     @default("[]")
-  sketchMapUrl    String?
-  sketchMapFileName String?
-  notes           String?
-  submittedAt     DateTime?
-  disputeFound    Boolean?
+  photos             Json                     @default("[]")
+  sketchMapUrl       String?
+  sketchMapFileName  String?
+  notes              String?
+  submittedAt        DateTime?
+  disputeFound       Boolean?
   disputeDescription String?
-  reviewedAt      DateTime?
-  reviewedById    String?
-  survey          FieldSurveySession?
-  syncReceipts    FieldSurveySyncReceipt[]
+  reviewedAt         DateTime?
+  reviewedById       String?
+  survey             FieldSurveySession?
+  syncReceipts       FieldSurveySyncReceipt[]
 
   @@index([parcelId])
   @@index([disputeId])
@@ -648,31 +648,31 @@ model Hearing {
 // implicated officer's queue and are routed to a supervisor or admin.
 
 model Grievance {
-  id                String          @id
-  caseNumber        String          @unique
+  id                 String    @id
+  caseNumber         String    @unique
   /// GrievanceCategory: "technical" | "delay" | "staff-conduct" | "corruption"
-  category          String
+  category           String
   /// GrievanceStatus: "submitted" | "under-review" | "investigating"
   ///   | "resolved" | "dismissed" | "escalated"
-  status            String          @default("submitted")
-  description       String
-  filedById         String
-  filedBy           User            @relation("GrievanceFiler", fields: [filedById], references: [id])
-  filedByName       String
+  status             String    @default("submitted")
+  description        String
+  filedById          String
+  filedBy            User      @relation("GrievanceFiler", fields: [filedById], references: [id])
+  filedByName        String
   /// Set to null for staff-conduct/corruption so the accused officer's queue is bypassed.
-  assignedOfficerId String?
-  assignedOfficer   User?           @relation("GrievanceOfficer", fields: [assignedOfficerId], references: [id])
+  assignedOfficerId  String?
+  assignedOfficer    User?     @relation("GrievanceOfficer", fields: [assignedOfficerId], references: [id])
   /// For conduct/corruption: routed to the supervisor instead.
-  escalatedToId     String?
-  escalatedTo       User?           @relation("GrievanceEscalated", fields: [escalatedToId], references: [id])
-  resolutionNote    String?
+  escalatedToId      String?
+  escalatedTo        User?     @relation("GrievanceEscalated", fields: [escalatedToId], references: [id])
+  resolutionNote     String?
   /// 1-5 citizen satisfaction rating, filled when status = "resolved" or "dismissed".
   satisfactionRating Int?
-  slaDeadline       DateTime?
-  escalatedAt       DateTime?
-  resolvedAt        DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  slaDeadline        DateTime?
+  escalatedAt        DateTime?
+  resolvedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   events GrievanceEvent[]
 
@@ -722,21 +722,22 @@ model AppNotification {
 // --- Khas Land Plots ----------------------------------------------------
 
 model KhasLandPlot {
-  id                  String   @id
-  mouza               String
-  upazila             String
-  district            String
-  jlNo                String?       // Jurisdiction list number
-  dagNo               String
-  landUse             String        // "agricultural" | "non-agricultural"
-  areaDecimals        Int
-  centroidLat         Float
-  centroidLng         Float
-  boundaryGeoJson     Json?         // GeoJSON polygon for Leaflet rendering
-  status              String        @default("available")  // "available" | "reserved" | "leased"
-  notes               String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id               String   @id
+  mouza            String
+  upazila          String
+  district         String
+  jlNo             String? // Jurisdiction list number
+  dagNo            String
+  landUse          String // "agricultural" | "non-agricultural"
+  areaDecimals     Int
+  centroidLat      Float
+  centroidLng      Float
+  boundaryGeoJson  Json? // GeoJSON polygon for Leaflet rendering
+  status           String   @default("available") // "available" | "reserved" | "leased"
+  unitPricePerYear Int      @default(50)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   serviceApplications ServiceApplication[]
 
