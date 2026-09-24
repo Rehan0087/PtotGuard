@@ -150,9 +150,7 @@ export default function NewMutationPage() {
     formState: { errors },
   } = useForm<FormInput, unknown, FormValues>({
     resolver: standardSchemaResolver(schema),
-    // A marketplace listing hands off here once the seller accepts a
-    // buyer's interest — see /marketplace — pre-filling parcel and
-    // recipient via query params. Type already defaults to "sale".
+    // Pre-filling parcel and recipient via query params. Type already defaults to "sale".
     defaultValues: {
       parcelId: searchParams.get("parcelId") ?? "",
       type: "sale",
@@ -184,7 +182,7 @@ export default function NewMutationPage() {
 
   // Display-only — the form only ever submits toOwnerId, but the picked
   // name is what the review step and a "change" chip need to show. Seeded
-  // from the marketplace deep link when present, same as toOwnerId above.
+  // from a deep link when present, same as toOwnerId above.
   const [toOwnerName, setToOwnerName] = useState(() => searchParams.get("toOwnerName") ?? "");
 
   const needsRecipient = TYPES_WITH_RECIPIENT.includes(type);

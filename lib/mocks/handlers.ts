@@ -63,11 +63,7 @@ import {
   type AcquisitionDetails,
   acquisitionTransition,
   validIncreasedAward,
-  canListParcel,
-  listingTransition,
-  canDecideInquiry,
-  canWithdrawInquiry,
-  listingAfterMutationDecision,
+
   routeGrievance,
   type GrievanceCategory,
 } from "@plotguard/rules";
@@ -462,82 +458,6 @@ function grievanceForHandler(id: string, request: Request) {
   return { grievance, me };
 }
 
-// --- Land marketplace helpers ------------------------------------------
-
-function personSummary(userId: string) {
-  const user = db.users.find((u) => u.id === userId);
-  return { id: userId, name: user?.name ?? "Unknown" };
-}
-
-function parcelSummary(parcelId: string) {
-  const parcel = db.parcels.find((p) => p.id === parcelId);
-  return parcel
-    ? {
-        id: parcel.id,
-        ulpin: parcel.ulpin ?? null,
-        dagNo: parcel.dagNo,
-        khatianNo: parcel.khatianNo,
-        title: parcel.title,
-        landUse: parcel.landUse,
-        area: parcel.area,
-        jurisdictionId: parcel.jurisdictionId,
-      }
-    : null;
-}
-
-function withListingJoins(listing: db.LandListingMock) {
-  return { ...listing, parcel: parcelSummary(listing.parcelId), seller: personSummary(listing.sellerId) };
-}
-
-function withInquiryJoins(inquiry: db.LandListingInquiryMock) {
-  return { ...inquiry, buyer: personSummary(inquiry.buyerId) };
-}
-
-function inquiriesFor(listingId: string) {
-  return db.landListingInquiries.filter((i) => i.listingId === listingId);
-}
-
-function transitionListingMock(id: string, request: Request, to: db.LandListingMock["status"]) {
-  const me = currentUser(request);
-  const listing = db.landListings.find((l) => l.id === id);
-  if (!listing) return notFound("Listing not found");
-  if (listing.sellerId !== me.id) return notFound("Listing not found");
-  const review = listingTransition(listing.status, to);
-  if (!review.canChange) return unprocessable({ base: { code: "illegal-transition", blockers: review.blockers } });
-  listing.status = to;
-  listing.updatedAt = new Date().toISOString();
-  return HttpResponse.json(withListingJoins(listing));
-}
-
-function decideInquiryMock(
-  id: string,
-  inquiryId: string,
-  request: Request,
-  to: "accepted" | "declined",
-) {
-  const me = currentUser(request);
-  const listing = db.landListings.find((l) => l.id === id);
-  const inquiry = db.landListingInquiries.find((i) => i.id === inquiryId);
-  if (!listing || !inquiry || inquiry.listingId !== id) return notFound("Inquiry not found");
-  if (listing.sellerId !== me.id) return notFound("Inquiry not found");
-  const review = canDecideInquiry(listing.status, inquiry.status);
-  if (!review.canDecide) return unprocessable({ base: { code: "cannot-decide", ...review.blocker } });
-
-  const now = new Date().toISOString();
-  inquiry.status = to;
-  inquiry.updatedAt = now;
-  if (to === "accepted") {
-    for (const other of inquiriesFor(id)) {
-      if (other.id !== inquiryId && other.status === "open") {
-        other.status = "declined";
-        other.updatedAt = now;
-      }
-    }
-    listing.status = "under-transfer";
-    listing.updatedAt = now;
-  }
-  return HttpResponse.json({ inquiry: withInquiryJoins(inquiry), buyerId: inquiry.buyerId });
-}
 
 /**
  * Flat `field.from` / `field.to` pairs for the fields that actually changed.
@@ -1572,26 +1492,7 @@ export const handlers = [
         ...(approving ? (note ? { note } : {}) : { reason }),
       },
     });
-    // Mirrors MutationsController.settleMarketplaceListing().
-    if (mutation.type === "sale" && mutation.toOwnerId) {
-      const listing = db.landListings.find(
-        (l) =>
-          l.parcelId === mutation.parcelId &&
-          l.status === "under-transfer" &&
-          inquiriesFor(l.id).some((i) => i.buyerId === mutation.toOwnerId && i.status === "accepted"),
-      );
-      if (listing) {
-        const outcome = listingAfterMutationDecision(approving);
-        listing.status = outcome.listing;
-        listing.updatedAt = new Date().toISOString();
-        for (const inquiry of inquiriesFor(listing.id)) {
-          if (inquiry.buyerId === mutation.toOwnerId && inquiry.status === "accepted") {
-            inquiry.status = outcome.acceptedInquiry;
-            inquiry.updatedAt = listing.updatedAt;
-          }
-        }
-      }
-    }
+
     return HttpResponse.json(mutation);
   }),
 
@@ -4634,152 +4535,7 @@ export const handlers = [
     return HttpResponse.json({ ok: true });
   }),
 
-  // Land marketplace ---------------------------------------------------------
-  // Browse, list, express interest. Accepting an inquiry only moves the
-  // listing to "under-transfer" and hands back the buyer's id/name — see
-  // apps/api/src/land-listings for the real endpoints this mirrors.
 
-  http.get(`${API}/land-listings`, async ({ request }) => {
-    await latency();
-    const url = new URL(request.url);
-    const q = (url.searchParams.get("q") ?? "").toLowerCase();
-    const landUse = url.searchParams.get("landUse");
-    const items = db.landListings
-      .filter((l) => l.status === "active")
-      .filter((l) => !q || l.description.toLowerCase().includes(q))
-      .filter((l) => !landUse || db.parcels.find((p) => p.id === l.parcelId)?.landUse === landUse)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map(withListingJoins);
-    return HttpResponse.json(paginate(items, url));
-  }),
-
-  http.get(`${API}/land-listings/mine`, async ({ request }) => {
-    await latency();
-    const me = currentUser(request);
-    const items = db.landListings
-      .filter((l) => l.sellerId === me.id)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map((l) => ({ ...withListingJoins(l), inquiries: inquiriesFor(l.id).map(withInquiryJoins) }));
-    return HttpResponse.json(items);
-  }),
-
-  http.get(`${API}/land-listings/inquiries/mine`, async ({ request }) => {
-    await latency();
-    const me = currentUser(request);
-    const items = db.landListingInquiries
-      .filter((i) => i.buyerId === me.id)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map((i) => {
-        const listing = db.landListings.find((l) => l.id === i.listingId)!;
-        return { ...withInquiryJoins(i), listing: withListingJoins(listing) };
-      });
-    return HttpResponse.json(items);
-  }),
-
-  http.get(`${API}/land-listings/:id`, async ({ params, request }) => {
-    await latency();
-    const me = currentUser(request);
-    const listing = db.landListings.find((l) => l.id === params.id);
-    if (!listing) return notFound("Listing not found");
-    const isSeller = listing.sellerId === me.id;
-    const inquiries = inquiriesFor(listing.id)
-      .filter((i) => isSeller || i.buyerId === me.id)
-      .map(withInquiryJoins);
-    return HttpResponse.json({ ...withListingJoins(listing), inquiries });
-  }),
-
-  http.post(`${API}/land-listings`, async ({ request }) => {
-    await latency();
-    const me = currentUser(request);
-    const body = (await request.json()) as {
-      parcelId: string;
-      askingPriceBdt: number;
-      description: string;
-    };
-    const parcel = db.parcels.find((p) => p.id === body.parcelId);
-    if (!parcel) return notFound("Parcel not found");
-    if (parcel.ownerId !== me.id) return notFound("Parcel not found");
-
-    const restrictions = db.parcelRestrictions.filter((r) => r.parcelId === parcel.id);
-    const hasOpenListing = db.landListings.some(
-      (l) => l.parcelId === parcel.id && (l.status === "active" || l.status === "under-transfer"),
-    );
-    const review = canListParcel(restrictions, hasOpenListing);
-    if (!review.canList) {
-      return unprocessable({ parcelId: { code: "not-listable", blockers: review.blockers } });
-    }
-
-    const now = new Date().toISOString();
-    const created: db.LandListingMock = {
-      id: crypto.randomUUID(),
-      parcelId: parcel.id,
-      sellerId: me.id,
-      askingPriceBdt: body.askingPriceBdt,
-      description: body.description,
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-    };
-    db.landListings.push(created);
-    return HttpResponse.json(withListingJoins(created), { status: 201 });
-  }),
-
-  http.patch(`${API}/land-listings/:id/withdraw`, async ({ params, request }) =>
-    transitionListingMock(params.id as string, request, "withdrawn"),
-  ),
-
-  http.patch(`${API}/land-listings/:id/reactivate`, async ({ params, request }) =>
-    transitionListingMock(params.id as string, request, "active"),
-  ),
-
-  http.post(`${API}/land-listings/:id/inquiries`, async ({ params, request }) => {
-    await latency();
-    const me = currentUser(request);
-    const listing = db.landListings.find((l) => l.id === params.id);
-    if (!listing) return notFound("Listing not found");
-    if (listing.sellerId === me.id) return unprocessable({ base: { code: "own-listing" } });
-    if (listing.status !== "active") {
-      return unprocessable({ base: { code: "listing-not-active", status: listing.status } });
-    }
-    const existingOpen = db.landListingInquiries.find(
-      (i) => i.listingId === listing.id && i.buyerId === me.id && i.status === "open",
-    );
-    if (existingOpen) return conflict("You already have an open inquiry on this listing.");
-
-    const body = (await request.json()) as { message?: string };
-    const now = new Date().toISOString();
-    const created: db.LandListingInquiryMock = {
-      id: crypto.randomUUID(),
-      listingId: listing.id,
-      buyerId: me.id,
-      message: body.message,
-      status: "open",
-      createdAt: now,
-      updatedAt: now,
-    };
-    db.landListingInquiries.push(created);
-    return HttpResponse.json(withInquiryJoins(created), { status: 201 });
-  }),
-
-  http.patch(`${API}/land-listings/:id/inquiries/:inquiryId/accept`, async ({ params, request }) =>
-    decideInquiryMock(params.id as string, params.inquiryId as string, request, "accepted"),
-  ),
-
-  http.patch(`${API}/land-listings/:id/inquiries/:inquiryId/decline`, async ({ params, request }) =>
-    decideInquiryMock(params.id as string, params.inquiryId as string, request, "declined"),
-  ),
-
-  http.patch(`${API}/land-listings/:id/inquiries/:inquiryId/withdraw`, async ({ params, request }) => {
-    const me = currentUser(request);
-    const inquiry = db.landListingInquiries.find((i) => i.id === params.inquiryId);
-    if (!inquiry || inquiry.listingId !== params.id) return notFound("Inquiry not found");
-    if (inquiry.buyerId !== me.id) return notFound("Inquiry not found");
-    const review = canWithdrawInquiry(inquiry.status);
-    if (!review.canWithdraw) return unprocessable({ base: { code: "cannot-withdraw", ...review.blocker } });
-    inquiry.status = "withdrawn";
-    inquiry.updatedAt = new Date().toISOString();
-    return HttpResponse.json(withInquiryJoins(inquiry));
-  }),
 
   // Complaints & grievances ------------------------------------------------
   // Mirrors GrievancesController. Service complaints route to the land office
