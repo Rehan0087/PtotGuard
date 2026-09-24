@@ -49,8 +49,8 @@ function RevenueCaseWorkCard({ application }: { application: ServiceApplication 
         <Button size="sm" variant="outline" disabled={notify.isPending} onClick={() => notify.mutate(undefined, { onSuccess: () => toast.success(t.pages.revenueCases.citizenNotifiedTitle) })}><Bell className="size-3.5" />{t.pages.revenueCases.notifyCitizen}</Button>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" disabled={decision.isPending} onClick={() => decision.mutate("approve")}><Check className="size-3.5" />{t.pages.revenueCases.uphold}</Button>
-        <Button size="sm" variant="outline" disabled={decision.isPending} onClick={() => decision.mutate("reject")}><Ban className="size-3.5" />{t.pages.revenueCases.dismiss}</Button>
+        <Button size="sm" disabled={decision.isPending} onClick={() => decision.mutate({ decision: "approve" })}><Check className="size-3.5" />{t.pages.revenueCases.uphold}</Button>
+        <Button size="sm" variant="outline" disabled={decision.isPending} onClick={() => decision.mutate({ decision: "reject" })}><Ban className="size-3.5" />{t.pages.revenueCases.dismiss}</Button>
         {(schedule.isPending || notify.isPending || decision.isPending) ? <Loader2 className="size-4 animate-spin self-center text-muted-foreground" /> : null}
       </div>
     </div> : null}

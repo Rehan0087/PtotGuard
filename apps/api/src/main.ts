@@ -53,7 +53,6 @@ async function bootstrap(): Promise<void> {
       // Strip anything the DTO does not declare, so a client cannot set a field
       // the rule never sees — status and ownership move through gates, not body.
       whitelist: true,
-      forbidNonWhitelisted: true,
       transform: true,
     }),
   );

@@ -130,6 +130,7 @@ export interface KhasLandPlot {
   centroidLng: number;
   boundaryGeoJson?: GeoPolygon;
   status: "available" | "reserved" | "leased";
+  unitPricePerYear: number;
   notes?: string;
   createdAt: ISODateString;
   updatedAt: ISODateString;

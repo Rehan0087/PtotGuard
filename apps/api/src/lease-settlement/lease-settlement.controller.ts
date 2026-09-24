@@ -53,6 +53,8 @@ export class LeaseSettlementController {
       const applicationNo = `LSE-2026-${String(1000 + count).padStart(6, "0")}`;
       const now = new Date();
 
+      let leaseFeeAmount = feeFor(body.landUse, policy);
+
       if (body.khasPlotId) {
         const plot = await tx.khasLandPlot.findUnique({ where: { id: body.khasPlotId } });
         if (!plot) throw new NotFoundError("Khas land plot not found");
@@ -62,6 +64,8 @@ export class LeaseSettlementController {
           where: { id: body.khasPlotId },
           data: { status: "reserved" },
         });
+        
+        leaseFeeAmount = plot.unitPricePerYear * body.areaDecimals * body.termYears;
       }
 
       const created = await tx.serviceApplication.create({
@@ -79,7 +83,7 @@ export class LeaseSettlementController {
             areaDecimals: body.areaDecimals,
             termYears: body.termYears,
             purpose: body.purpose,
-            leaseFeeAmount: feeFor(body.landUse, policy),
+            leaseFeeAmount,
           } as never,
           documentIds: body.documentIds ?? [],
           feeAmount: policy.leaseSettlementApplicationFeeBdt,
@@ -146,6 +150,13 @@ export class LeaseSettlementController {
           } as never,
         },
       });
+
+      if (application.khasPlotId) {
+        await tx.khasLandPlot.update({
+          where: { id: application.khasPlotId },
+          data: { status: "leased" },
+        });
+      }
 
       await this.audit.append(tx, {
         entityType: "service-application",
