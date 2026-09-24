@@ -4,7 +4,7 @@ import { AccessTokenGuard } from "../auth/access-token.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import type { Request } from "express";
-import { routeGrievance, type Jurisdiction } from "@plotguard/rules";
+import { OPEN_GRIEVANCE_STATUSES, routeGrievance, shouldEscalateGrievance, type GrievanceStatus, type Jurisdiction } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError, ForbiddenError } from "../common/domain-exceptions";
@@ -38,6 +38,7 @@ export class GrievancesController {
 
   @Get()
   async findAll(@Req() req: Request) {
+    await this.escalateOverdue();
     const userId = currentUserId(req);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError("User not found");
@@ -57,6 +58,7 @@ export class GrievancesController {
 
   @Get(":id")
   async findOne(@Param("id") id: string, @Req() req: Request) {
+    await this.escalateOverdue();
     const grievance = await this.prisma.grievance.findUnique({
       where: { id },
       include: {
@@ -382,5 +384,69 @@ export class GrievancesController {
 
       return updated;
     });
+  }
+
+  /**
+   * Sends every open grievance past its response deadline over the office's
+   * head. There is no job scheduler here, so this runs before any grievance
+   * is read — nobody can see one without it having been swept first. Each
+   * escalation is a conditional update, so two concurrent reads escalate a
+   * grievance once.
+   */
+  private async escalateOverdue(now: Date = new Date()) {
+    const overdue = await this.prisma.grievance.findMany({
+      where: {
+        status: { in: OPEN_GRIEVANCE_STATUSES },
+        escalatedToId: null,
+        slaDeadline: { lt: now },
+      },
+    });
+    const due = overdue.filter((g) =>
+      shouldEscalateGrievance({ ...g, status: g.status as GrievanceStatus }, now),
+    );
+    if (due.length === 0) return;
+
+    const admin = await this.prisma.user.findFirst({
+      where: { role: "admin", status: "active" },
+      orderBy: { id: "asc" },
+    });
+    if (!admin) return;
+
+    for (const grievance of due) {
+      await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.grievance.updateMany({
+          where: { id: grievance.id, escalatedToId: null, status: { in: OPEN_GRIEVANCE_STATUSES } },
+          data: { status: "escalated", escalatedToId: admin.id, escalatedAt: now, updatedAt: now },
+        });
+        if (count === 0) return;
+
+        await tx.grievanceEvent.create({
+          data: {
+            id: `ge-${randomUUID()}`,
+            grievanceId: grievance.id,
+            at: now,
+            type: "escalated",
+            title: "Escalated — response deadline missed",
+            description: `No resolution by the deadline, so the complaint was passed to ${admin.name}.`,
+            actorName: "System",
+          },
+        });
+        await this.audit.append(tx, {
+          entityType: "grievance",
+          entityId: grievance.id,
+          action: "status-change",
+          actorId: admin.id,
+          payload: { from: grievance.status, to: "escalated", reason: "sla-missed", automatic: true },
+        });
+        for (const notice of [
+          { userId: admin.id, severity: "warning", title: "Grievance escalated to you", body: `${grievance.caseNumber} missed its response deadline and needs your attention.` },
+          { userId: grievance.filedById, severity: "info", title: "Your complaint was escalated", body: `${grievance.caseNumber} was not resolved in time, so it has been passed to an administrator.` },
+        ]) {
+          await tx.appNotification.create({
+            data: { id: `n-${randomUUID()}`, at: now, read: false, href: `/grievances/${grievance.id}`, ...notice },
+          });
+        }
+      });
+    }
   }
 }

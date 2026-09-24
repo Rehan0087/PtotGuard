@@ -69,6 +69,7 @@ import {
   canWithdrawInquiry,
   listingAfterMutationDecision,
   routeGrievance,
+  shouldEscalateGrievance,
   type GrievanceCategory,
 } from "@plotguard/rules";
 import * as db from "./data";
@@ -445,6 +446,31 @@ function unprocessable(errors: Record<string, ({ code: string } & Record<string,
 /** A write refused because of the state of other records. See `unprocessable`. */
 function conflict(message: string, reason?: unknown) {
   return HttpResponse.json({ error: "conflict", message, reason }, { status: 409 });
+}
+
+/** Mirrors GrievancesController.escalateOverdue() — runs before any grievance read. */
+async function escalateOverdueGrievances(now: Date = new Date()) {
+  const admin = db.users
+    .filter((u) => u.role === "admin" && u.status === "active")
+    .sort((a, b) => a.id.localeCompare(b.id))[0];
+  if (!admin) return;
+  for (const grievance of db.grievances) {
+    if (!shouldEscalateGrievance(grievance, now)) continue;
+    const at = now.toISOString();
+    const from = grievance.status;
+    Object.assign(grievance, { status: "escalated", escalatedToId: admin.id, escalatedAt: at, updatedAt: at });
+    db.grievanceEvents.push({
+      id: `ge-${crypto.randomUUID()}`, grievanceId: grievance.id, at, type: "escalated",
+      title: "Escalated — response deadline missed",
+      description: `No resolution by the deadline, so the complaint was passed to ${admin.name}.`,
+      actorName: "System",
+    });
+    await appendAudit({ entityType: "grievance", entityId: grievance.id, action: "status-change", actorId: admin.id, actorName: "System", payload: { from, to: "escalated", reason: "sla-missed", automatic: true } });
+    db.notifications.unshift(
+      { id: `n-${crypto.randomUUID()}`, userId: admin.id, at, severity: "warning", title: "Grievance escalated to you", body: `${grievance.caseNumber} missed its response deadline and needs your attention.`, read: false, href: `/grievances/${grievance.id}` },
+      { id: `n-${crypto.randomUUID()}`, userId: grievance.filedById, at, severity: "info", title: "Your complaint was escalated", body: `${grievance.caseNumber} was not resolved in time, so it has been passed to an administrator.`, read: false, href: `/grievances/${grievance.id}` },
+    );
+  }
 }
 
 /** Mirrors assertHandler() in GrievancesController, plus its not-decided guard. */
@@ -4788,6 +4814,7 @@ export const handlers = [
 
   http.get(`${API}/grievances`, async ({ request }) => {
     await latency();
+    await escalateOverdueGrievances();
     const me = currentUser(request);
     const items = db.grievances
       .filter((g) =>
@@ -4801,6 +4828,7 @@ export const handlers = [
 
   http.get(`${API}/grievances/:id`, async ({ params, request }) => {
     await latency();
+    await escalateOverdueGrievances();
     const me = currentUser(request);
     const grievance = db.grievances.find((g) => g.id === params.id);
     if (!grievance) return notFound("Grievance not found");

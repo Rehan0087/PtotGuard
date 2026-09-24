@@ -2,7 +2,9 @@
 
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Clock, ShieldAlert, UserX, ServerCrash, Star, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Clock, ShieldAlert, UserX, ServerCrash, Star, CheckCircle2, AlarmClock } from "lucide-react";
+import { toast } from "sonner";
+import { grievanceSla } from "@plotguard/rules";
 import { useGrievance, useRateGrievance, useResolveGrievance } from "@/hooks/queries";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -60,6 +62,13 @@ export default function GrievanceDetailPage({
   const categoryKey = grievance.category === "staff-conduct" ? "staffConduct" : grievance.category;
   const categoryLabel = t.pages.grievances.category[categoryKey as keyof Dictionary["pages"]["grievances"]["category"]];
   const isResolved = grievance.status === "resolved" || grievance.status === "dismissed";
+  const sla = grievanceSla(grievance);
+  const noteReady = resolutionNote.trim().length >= 10;
+  const resolve = (dismissed: boolean) =>
+    resolveGrievance.mutate(
+      { resolutionNote: resolutionNote.trim(), ...(dismissed ? { dismissed: true } : {}) },
+      { onError: () => toast.error(t.pages.grievances.resolveFailed) },
+    );
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 pb-24">
@@ -77,8 +86,27 @@ export default function GrievanceDetailPage({
           <div className="flex flex-wrap items-center gap-3">
             <StatusMetaBadge meta={s.grievance[grievance.status]} />
             <div className="text-sm text-muted-foreground">
-              Filed {f.date(grievance.createdAt)}
+              {t.pages.grievances.filedOn(f.date(grievance.createdAt))}
             </div>
+            {sla.state === "on-track" || sla.state === "overdue" ? (
+              <div
+                className={cn(
+                  "flex items-center gap-1.5 text-sm",
+                  sla.state === "overdue" ? "font-medium text-destructive" : "text-muted-foreground",
+                )}
+              >
+                <AlarmClock className="size-4" />
+                {sla.state === "overdue"
+                  ? t.pages.grievances.sla.overdue(-(sla.daysLeft ?? 0))
+                  : t.pages.grievances.sla.onTrack(sla.daysLeft ?? 0)}
+              </div>
+            ) : null}
+            {grievance.status === "escalated" && grievance.escalatedAt ? (
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <AlarmClock className="size-4" />
+                {t.pages.grievances.sla.escalated(f.date(grievance.escalatedAt))}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -86,7 +114,7 @@ export default function GrievanceDetailPage({
       <Card className="p-6">
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <Icon className="size-5 text-red-600" />
-          Complaint Details
+          {t.pages.grievances.detailsTitle}
         </h3>
         <p className="whitespace-pre-wrap text-sm leading-relaxed">
           {grievance.description}
@@ -97,7 +125,7 @@ export default function GrievanceDetailPage({
         <Card className="border-green-200 bg-green-50 p-6 dark:border-green-900/50 dark:bg-green-950/20">
           <h3 className="font-semibold mb-2 flex items-center gap-2 text-green-800 dark:text-green-300">
             <CheckCircle2 className="size-5" />
-            Resolution
+            {t.pages.grievances.resolutionTitle}
           </h3>
           <p className="whitespace-pre-wrap text-sm text-green-900 dark:text-green-200">
             {grievance.resolutionNote}
@@ -130,46 +158,46 @@ export default function GrievanceDetailPage({
             disabled={!rating || rateGrievance.isPending}
             onClick={() => rateGrievance.mutate({ rating })}
           >
-            Submit rating
+            {t.pages.grievances.submitRating}
           </Button>
         </Card>
       )}
 
       {role !== "citizen" && !isResolved && (
         <Card className="p-6 space-y-4">
-          <h3 className="font-semibold">Resolve Complaint</h3>
+          <h3 className="font-semibold">{t.pages.grievances.resolveTitle}</h3>
           <Textarea
-            placeholder="Explain how this issue was resolved or why it was dismissed..."
+            placeholder={t.pages.grievances.resolvePlaceholder}
             value={resolutionNote}
             onChange={(e) => setResolutionNote(e.target.value)}
             className="min-h-[100px]"
           />
+          {resolutionNote.trim() && !noteReady ? (
+            <p className="text-sm text-muted-foreground">{t.pages.grievances.resolveNoteTooShort}</p>
+          ) : null}
           <div className="flex gap-2 justify-end">
             <Button
               variant="outline"
-              disabled={!resolutionNote || resolveGrievance.isPending}
-              onClick={() => resolveGrievance.mutate({ resolutionNote, dismissed: true })}
+              disabled={!noteReady || resolveGrievance.isPending}
+              onClick={() => resolve(true)}
             >
-              Dismiss
+              {t.pages.grievances.dismiss}
             </Button>
-            <Button
-              disabled={!resolutionNote || resolveGrievance.isPending}
-              onClick={() => resolveGrievance.mutate({ resolutionNote })}
-            >
-              Mark Resolved
+            <Button disabled={!noteReady || resolveGrievance.isPending} onClick={() => resolve(false)}>
+              {t.pages.grievances.markResolved}
             </Button>
           </div>
         </Card>
       )}
 
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Timeline</h3>
+        <h3 className="text-lg font-semibold">{t.pages.grievances.timeline}</h3>
         <div className="relative space-y-4 pl-4 before:absolute before:inset-y-2 before:left-[7px] before:w-px before:bg-border">
           {timeline.map((event) => (
             <div key={event.id} className="relative flex gap-4">
               <div className="absolute -left-5 mt-1.5 size-2.5 rounded-full bg-primary ring-4 ring-background" />
               <div className="flex-1 space-y-1">
-                <div className="font-medium text-sm">{event.title}</div>
+                <div className="font-medium text-sm">{t.grievanceEvents[event.type] ?? event.title}</div>
                 {event.description && (
                   <div className="text-sm text-muted-foreground">
                     {event.description}

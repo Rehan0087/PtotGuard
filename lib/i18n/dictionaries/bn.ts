@@ -341,6 +341,16 @@ export const bn: Dictionary = {
     errorRateLimited: "আপনি অনেকগুলো বার্তা পাঠিয়েছেন — কিছুক্ষণ পর আবার চেষ্টা করুন।",
   },
 
+  grievanceEvents: {
+    filed: "অভিযোগ দাখিল হয়েছে",
+    assigned: "দায়িত্ব দেওয়া হয়েছে",
+    "status-change": "অবস্থা হালনাগাদ হয়েছে",
+    resolved: "অভিযোগ নিষ্পত্তি হয়েছে",
+    dismissed: "অভিযোগ খারিজ হয়েছে",
+    escalated: "ঊর্ধ্বতন পর্যায়ে প্রেরিত — জবাবের সময়সীমা পেরিয়ে গেছে",
+    rated: "রেটিং জমা দেওয়া হয়েছে",
+  },
+
   disputeEvents: {
     filed: "বিরোধ দাখিল হয়েছে",
     assigned: (to: string) => `${to}-কে বরাদ্দ করা হয়েছে`,
@@ -572,6 +582,22 @@ export const bn: Dictionary = {
         corruption: "ঘুষ দাবি বা অবৈধ কাজ",
       },
       ratingDescription: "আপনি সমাধানে কতটা সন্তুষ্ট?",
+      filedOn: (date: string) => `দাখিল ${date}`,
+      detailsTitle: "অভিযোগের বিবরণ",
+      resolutionTitle: "সমাধান",
+      submitRating: "রেটিং জমা দিন",
+      resolveTitle: "অভিযোগ নিষ্পত্তি",
+      resolvePlaceholder: "সমস্যাটি কীভাবে সমাধান হয়েছে বা কেন খারিজ করা হয়েছে তা লিখুন...",
+      resolveNoteTooShort: "ফলাফল ব্যাখ্যা করে অন্তত ১০টি অক্ষর লিখুন।",
+      resolveFailed: "নিষ্পত্তি সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।",
+      dismiss: "খারিজ করুন",
+      markResolved: "নিষ্পত্তি হয়েছে",
+      timeline: "সময়রেখা",
+      sla: {
+        onTrack: (days: number) => (days <= 1 ? "এক দিনের মধ্যে জবাব দেওয়ার কথা" : `${n(days)} দিনের মধ্যে জবাব দেওয়ার কথা`),
+        overdue: (days: number) => `জবাবের সময়সীমা ${n(days)} দিন পেরিয়ে গেছে`,
+        escalated: (date: string) => `${date} তারিখে প্রশাসকের কাছে পাঠানো হয়েছে`,
+      },
     },
 
     leaseSettlement: {

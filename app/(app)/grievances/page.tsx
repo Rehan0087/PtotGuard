@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { useStatusMeta } from "@/lib/i18n/status";
+import { grievanceSla } from "@plotguard/rules";
 import { useGrievances } from "@/hooks/queries";
 import { useT } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ function GrievanceCard({ grievance }: { grievance: Grievance }) {
   const f = useFmt();
   const s = useStatusMeta();
   const Icon = CATEGORY_ICONS[grievance.category];
+  const sla = grievanceSla(grievance);
 
   // Map camelCase to dictionary keys
   const categoryKey = grievance.category === "staff-conduct" ? "staffConduct" : grievance.category;
@@ -54,6 +56,13 @@ function GrievanceCard({ grievance }: { grievance: Grievance }) {
         <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 text-sm text-muted-foreground">
           <StatusMetaBadge meta={s.grievance[grievance.status]} />
           <time dateTime={grievance.createdAt}>{f.fromNow(grievance.createdAt)}</time>
+          {sla.state === "overdue" ? (
+            <span className="text-xs font-medium text-destructive">
+              {t.pages.grievances.sla.overdue(-(sla.daysLeft ?? 0))}
+            </span>
+          ) : sla.state === "on-track" ? (
+            <span className="text-xs">{t.pages.grievances.sla.onTrack(sla.daysLeft ?? 0)}</span>
+          ) : null}
         </div>
       </Card>
     </Link>

@@ -363,6 +363,17 @@ export const en = {
     errorRateLimited: "You've sent a lot of messages — please wait a few minutes and try again.",
   },
 
+  /** Grievance timeline titles by event type — the stored title is English. */
+  grievanceEvents: {
+    filed: "Grievance filed",
+    assigned: "Assigned",
+    "status-change": "Status updated",
+    resolved: "Grievance resolved",
+    dismissed: "Grievance dismissed",
+    escalated: "Escalated — response deadline missed",
+    rated: "Rating submitted",
+  },
+
   disputeEvents: {
     filed: "Dispute filed",
     assigned: (to: string) => `Assigned to ${to}`,
@@ -602,6 +613,22 @@ export const en = {
         corruption: "Demand for bribes or illicit acts",
       },
       ratingDescription: "How satisfied are you with the resolution?",
+      filedOn: (date: string) => `Filed ${date}`,
+      detailsTitle: "Complaint details",
+      resolutionTitle: "Resolution",
+      submitRating: "Submit rating",
+      resolveTitle: "Resolve complaint",
+      resolvePlaceholder: "Explain how this issue was resolved or why it was dismissed...",
+      resolveNoteTooShort: "Write at least 10 characters explaining the outcome.",
+      resolveFailed: "Couldn't save the resolution. Please try again.",
+      dismiss: "Dismiss",
+      markResolved: "Mark resolved",
+      timeline: "Timeline",
+      sla: {
+        onTrack: (days: number) => (days <= 1 ? "Response due within a day" : `Response due in ${days} days`),
+        overdue: (days: number) => `Response overdue by ${days} day${days === 1 ? "" : "s"}`,
+        escalated: (date: string) => `Escalated to an administrator on ${date}`,
+      },
     },
 
     leaseSettlement: {
