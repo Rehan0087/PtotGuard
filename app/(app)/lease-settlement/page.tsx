@@ -9,11 +9,9 @@ import { toast } from "sonner";
 import {
   Ban,
   Check,
-  CreditCard,
   Home,
   Loader2,
   Plus,
-  Smartphone,
   Sprout,
   X,
   FileText,
@@ -56,12 +54,6 @@ type LandUse = "agricultural" | "non-agricultural";
 const LAND_USES: { value: LandUse; icon: LucideIcon }[] = [
   { value: "agricultural", icon: Sprout },
   { value: "non-agricultural", icon: Home },
-];
-
-const PAYMENT_METHODS: { value: PaymentMethod; icon: LucideIcon }[] = [
-  { value: "bkash", icon: Smartphone },
-  { value: "nagad", icon: Smartphone },
-  { value: "card", icon: CreditCard },
 ];
 
 /** Built per locale — every message here is read by whoever is filing. */
@@ -112,7 +104,9 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
     resolver: standardSchemaResolver(schema),
     defaultValues: {
       landUse: prefilledPlot ? (prefilledPlot.landUse === "agricultural" ? "agricultural" : "non-agricultural") : "agricultural",
-      locationDescription: prefilledPlot ? `${prefilledPlot.mouza}, ${prefilledPlot.upazila} (Dag No: ${prefilledPlot.dagNo})` : "",
+      locationDescription: prefilledPlot
+        ? `${prefilledPlot.mouza}, ${prefilledPlot.upazila} (${t.pages.leaseSettlement.dagNo}: ${prefilledPlot.dagNo})`
+        : "",
       areaDecimals: prefilledPlot ? String(prefilledPlot.areaDecimals) : "",
       termYears: "",
       purpose: "",
@@ -317,11 +311,11 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
         body: JSON.stringify({ paymentMethod: method }),
       });
       if (!res.ok) throw new Error("Failed to pay lease");
-      toast.success("Lease fee paid successfully");
+      toast.success(t.pages.leaseSettlement.leaseFeePaidTitle);
       setPaymentDialogOpen(false);
       window.location.reload();
-    } catch (e) {
-      toast.error("Payment failed");
+    } catch {
+      toast.error(t.pages.leaseSettlement.paymentFailed);
     } finally {
       setBusy(false);
     }
@@ -335,10 +329,10 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
         headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error("Failed to renew lease");
-      toast.success("Lease renewed for 1 year");
+      toast.success(t.pages.leaseSettlement.renewedTitle);
       window.location.reload();
-    } catch (e) {
-      toast.error("Renewal failed");
+    } catch {
+      toast.error(t.pages.leaseSettlement.renewalFailed);
     } finally {
       setBusy(false);
     }
@@ -364,13 +358,15 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
             {application.feeAmount != null ? (
               <>
                 {" · "}
-                <span className="tabular">{f.money({ amount: application.feeAmount, currency: "BDT" })} (Application Fee)</span>
+                <span className="tabular">
+                  {f.money({ amount: application.feeAmount, currency: "BDT" })} ({t.pages.leaseSettlement.applicationFeeSuffix})
+                </span>
               </>
             ) : null}
           </div>
           {details.leaseExpiresAt && (
             <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-1">
-              Active until: {f.date(details.leaseExpiresAt)}
+              {t.pages.leaseSettlement.activeUntil}: {f.date(details.leaseExpiresAt)}
             </div>
           )}
         </div>
@@ -378,18 +374,20 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
           <StatusMetaBadge meta={s.serviceApplication[application.status]} />
           {application.status === "approved" && !details.leaseFeePaidAt && details.leaseFeeAmount && (
             <Button size="sm" onClick={() => setPaymentDialogOpen(true)} disabled={busy}>
-              Pay Lease Fee ({f.money({ amount: details.leaseFeeAmount, currency: "BDT" })})
+              {t.pages.leaseSettlement.payLeaseFee(
+                f.money({ amount: details.leaseFeeAmount, currency: "BDT" }),
+              )}
             </Button>
           )}
           {details.leaseFeePaidAt && (
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setReceiptOpen(true)}>
                 <FileText className="mr-2 size-3" />
-                View Receipt
+                {t.pages.leaseSettlement.viewReceipt}
               </Button>
               <Button size="sm" variant="outline" onClick={handleRenewLease} disabled={busy}>
                 {busy && <Loader2 className="mr-2 size-3 animate-spin" />}
-                Renew Lease
+                {t.pages.leaseSettlement.renewLease}
               </Button>
             </div>
           )}
@@ -411,29 +409,31 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
         <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Lease Payment Receipt</DialogTitle>
+              <DialogTitle>{t.pages.leaseSettlement.receiptTitle}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4 text-sm">
               <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Application No:</span>
+                <span className="text-muted-foreground">{t.pages.leaseSettlement.applicationNo}:</span>
                 <span className="font-medium">{application.applicationNo}</span>
               </div>
               <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Payment Date:</span>
+                <span className="text-muted-foreground">{t.pages.leaseSettlement.paymentDate}:</span>
                 <span className="font-medium">{f.date(details.leaseFeePaidAt)}</span>
               </div>
               <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Amount Paid:</span>
+                <span className="text-muted-foreground">{t.pages.leaseSettlement.amountPaid}:</span>
                 <span className="font-medium">{f.money({ amount: details.leaseFeeAmount ?? 0, currency: "BDT" })}</span>
               </div>
               <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Valid Until:</span>
+                <span className="text-muted-foreground">{t.pages.leaseSettlement.validUntil}:</span>
                 <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                  {details.leaseExpiresAt ? f.date(details.leaseExpiresAt) : "N/A"}
+                  {details.leaseExpiresAt
+                    ? f.date(details.leaseExpiresAt)
+                    : t.pages.leaseSettlement.notAvailable}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground text-center pt-2">
-                This is a system generated receipt and does not require a physical signature. It serves as validation for one year of land lease.
+                {t.pages.leaseSettlement.receiptNote}
               </p>
             </div>
           </DialogContent>
@@ -456,10 +456,12 @@ function NewApplicationFlow({ onDone }: { onDone: () => void }) {
         {selectedPlot ? (
           <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
             <div className="text-sm">
-              <span className="font-medium">Selected Plot:</span> {selectedPlot.dagNo} ({selectedPlot.mouza}, {selectedPlot.upazila}) — {selectedPlot.areaDecimals} decimals
+              <span className="font-medium">{t.pages.leaseSettlement.selectedPlot}:</span>{" "}
+              {selectedPlot.dagNo} ({selectedPlot.mouza}, {selectedPlot.upazila}) —{" "}
+              {selectedPlot.areaDecimals} {t.pages.leaseSettlement.decimals}
             </div>
             <Button variant="outline" size="sm" onClick={() => setShowForm(false)}>
-              Back to Map
+              {t.pages.leaseSettlement.backToMap}
             </Button>
           </div>
         ) : null}
@@ -472,12 +474,12 @@ function NewApplicationFlow({ onDone }: { onDone: () => void }) {
     <div className="space-y-4">
       <Card className="p-4 space-y-4">
         <div className="text-sm text-muted-foreground font-medium flex justify-between items-center">
-          <span>Select an available plot from the map or list, or skip to apply manually:</span>
+          <span>{t.pages.leaseSettlement.plotSelectionHelp}</span>
           <Button variant="secondary" size="sm" onClick={() => {
             setSelectedPlot(undefined);
             setShowForm(true);
           }}>
-            Skip Map Selection
+            {t.pages.leaseSettlement.skipMapSelection}
           </Button>
         </div>
         
@@ -487,20 +489,25 @@ function NewApplicationFlow({ onDone }: { onDone: () => void }) {
           </div>
           
           <div className="flex flex-col gap-2 overflow-y-auto max-h-96 pr-1">
-            <div className="text-sm font-medium mb-1">Available Plots</div>
+            <div className="text-sm font-medium mb-1">{t.pages.leaseSettlement.availablePlots}</div>
             {plots.map((plot) => (
               <div 
                 key={plot.id} 
                 onClick={() => setSelectedPlot(plot)}
                 className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedPlot?.id === plot.id ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}
               >
-                <div className="font-medium text-sm">Dag No: {plot.dagNo}</div>
+                <div className="font-medium text-sm">{t.pages.leaseSettlement.dagNo}: {plot.dagNo}</div>
                 <div className="text-xs text-muted-foreground">{plot.mouza}, {plot.upazila}</div>
-                <div className="text-xs text-muted-foreground mt-1 capitalize">{plot.areaDecimals} decimals • {plot.landUse}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {plot.areaDecimals} {t.pages.leaseSettlement.decimals} •{" "}
+                  {t.pages.leaseSettlement.landUse[
+                    plot.landUse === "agricultural" ? "agricultural" : "nonAgricultural"
+                  ]}
+                </div>
                 
                 {selectedPlot?.id === plot.id && (
                   <Button size="sm" className="w-full mt-3" onClick={() => setShowForm(true)}>
-                    Apply for this Plot
+                    {t.pages.leaseSettlement.applyForPlot}
                   </Button>
                 )}
               </div>
@@ -508,7 +515,7 @@ function NewApplicationFlow({ onDone }: { onDone: () => void }) {
             
             {plots.length === 0 && (
               <div className="text-sm text-muted-foreground italic p-4 text-center border rounded-lg border-dashed">
-                No plots currently available.
+                {t.pages.leaseSettlement.noAvailablePlots}
               </div>
             )}
           </div>

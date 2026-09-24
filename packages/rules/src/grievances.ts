@@ -1,39 +1,19 @@
 /**
  * Who a new grievance lands with.
  *
- * A complaint about staff conduct or corruption must never reach the office
- * it is about, so it goes straight to an administrator. Anything else goes to
- * the nearest land-office officer responsible for the filer's area — the
- * officer sitting at the filer's own jurisdiction, or failing that the
- * closest one above it. Citizens are registered at mouza level and officers
- * at upazila level, so an exact-jurisdiction match alone would route nothing.
+ * Every citizen complaint goes to an administrator. Keeping complaints out of
+ * the operational land-office queue gives citizens one accountable review
+ * path and prevents the office being complained about from deciding its own
+ * case.
  */
-import { ancestryOf } from "./jurisdictions";
-import type { GrievanceCategory, GrievanceStatus, Jurisdiction } from "./types";
-
-export const ESCALATED_GRIEVANCE_CATEGORIES: GrievanceCategory[] = ["staff-conduct", "corruption"];
+import type { GrievanceStatus } from "./types";
 
 export interface GrievanceRouting {
-  assignedOfficerId?: string;
   escalatedToId?: string;
 }
 
-export function routeGrievance(
-  category: GrievanceCategory,
-  filerJurisdictionId: string,
-  officers: { id: string; jurisdictionId: string }[],
-  admins: { id: string }[],
-  jurisdictions: Jurisdiction[],
-): GrievanceRouting {
-  if (ESCALATED_GRIEVANCE_CATEGORIES.includes(category)) {
-    return { escalatedToId: admins[0]?.id };
-  }
-  const nearestFirst = ancestryOf(filerJurisdictionId, jurisdictions).reverse();
-  for (const level of nearestFirst) {
-    const officer = officers.find((o) => o.jurisdictionId === level.id);
-    if (officer) return { assignedOfficerId: officer.id };
-  }
-  return {};
+export function routeGrievance(admins: { id: string }[]): GrievanceRouting {
+  return { escalatedToId: admins[0]?.id };
 }
 
 /** Still waiting on the office — the only statuses the response deadline applies to. */
@@ -61,8 +41,9 @@ export function grievanceSla(grievance: SlaInput, now: Date = new Date()): Griev
 
 /**
  * An open grievance the office let run past its deadline goes over the
- * office's head, once. One already routed to an administrator — conduct and
- * corruption complaints are, at filing — has nowhere higher to go.
+ * office's head, once. New complaints are routed to an administrator at
+ * filing and therefore have nowhere higher to go; this remains for legacy
+ * records that were originally assigned to a land-office officer.
  */
 export function shouldEscalateGrievance(
   grievance: SlaInput & { escalatedToId?: string | null },

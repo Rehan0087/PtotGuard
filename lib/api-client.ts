@@ -3,13 +3,21 @@ import { getAccessToken, useSessionStore } from "@/store/session";
 /**
  * The single choke point for all data fetching. It uses the same-origin /api
  * proxy; production and local demo traffic goes to the NestJS
- * backend by default. Set NEXT_PUBLIC_API_MOCKING=enabled only when working
- * with the in-browser fixture API.
+ * backend when it is explicitly selected. A plain `pnpm dev` defaults to the
+ * in-browser fixture API so the documented demo login works without a second
+ * server; the persistent-stack runner explicitly sets mocking to `disabled`.
  */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
-/** Mocking is deliberately opt-in: persistence must not silently be bypassed. */
-export const API_MOCKING = process.env.NEXT_PUBLIC_API_MOCKING === "enabled";
+/**
+ * Keep production fail-closed against the real API, but make the standalone
+ * frontend dev command usable. `demo.sh` sets `disabled`, so its Postgres-backed
+ * workflow never silently falls back to fixtures.
+ */
+export const API_MOCKING =
+  process.env.NEXT_PUBLIC_API_MOCKING === "enabled" ||
+  (process.env.NODE_ENV === "development" &&
+    process.env.NEXT_PUBLIC_API_MOCKING !== "disabled");
 
 export class ApiError extends Error {
   constructor(

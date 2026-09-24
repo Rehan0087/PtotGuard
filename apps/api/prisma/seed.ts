@@ -656,7 +656,7 @@ async function main(): Promise<void> {
       description: "My land acquisition payment has been delayed for 6 months despite all documents being submitted.",
       filedById: "usr-karim",
       filedByName: "Karim Mia",
-      assignedOfficerId: "usr-officer",
+      escalatedToId: "usr-admin",
       slaDeadline: new Date("2026-08-01T10:00:00Z"),
       createdAt: new Date("2026-07-20T10:00:00Z"),
       updatedAt: new Date("2026-07-22T10:00:00Z"),
@@ -680,7 +680,7 @@ async function main(): Promise<void> {
         type: "status-change",
         title: "Status updated",
         description: "Status changed to under-review",
-        actorId: "usr-officer",
+        actorId: "usr-admin",
       },
     ],
   });
