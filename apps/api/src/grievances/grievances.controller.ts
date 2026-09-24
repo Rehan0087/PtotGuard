@@ -4,6 +4,7 @@ import { AccessTokenGuard } from "../auth/access-token.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import type { Request } from "express";
+import { routeGrievance, type Jurisdiction } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { ConflictError, NotFoundError, ValidationError, ForbiddenError } from "../common/domain-exceptions";
@@ -88,19 +89,18 @@ export class GrievancesController {
     const filer = await this.prisma.user.findUnique({ where: { id: actorId } });
     if (!filer) throw new NotFoundError("User not found");
 
-    const [officers, admins] = await Promise.all([
-      this.prisma.user.findMany({ where: { role: "land-office", jurisdictionId: filer.jurisdictionId } }),
-      this.prisma.user.findMany({ where: { role: "admin" } }),
+    const [officers, admins, jurisdictions] = await Promise.all([
+      this.prisma.user.findMany({ where: { role: "land-office", status: "active" }, orderBy: { id: "asc" } }),
+      this.prisma.user.findMany({ where: { role: "admin", status: "active" }, orderBy: { id: "asc" } }),
+      this.prisma.jurisdiction.findMany(),
     ]);
-
-    let assignedOfficerId: string | undefined;
-    let escalatedToId: string | undefined;
-
-    if (body.category === "staff-conduct" || body.category === "corruption") {
-      escalatedToId = admins[0]?.id; // bypass local officer, route to admin
-    } else {
-      assignedOfficerId = officers[0]?.id;
-    }
+    const { assignedOfficerId, escalatedToId } = routeGrievance(
+      body.category,
+      filer.jurisdictionId,
+      officers,
+      admins,
+      jurisdictions as unknown as Jurisdiction[],
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();

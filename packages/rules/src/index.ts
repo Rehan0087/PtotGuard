@@ -31,3 +31,4 @@ export * from "./hearing-status";
 export * from "./accounts";
 export * from "./acquisition";
 export * from "./land-listings";
+export * from "./grievances";
