@@ -87,6 +87,31 @@ export const users: User[] = [
     createdAt: "2024-06-19T09:00:00Z",
   },
   {
+    id: "usr-fatema", name: "Fatema Begum", email: "demo2@example.bd", phone: "+8801922-111111",
+    role: "citizen", jurisdictionId: "j-rajamehar", nationalId: "•••• •••• 3312", status: "active",
+    profileDetails: { nameBn: "ফাতেমা বেগম", occupation: "Homemaker", bloodGroup: "AB+", gender: "Female", birthDate: "1990-03-08", currentAddress: "Village: Rajamehar, Upazila: Debidwar, Cumilla", permanentAddress: "Rajamehar, Debidwar, Cumilla", fatherName: "Hafizur Rahman", motherName: "Kulsum Begum" },
+    createdAt: "2025-01-15T09:00:00Z",
+  },
+  {
+    id: "usr-rashed", name: "Rashed Khan", email: "demo3@example.bd", phone: "+8801933-222222",
+    role: "citizen", jurisdictionId: "j-debidwar", nationalId: "•••• •••• 5589", status: "active",
+    profileDetails: { nameBn: "রাশেদ খান", occupation: "Engineer", bloodGroup: "A-", gender: "Male", birthDate: "1988-07-22", currentAddress: "Debidwar Upazila, Cumilla", permanentAddress: "Debidwar, Cumilla", fatherName: "Lutfor Khan", motherName: "Rahela Begum" },
+    createdAt: "2025-03-20T09:00:00Z",
+  },
+  {
+    id: "usr-noor", name: "Noor Jahan", email: "demo4@example.bd", phone: "+8801944-333333",
+    role: "citizen", jurisdictionId: "j-payalgacha", nationalId: "•••• •••• 7741", status: "active",
+    profileDetails: { nameBn: "নূর জাহান", occupation: "Teacher", bloodGroup: "O-", gender: "Female", birthDate: "1992-12-14", currentAddress: "Payalgacha, Barura, Cumilla", permanentAddress: "Payalgacha, Barura, Cumilla", fatherName: "Abul Kashem", motherName: "Amena Khatun" },
+    createdAt: "2025-06-10T09:00:00Z",
+  },
+  {
+    id: "usr-habib", name: "Habib Molla", email: "demo5@example.bd", phone: "+8801955-444444",
+    role: "citizen", jurisdictionId: "j-barura", nationalId: "•••• •••• 9923", status: "active",
+    profileDetails: { nameBn: "হাবিব মোল্লা", occupation: "Businessman", bloodGroup: "B-", gender: "Male", birthDate: "1975-04-30", currentAddress: "Barura Upazila, Cumilla", permanentAddress: "Barura, Cumilla", fatherName: "Wahab Molla", motherName: "Fatema Molla" },
+    createdAt: "2025-08-05T09:00:00Z",
+  },
+
+  {
     id: "usr-officer", name: "Nasrin Akter", email: "n.akter@minland.gov.bd", phone: "+8801712-345678",
     role: "land-office", jurisdictionId: "j-debidwar", title: "Sub-Registrar", status: "active",
     profileDetails: { nameBn: "নাসরিন আক্তার", fatherName: "Abdul Hakim", motherName: "Rahima Begum", birthDate: "1987-08-19", bloodGroup: "B+", gender: "Female", occupation: "Government Officer", currentAddress: "Debidwar, Cumilla", permanentAddress: "Cumilla, Bangladesh" },
@@ -228,6 +253,219 @@ export const parcels: Parcel[] = [
     ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.556, lng: 90.995 }, boundary: square({ lat: 23.556, lng: 90.995 }, 0.0007),
     marketValue: { amount: 3350000, currency: "BDT" }, registeredAt: "2014-06-21T00:00:00Z", lastMutationAt: "2026-08-28T10:00:00Z", openDisputeCount: 0,
   },
+
+  // --- Extra plots: Ayesha Siddika (usr-ayesha) ---
+  {
+    id: "p-501", ulpin: "ILR-CUM-DEB-000010", dagNo: "RS-501", khatianNo: "811", title: "Fishpond plot, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "agricultural", area: { value: 65, unit: "decimal" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.5505, lng: 90.9915 }, boundary: square({ lat: 23.5505, lng: 90.9915 }, 0.001),
+    marketValue: { amount: 3900000, currency: "BDT" }, registeredAt: "2013-04-18T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-502", ulpin: "ILR-CUM-DEB-000011", dagNo: "RS-502", khatianNo: "812", title: "Corner shop plot, Debidwar", jurisdictionId: "j-debidwar",
+    landUse: "commercial", area: { value: 2, unit: "katha" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.5465, lng: 90.9885 }, boundary: square({ lat: 23.5465, lng: 90.9885 }, 0.0003),
+    marketValue: { amount: 5200000, currency: "BDT" }, registeredAt: "2021-11-09T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-503", ulpin: "ILR-CUM-DEB-000012", dagNo: "RS-503", khatianNo: "813", title: "Bamboo grove, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "mixed", area: { value: 25, unit: "decimal" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
+    ownershipType: "joint", registryStatus: "verified", centroid: { lat: 23.5488, lng: 90.9901 }, boundary: square({ lat: 23.5488, lng: 90.9901 }, 0.0005),
+    marketValue: { amount: 1750000, currency: "BDT" }, registeredAt: "2019-06-01T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-504", ulpin: "ILR-CUM-DEB-000013", dagNo: "CS-504", khatianNo: "814", title: "Inherited orchard, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "agricultural", area: { value: 98, unit: "decimal" }, ownerId: "usr-ayesha", ownerName: "Ayesha Siddika",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.5535, lng: 90.9878 }, boundary: square({ lat: 23.5535, lng: 90.9878 }, 0.0013),
+    marketValue: { amount: 5900000, currency: "BDT" }, registeredAt: "2011-02-14T00:00:00Z", openDisputeCount: 0,
+  },
+
+  // --- Extra plots: Md. Karim Uddin (usr-karim) ---
+  {
+    id: "p-511", ulpin: "ILR-CUM-BAR-000003", dagNo: "BS-511", khatianNo: "901", title: "Paddy lowland, Payalgacha", jurisdictionId: "j-payalgacha",
+    landUse: "agricultural", area: { value: 75, unit: "decimal" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.3605, lng: 91.0345 }, boundary: square({ lat: 23.3605, lng: 91.0345 }, 0.0011),
+    marketValue: { amount: 4200000, currency: "BDT" }, registeredAt: "2010-08-30T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-512", ulpin: "ILR-CUM-DEB-000014", dagNo: "RS-512", khatianNo: "902", title: "Residential plot, Debidwar Town", jurisdictionId: "j-debidwar",
+    landUse: "residential", area: { value: 4, unit: "katha" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.548, lng: 90.987 }, boundary: square({ lat: 23.548, lng: 90.987 }, 0.0004),
+    marketValue: { amount: 3800000, currency: "BDT" }, registeredAt: "2023-03-22T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-513", ulpin: "ILR-CUM-BAR-000004", dagNo: "BS-513", khatianNo: "903", title: "Roadside vacant plot, Barura", jurisdictionId: "j-barura",
+    landUse: "vacant", area: { value: 18, unit: "decimal" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.365, lng: 91.029 }, boundary: square({ lat: 23.365, lng: 91.029 }, 0.0005),
+    marketValue: { amount: 1100000, currency: "BDT" }, registeredAt: "2025-01-15T00:00:00Z", openDisputeCount: 0,
+  },
+
+  // --- Extra plots: Shanti Rani Das (usr-shanti) ---
+  {
+    id: "p-521", ulpin: "ILR-CUM-BAR-000005", dagNo: "BS-521", khatianNo: "1201", title: "Vegetable farm, Payalgacha", jurisdictionId: "j-payalgacha",
+    landUse: "agricultural", area: { value: 55, unit: "decimal" }, ownerId: "usr-shanti", ownerName: "Shanti Rani Das",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.3615, lng: 91.0285 }, boundary: square({ lat: 23.3615, lng: 91.0285 }, 0.0009),
+    marketValue: { amount: 3100000, currency: "BDT" }, registeredAt: "2015-09-10T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-522", ulpin: "ILR-CUM-BAR-000006", dagNo: "BS-522", khatianNo: "1202", title: "Homestead, Payalgacha", jurisdictionId: "j-payalgacha",
+    landUse: "residential", area: { value: 7, unit: "katha" }, ownerId: "usr-shanti", ownerName: "Shanti Rani Das",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.363, lng: 91.032 }, boundary: square({ lat: 23.363, lng: 91.032 }, 0.0005),
+    marketValue: { amount: 4500000, currency: "BDT" }, registeredAt: "2009-12-01T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-523", ulpin: "ILR-CUM-BAR-000007", dagNo: "BS-523", khatianNo: "1203", title: "Pond-side mixed plot, Barura", jurisdictionId: "j-barura",
+    landUse: "mixed", area: { value: 42, unit: "decimal" }, ownerId: "usr-shanti", ownerName: "Shanti Rani Das",
+    ownershipType: "joint", registryStatus: "verified", centroid: { lat: 23.364, lng: 91.031 }, boundary: square({ lat: 23.364, lng: 91.031 }, 0.0008),
+    marketValue: { amount: 2550000, currency: "BDT" }, registeredAt: "2020-07-25T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-524", ulpin: "ILR-CUM-BAR-000008", dagNo: "BS-524", khatianNo: "1204", title: "Commercial shed, Barura Bazar", jurisdictionId: "j-barura",
+    landUse: "commercial", area: { value: 3, unit: "katha" }, ownerId: "usr-shanti", ownerName: "Shanti Rani Das",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.362, lng: 91.0275 }, boundary: square({ lat: 23.362, lng: 91.0275 }, 0.0003),
+    marketValue: { amount: 8200000, currency: "BDT" }, registeredAt: "2024-05-30T00:00:00Z", openDisputeCount: 0,
+  },
+
+  // --- Extra plots: Iqbal Enterprise (usr-iqbal) ---
+  {
+    id: "p-531", ulpin: "ILR-CUM-DEB-000015", dagNo: "RS-531", khatianNo: "1301", title: "Warehouse plot, Debidwar", jurisdictionId: "j-debidwar",
+    landUse: "commercial", area: { value: 6, unit: "katha" }, ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise",
+    ownershipType: "corporate", registryStatus: "verified", centroid: { lat: 23.5525, lng: 90.9845 }, boundary: square({ lat: 23.5525, lng: 90.9845 }, 0.0006),
+    marketValue: { amount: 12500000, currency: "BDT" }, registeredAt: "2023-08-11T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-532", ulpin: "ILR-CUM-DEB-000016", dagNo: "RS-532", khatianNo: "1302", title: "Industrial shed, Debidwar", jurisdictionId: "j-debidwar",
+    landUse: "industrial", area: { value: 9, unit: "katha" }, ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise",
+    ownershipType: "corporate", registryStatus: "verified", centroid: { lat: 23.5498, lng: 90.9832 }, boundary: square({ lat: 23.5498, lng: 90.9832 }, 0.0007),
+    marketValue: { amount: 18000000, currency: "BDT" }, registeredAt: "2024-10-03T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-533", ulpin: "ILR-CUM-DEB-000017", dagNo: "RS-533", khatianNo: "1303", title: "Roadfront plot, Cumilla Road", jurisdictionId: "j-debidwar",
+    landUse: "commercial", area: { value: 5, unit: "katha" }, ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise",
+    ownershipType: "corporate", registryStatus: "flagged", centroid: { lat: 23.553, lng: 90.98 }, boundary: square({ lat: 23.553, lng: 90.98 }, 0.0005),
+    marketValue: { amount: 14000000, currency: "BDT" }, registeredAt: "2026-05-21T00:00:00Z", openDisputeCount: 0,
+  },
+
+  // --- Extra plots: Late Fazlul Haque (usr-legacy-2) estate ---
+  {
+    id: "p-541", ulpin: "ILR-CUM-DEB-000018", dagNo: "RS-541", khatianNo: "218", title: "Adjoining homestead, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "residential", area: { value: 5, unit: "katha" }, ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.5508, lng: 90.9868 }, boundary: square({ lat: 23.5508, lng: 90.9868 }, 0.0004),
+    marketValue: { amount: 2700000, currency: "BDT" }, registeredAt: "1985-06-10T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-542", ulpin: "ILR-CUM-DEB-000019", dagNo: "CS-542", khatianNo: "219", title: "Paddy estate, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "agricultural", area: { value: 110, unit: "decimal" }, ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.551, lng: 90.9858 }, boundary: square({ lat: 23.551, lng: 90.9858 }, 0.0014),
+    marketValue: { amount: 6600000, currency: "BDT" }, registeredAt: "1978-11-20T00:00:00Z", openDisputeCount: 0,
+  },
+  // --- Demo Citizen Parcels (Fatema, Rashed, Noor, Habib) ---
+  {
+    id: "p-d2-1", ulpin: "ILR-CUM-DEB-000020", dagNo: "RS-601", khatianNo: "811", title: "Paddy plot, Rajamehar (Fatema)", jurisdictionId: "j-rajamehar",
+    landUse: "agricultural", area: { value: 55, unit: "decimal" }, ownerId: "usr-fatema", ownerName: "Fatema Begum",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.548, lng: 90.988 }, boundary: square({ lat: 23.548, lng: 90.988 }),
+    marketValue: { amount: 3300000, currency: "BDT" }, registeredAt: "2022-05-10T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d2-2", ulpin: "ILR-CUM-DEB-000021", dagNo: "RS-602", khatianNo: "812", title: "Homestead plot, Rajamehar (Fatema)", jurisdictionId: "j-rajamehar",
+    landUse: "residential", area: { value: 4, unit: "katha" }, ownerId: "usr-fatema", ownerName: "Fatema Begum",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.547, lng: 90.987 }, boundary: square({ lat: 23.547, lng: 90.987 }, 0.0005),
+    marketValue: { amount: 2100000, currency: "BDT" }, registeredAt: "2023-11-18T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d2-3", ulpin: "ILR-CUM-DEB-000022", dagNo: "RS-603", khatianNo: "813", title: "Fish Pond & Agricultural Plot, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "agricultural", area: { value: 45, unit: "decimal" }, ownerId: "usr-fatema", ownerName: "Fatema Begum",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.546, lng: 90.989 }, boundary: square({ lat: 23.546, lng: 90.989 }, 0.0007),
+    marketValue: { amount: 2800000, currency: "BDT" }, registeredAt: "2020-07-14T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d2-4", ulpin: "ILR-CUM-DEB-000023", dagNo: "RS-604", khatianNo: "814", title: "Village Market Commercial Shed, Rajamehar", jurisdictionId: "j-rajamehar",
+    landUse: "commercial", area: { value: 3.5, unit: "katha" }, ownerId: "usr-fatema", ownerName: "Fatema Begum",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.545, lng: 90.990 }, boundary: square({ lat: 23.545, lng: 90.990 }, 0.0004),
+    marketValue: { amount: 4600000, currency: "BDT" }, registeredAt: "2022-03-25T00:00:00Z", openDisputeCount: 0,
+  },
+
+  {
+    id: "p-d3-1", ulpin: "ILR-CUM-DEB-000024", dagNo: "RS-701", khatianNo: "901", title: "Commercial plot, Debidwar (Rashed)", jurisdictionId: "j-debidwar",
+    landUse: "commercial", area: { value: 6, unit: "katha" }, ownerId: "usr-rashed", ownerName: "Rashed Khan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.552, lng: 90.984 }, boundary: square({ lat: 23.552, lng: 90.984 }, 0.0005),
+    marketValue: { amount: 8500000, currency: "BDT" }, registeredAt: "2021-08-22T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d3-2", ulpin: "ILR-CUM-DEB-000025", dagNo: "RS-702", khatianNo: "902", title: "Agricultural Paddy Plot, Debidwar", jurisdictionId: "j-debidwar",
+    landUse: "agricultural", area: { value: 65, unit: "decimal" }, ownerId: "usr-rashed", ownerName: "Rashed Khan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.553, lng: 90.985 }, boundary: square({ lat: 23.553, lng: 90.985 }, 0.0008),
+    marketValue: { amount: 3800000, currency: "BDT" }, registeredAt: "2019-04-12T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d3-3", ulpin: "ILR-CUM-DEB-000026", dagNo: "RS-703", khatianNo: "903", title: "Residential Homestead, Debidwar", jurisdictionId: "j-debidwar",
+    landUse: "residential", area: { value: 8, unit: "katha" }, ownerId: "usr-rashed", ownerName: "Rashed Khan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.554, lng: 90.986 }, boundary: square({ lat: 23.554, lng: 90.986 }, 0.0006),
+    marketValue: { amount: 6200000, currency: "BDT" }, registeredAt: "2022-01-15T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d3-4", ulpin: "ILR-CUM-DEB-000027", dagNo: "RS-704", khatianNo: "904", title: "Mango & Litchi Orchard, Debidwar", jurisdictionId: "j-debidwar",
+    landUse: "agricultural", area: { value: 85, unit: "decimal" }, ownerId: "usr-rashed", ownerName: "Rashed Khan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.556, lng: 90.988 }, boundary: square({ lat: 23.556, lng: 90.988 }, 0.0012),
+    marketValue: { amount: 4900000, currency: "BDT" }, registeredAt: "2018-09-10T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d3-5", ulpin: "ILR-CUM-DEB-000028", dagNo: "RS-705", khatianNo: "905", title: "Debidwar Bazar Commercial Shop", jurisdictionId: "j-debidwar",
+    landUse: "commercial", area: { value: 4, unit: "katha" }, ownerId: "usr-rashed", ownerName: "Rashed Khan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.550, lng: 90.983 }, boundary: square({ lat: 23.550, lng: 90.983 }, 0.0005),
+    marketValue: { amount: 8900000, currency: "BDT" }, registeredAt: "2023-06-20T00:00:00Z", openDisputeCount: 0,
+  },
+
+  {
+    id: "p-d4-1", ulpin: "ILR-CUM-BAR-000020", dagNo: "BS-301", khatianNo: "1201", title: "Agricultural plot, Payalgacha (Noor)", jurisdictionId: "j-payalgacha",
+    landUse: "agricultural", area: { value: 80, unit: "decimal" }, ownerId: "usr-noor", ownerName: "Noor Jahan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.361, lng: 91.034 }, boundary: square({ lat: 23.361, lng: 91.034 }, 0.001),
+    marketValue: { amount: 4800000, currency: "BDT" }, registeredAt: "2023-03-05T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d4-2", ulpin: "ILR-CUM-BAR-000021", dagNo: "BS-302", khatianNo: "1202", title: "Residential Compound, Payalgacha", jurisdictionId: "j-payalgacha",
+    landUse: "residential", area: { value: 7, unit: "katha" }, ownerId: "usr-noor", ownerName: "Noor Jahan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.362, lng: 91.035 }, boundary: square({ lat: 23.362, lng: 91.035 }, 0.0006),
+    marketValue: { amount: 4200000, currency: "BDT" }, registeredAt: "2021-08-19T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d4-3", ulpin: "ILR-CUM-BAR-000022", dagNo: "BS-303", khatianNo: "1203", title: "Paddy & Crop Field, Payalgacha", jurisdictionId: "j-payalgacha",
+    landUse: "agricultural", area: { value: 70, unit: "decimal" }, ownerId: "usr-noor", ownerName: "Noor Jahan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.363, lng: 91.036 }, boundary: square({ lat: 23.363, lng: 91.036 }, 0.001),
+    marketValue: { amount: 3500000, currency: "BDT" }, registeredAt: "2019-11-25T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d4-4", ulpin: "ILR-CUM-BAR-000023", dagNo: "BS-304", khatianNo: "1204", title: "Commercial Roadfront Plot, Payalgacha", jurisdictionId: "j-payalgacha",
+    landUse: "commercial", area: { value: 4, unit: "katha" }, ownerId: "usr-noor", ownerName: "Noor Jahan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.360, lng: 91.033 }, boundary: square({ lat: 23.360, lng: 91.033 }, 0.0005),
+    marketValue: { amount: 6800000, currency: "BDT" }, registeredAt: "2024-02-10T00:00:00Z", openDisputeCount: 0,
+  },
+
+  {
+    id: "p-d5-1", ulpin: "ILR-CUM-BAR-000024", dagNo: "BS-401", khatianNo: "1401", title: "Riverside land, Barura (Habib)", jurisdictionId: "j-barura",
+    landUse: "mixed", area: { value: 95, unit: "decimal" }, ownerId: "usr-habib", ownerName: "Habib Molla",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.420, lng: 91.010 }, boundary: square({ lat: 23.420, lng: 91.010 }, 0.0012),
+    marketValue: { amount: 5700000, currency: "BDT" }, registeredAt: "2020-12-01T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d5-2", ulpin: "ILR-CUM-BAR-000025", dagNo: "BS-402", khatianNo: "1402", title: "Orchard, Barura (Habib)", jurisdictionId: "j-barura",
+    landUse: "agricultural", area: { value: 45, unit: "decimal" }, ownerId: "usr-habib", ownerName: "Habib Molla",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.421, lng: 91.011 }, boundary: square({ lat: 23.421, lng: 91.011 }),
+    marketValue: { amount: 2800000, currency: "BDT" }, registeredAt: "2022-07-15T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d5-3", ulpin: "ILR-CUM-BAR-000026", dagNo: "BS-403", khatianNo: "1403", title: "Wholesale Warehouse & Store, Barura", jurisdictionId: "j-barura",
+    landUse: "commercial", area: { value: 9, unit: "katha" }, ownerId: "usr-habib", ownerName: "Habib Molla",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.422, lng: 91.012 }, boundary: square({ lat: 23.422, lng: 91.012 }, 0.0007),
+    marketValue: { amount: 11000000, currency: "BDT" }, registeredAt: "2021-05-18T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d5-4", ulpin: "ILR-CUM-BAR-000027", dagNo: "BS-404", khatianNo: "1404", title: "Residential Compound, Barura", jurisdictionId: "j-barura",
+    landUse: "residential", area: { value: 11, unit: "katha" }, ownerId: "usr-habib", ownerName: "Habib Molla",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.423, lng: 91.013 }, boundary: square({ lat: 23.423, lng: 91.013 }, 0.0008),
+    marketValue: { amount: 7800000, currency: "BDT" }, registeredAt: "2018-03-22T00:00:00Z", openDisputeCount: 0,
+  },
+
 ];
 
 // Encumbrances. Mirrors apps/api/prisma/seed.ts exactly — both effects the
@@ -260,6 +498,49 @@ export const ownershipRecords: OwnershipRecord[] = [
   { id: "own-10", parcelId: "p-404", ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise", acquisitionType: "purchase", fromDate: "2022-02-14T00:00:00Z", toDate: null, documentId: "d-17" },
   { id: "own-11", parcelId: "p-405", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "purchase", fromDate: "2014-06-21T00:00:00Z", toDate: "2026-08-28T10:00:00Z" },
   { id: "own-12", parcelId: "p-405", ownerId: "usr-karim", ownerName: "Md. Karim Uddin", acquisitionType: "gift", fromDate: "2026-08-28T10:00:00Z", toDate: null, documentId: "d-18", mutationId: "m-1231" },
+  // Extra: Ayesha
+  { id: "own-20", parcelId: "p-501", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "purchase", fromDate: "2013-04-18T00:00:00Z", toDate: null, documentId: "d-p501" },
+  { id: "own-21", parcelId: "p-502", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "purchase", fromDate: "2021-11-09T00:00:00Z", toDate: null, documentId: "d-p502" },
+  { id: "own-22", parcelId: "p-503", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "inheritance", fromDate: "2019-06-01T00:00:00Z", toDate: null, documentId: "d-p503" },
+  { id: "own-23", parcelId: "p-504", ownerId: "usr-ayesha", ownerName: "Ayesha Siddika", acquisitionType: "inheritance", fromDate: "2011-02-14T00:00:00Z", toDate: null, documentId: "d-p504" },
+  // Extra: Karim
+  { id: "own-30", parcelId: "p-511", ownerId: "usr-karim", ownerName: "Md. Karim Uddin", acquisitionType: "purchase", fromDate: "2010-08-30T00:00:00Z", toDate: null, documentId: "d-p511" },
+  { id: "own-31", parcelId: "p-512", ownerId: "usr-karim", ownerName: "Md. Karim Uddin", acquisitionType: "purchase", fromDate: "2023-03-22T00:00:00Z", toDate: null, documentId: "d-p512" },
+  { id: "own-32", parcelId: "p-513", ownerId: "usr-karim", ownerName: "Md. Karim Uddin", acquisitionType: "purchase", fromDate: "2025-01-15T00:00:00Z", toDate: null, documentId: "d-p513" },
+  // Extra: Shanti
+  { id: "own-40", parcelId: "p-521", ownerId: "usr-shanti", ownerName: "Shanti Rani Das", acquisitionType: "purchase", fromDate: "2015-09-10T00:00:00Z", toDate: null, documentId: "d-p521" },
+  { id: "own-41", parcelId: "p-522", ownerId: "usr-shanti", ownerName: "Shanti Rani Das", acquisitionType: "inheritance", fromDate: "2009-12-01T00:00:00Z", toDate: null, documentId: "d-p522" },
+  { id: "own-42", parcelId: "p-523", ownerId: "usr-shanti", ownerName: "Shanti Rani Das", acquisitionType: "purchase", fromDate: "2020-07-25T00:00:00Z", toDate: null, documentId: "d-p523" },
+  { id: "own-43", parcelId: "p-524", ownerId: "usr-shanti", ownerName: "Shanti Rani Das", acquisitionType: "purchase", fromDate: "2024-05-30T00:00:00Z", toDate: null, documentId: "d-p524" },
+  // Extra: Iqbal
+  { id: "own-50", parcelId: "p-531", ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise", acquisitionType: "purchase", fromDate: "2023-08-11T00:00:00Z", toDate: null, documentId: "d-p531" },
+  { id: "own-51", parcelId: "p-532", ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise", acquisitionType: "purchase", fromDate: "2024-10-03T00:00:00Z", toDate: null, documentId: "d-p532" },
+  { id: "own-52", parcelId: "p-533", ownerId: "usr-iqbal", ownerName: "Iqbal Enterprise", acquisitionType: "purchase", fromDate: "2026-05-21T00:00:00Z", toDate: null, documentId: "d-p533" },
+  // Extra: Legacy estate
+  { id: "own-60", parcelId: "p-541", ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque", acquisitionType: "grant", fromDate: "1985-06-10T00:00:00Z", toDate: null, documentId: "d-p541" },
+  { id: "own-61", parcelId: "p-542", ownerId: "usr-legacy-2", ownerName: "Late Fazlul Haque", acquisitionType: "grant", fromDate: "1978-11-20T00:00:00Z", toDate: null, documentId: "d-p542" },
+  // Demo Citizens Ownership Records
+  { id: "own-d2-1", parcelId: "p-d2-1", ownerId: "usr-fatema", ownerName: "Fatema Begum", acquisitionType: "inheritance", fromDate: "2022-05-10T00:00:00Z", toDate: null, documentId: "d-d2-1" },
+  { id: "own-d2-2", parcelId: "p-d2-2", ownerId: "usr-fatema", ownerName: "Fatema Begum", acquisitionType: "purchase", fromDate: "2023-11-18T00:00:00Z", toDate: null, documentId: "d-d2-2" },
+  { id: "own-d2-3", parcelId: "p-d2-3", ownerId: "usr-fatema", ownerName: "Fatema Begum", acquisitionType: "purchase", fromDate: "2020-07-14T00:00:00Z", toDate: null, documentId: "d-d2-3" },
+  { id: "own-d2-4", parcelId: "p-d2-4", ownerId: "usr-fatema", ownerName: "Fatema Begum", acquisitionType: "purchase", fromDate: "2022-03-25T00:00:00Z", toDate: null, documentId: "d-d2-4" },
+
+  { id: "own-d3-1", parcelId: "p-d3-1", ownerId: "usr-rashed", ownerName: "Rashed Khan", acquisitionType: "purchase", fromDate: "2021-08-22T00:00:00Z", toDate: null, documentId: "d-d3-1" },
+  { id: "own-d3-2", parcelId: "p-d3-2", ownerId: "usr-rashed", ownerName: "Rashed Khan", acquisitionType: "purchase", fromDate: "2019-04-12T00:00:00Z", toDate: null, documentId: "d-d3-2" },
+  { id: "own-d3-3", parcelId: "p-d3-3", ownerId: "usr-rashed", ownerName: "Rashed Khan", acquisitionType: "purchase", fromDate: "2022-01-15T00:00:00Z", toDate: null, documentId: "d-d3-3" },
+  { id: "own-d3-4", parcelId: "p-d3-4", ownerId: "usr-rashed", ownerName: "Rashed Khan", acquisitionType: "inheritance", fromDate: "2018-09-10T00:00:00Z", toDate: null, documentId: "d-d3-4" },
+  { id: "own-d3-5", parcelId: "p-d3-5", ownerId: "usr-rashed", ownerName: "Rashed Khan", acquisitionType: "purchase", fromDate: "2023-06-20T00:00:00Z", toDate: null, documentId: "d-d3-5" },
+
+  { id: "own-d4-1", parcelId: "p-d4-1", ownerId: "usr-noor", ownerName: "Noor Jahan", acquisitionType: "inheritance", fromDate: "2023-03-05T00:00:00Z", toDate: null, documentId: "d-d4-1" },
+  { id: "own-d4-2", parcelId: "p-d4-2", ownerId: "usr-noor", ownerName: "Noor Jahan", acquisitionType: "purchase", fromDate: "2021-08-19T00:00:00Z", toDate: null, documentId: "d-d4-2" },
+  { id: "own-d4-3", parcelId: "p-d4-3", ownerId: "usr-noor", ownerName: "Noor Jahan", acquisitionType: "inheritance", fromDate: "2019-11-25T00:00:00Z", toDate: null, documentId: "d-d4-3" },
+  { id: "own-d4-4", parcelId: "p-d4-4", ownerId: "usr-noor", ownerName: "Noor Jahan", acquisitionType: "purchase", fromDate: "2024-02-10T00:00:00Z", toDate: null, documentId: "d-d4-4" },
+
+  { id: "own-d5-1", parcelId: "p-d5-1", ownerId: "usr-habib", ownerName: "Habib Molla", acquisitionType: "purchase", fromDate: "2020-12-01T00:00:00Z", toDate: null, documentId: "d-d5-1" },
+  { id: "own-d5-2", parcelId: "p-d5-2", ownerId: "usr-habib", ownerName: "Habib Molla", acquisitionType: "purchase", fromDate: "2022-07-15T00:00:00Z", toDate: null, documentId: "d-d5-2" },
+  { id: "own-d5-3", parcelId: "p-d5-3", ownerId: "usr-habib", ownerName: "Habib Molla", acquisitionType: "purchase", fromDate: "2021-05-18T00:00:00Z", toDate: null, documentId: "d-d5-3" },
+  { id: "own-d5-4", parcelId: "p-d5-4", ownerId: "usr-habib", ownerName: "Habib Molla", acquisitionType: "purchase", fromDate: "2018-03-22T00:00:00Z", toDate: null, documentId: "d-d5-4" },
+
 ];
 
 // ---------------------------------------------------------------------------
@@ -287,6 +568,49 @@ export const documents: LandDocument[] = [
   { id: "d-16", parcelId: "p-403", ownerId: "usr-ayesha", type: "survey-report", fileName: "boundary-survey-403.pdf", mimeType: "application/pdf", sizeBytes: 544210, pageCount: 5, uploadedAt: "2026-09-07T07:00:00Z", uploadedById: "usr-agent", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02 },
   { id: "d-17", parcelId: "p-404", ownerId: "usr-iqbal", type: "title-deed", fileName: "deed-404-scan.pdf", mimeType: "application/pdf", sizeBytes: 721330, pageCount: 7, uploadedAt: "2026-09-08T10:15:00Z", uploadedById: "usr-iqbal", ocrStatus: "extracted", verificationStatus: "flagged", fraudScore: 0.86, extractedFields: { "Dag No": "RS-440", Khatian: "704", Owner: "Iqbal Enterprise" } },
   { id: "d-18", parcelId: "p-405", ownerId: "usr-karim", type: "mutation-order", fileName: "mutation-order-405.pdf", mimeType: "application/pdf", sizeBytes: 264900, pageCount: 2, uploadedAt: "2026-08-28T10:05:00Z", uploadedById: "usr-officer", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.01 },
+  // Extra dolils: Ayesha
+  { id: "d-p501", parcelId: "p-501", ownerId: "usr-ayesha", type: "sale-deed", fileName: "dolil-501-fishpond.pdf", mimeType: "application/pdf", sizeBytes: 712400, pageCount: 6, uploadedAt: "2026-09-01T09:00:00Z", uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.03, extractedFields: { "Dag No": "RS-501", Khatian: "811", Owner: "Ayesha Siddika", Area: "65 decimal" } },
+  { id: "d-p502", parcelId: "p-502", ownerId: "usr-ayesha", type: "sale-deed", fileName: "dolil-502-shop.pdf", mimeType: "application/pdf", sizeBytes: 889200, pageCount: 8, uploadedAt: "2026-09-02T08:30:00Z", uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.04, extractedFields: { "Dag No": "RS-502", Khatian: "812", Owner: "Ayesha Siddika", "Land Use": "commercial" } },
+  { id: "d-p503", parcelId: "p-503", ownerId: "usr-ayesha", type: "inheritance-affidavit", fileName: "warish-503-bamboo.pdf", mimeType: "application/pdf", sizeBytes: 310000, pageCount: 3, uploadedAt: "2026-09-03T10:15:00Z", uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "RS-503", Khatian: "813", Owner: "Ayesha Siddika" } },
+  { id: "d-p504", parcelId: "p-504", ownerId: "usr-ayesha", type: "title-deed", fileName: "khatian-504-orchard.pdf", mimeType: "application/pdf", sizeBytes: 540000, pageCount: 5, uploadedAt: "2026-09-04T07:45:00Z", uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.01, extractedFields: { "Dag No": "CS-504", Khatian: "814", Owner: "Ayesha Siddika", Area: "98 decimal" } },
+  // Extra dolils: Karim
+  { id: "d-p511", parcelId: "p-511", ownerId: "usr-karim", type: "sale-deed", fileName: "dolil-511-paddy.pdf", mimeType: "application/pdf", sizeBytes: 655000, pageCount: 6, uploadedAt: "2026-09-05T09:00:00Z", uploadedById: "usr-karim", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.03, extractedFields: { "Dag No": "BS-511", Khatian: "901", Owner: "Md. Karim Uddin" } },
+  { id: "d-p512", parcelId: "p-512", ownerId: "usr-karim", type: "sale-deed", fileName: "dolil-512-residential.pdf", mimeType: "application/pdf", sizeBytes: 780000, pageCount: 7, uploadedAt: "2026-09-06T08:00:00Z", uploadedById: "usr-karim", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "RS-512", Khatian: "902", Owner: "Md. Karim Uddin", Area: "4 katha" } },
+  { id: "d-p513", parcelId: "p-513", ownerId: "usr-karim", type: "sale-deed", fileName: "dolil-513-vacant.pdf", mimeType: "application/pdf", sizeBytes: 422000, pageCount: 4, uploadedAt: "2026-09-07T10:30:00Z", uploadedById: "usr-karim", ocrStatus: "pending", verificationStatus: "unverified" },
+  // Extra dolils: Shanti
+  { id: "d-p521", parcelId: "p-521", ownerId: "usr-shanti", type: "sale-deed", fileName: "dolil-521-vegetable.pdf", mimeType: "application/pdf", sizeBytes: 600000, pageCount: 5, uploadedAt: "2026-09-01T11:00:00Z", uploadedById: "usr-shanti", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.04, extractedFields: { "Dag No": "BS-521", Khatian: "1201", Owner: "Shanti Rani Das" } },
+  { id: "d-p522", parcelId: "p-522", ownerId: "usr-shanti", type: "title-deed", fileName: "khatian-522-homestead.pdf", mimeType: "application/pdf", sizeBytes: 382000, pageCount: 4, uploadedAt: "2026-09-02T10:00:00Z", uploadedById: "usr-shanti", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "BS-522", Khatian: "1202", Owner: "Shanti Rani Das", Area: "7 katha" } },
+  { id: "d-p523", parcelId: "p-523", ownerId: "usr-shanti", type: "sale-deed", fileName: "dolil-523-pond.pdf", mimeType: "application/pdf", sizeBytes: 519000, pageCount: 5, uploadedAt: "2026-09-03T09:20:00Z", uploadedById: "usr-shanti", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.05, extractedFields: { "Dag No": "BS-523", Khatian: "1203", Owner: "Shanti Rani Das" } },
+  { id: "d-p524", parcelId: "p-524", ownerId: "usr-shanti", type: "sale-deed", fileName: "dolil-524-commercial.pdf", mimeType: "application/pdf", sizeBytes: 950000, pageCount: 9, uploadedAt: "2026-09-04T08:45:00Z", uploadedById: "usr-shanti", ocrStatus: "processing", verificationStatus: "unverified" },
+  // Extra dolils: Iqbal
+  { id: "d-p531", parcelId: "p-531", ownerId: "usr-iqbal", type: "sale-deed", fileName: "dolil-531-warehouse.pdf", mimeType: "application/pdf", sizeBytes: 1100000, pageCount: 10, uploadedAt: "2026-09-05T08:00:00Z", uploadedById: "usr-iqbal", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.03, extractedFields: { "Dag No": "RS-531", Khatian: "1301", Owner: "Iqbal Enterprise", Area: "6 katha" } },
+  { id: "d-p532", parcelId: "p-532", ownerId: "usr-iqbal", type: "sale-deed", fileName: "dolil-532-industrial.pdf", mimeType: "application/pdf", sizeBytes: 1350000, pageCount: 12, uploadedAt: "2026-09-06T09:15:00Z", uploadedById: "usr-iqbal", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.06, extractedFields: { "Dag No": "RS-532", Khatian: "1302", Owner: "Iqbal Enterprise" } },
+  { id: "d-p533", parcelId: "p-533", ownerId: "usr-iqbal", type: "title-deed", fileName: "khatian-533-roadfront.pdf", mimeType: "application/pdf", sizeBytes: 820000, pageCount: 7, uploadedAt: "2026-09-07T11:00:00Z", uploadedById: "usr-iqbal", ocrStatus: "pending", verificationStatus: "unverified" },
+  // Extra dolils: Legacy estate
+  { id: "d-p541", parcelId: "p-541", ownerId: "usr-legacy-2", type: "title-deed", fileName: "khatian-541-adjoining.pdf", mimeType: "application/pdf", sizeBytes: 290000, pageCount: 3, uploadedAt: "2026-09-08T09:00:00Z", uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "RS-541", Khatian: "218", Owner: "Late Fazlul Haque" } },
+  { id: "d-p542", parcelId: "p-542", ownerId: "usr-legacy-2", type: "title-deed", fileName: "khatian-542-paddy-estate.pdf", mimeType: "application/pdf", sizeBytes: 470000, pageCount: 5, uploadedAt: "2026-09-08T09:30:00Z", uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.01, extractedFields: { "Dag No": "CS-542", Khatian: "219", Owner: "Late Fazlul Haque", Area: "110 decimal" } },
+  // Demo Citizens Documents
+  { id: "d-d2-1", parcelId: "p-d2-1", ownerId: "usr-fatema", type: "sale-deed", fileName: "dolil-d2-1.pdf", mimeType: "application/pdf", sizeBytes: 520411, pageCount: 2, uploadedAt: "2026-08-01T10:00:00Z", uploadedById: "usr-fatema", ocrStatus: "extracted", verificationStatus: "verified" },
+  { id: "d-d2-2", parcelId: "p-d2-2", ownerId: "usr-fatema", type: "sale-deed", fileName: "dolil-d2-2.pdf", mimeType: "application/pdf", sizeBytes: 520411, pageCount: 2, uploadedAt: "2026-08-01T10:00:00Z", uploadedById: "usr-fatema", ocrStatus: "extracted", verificationStatus: "verified" },
+  { id: "d-d2-3", parcelId: "p-d2-3", ownerId: "usr-fatema", type: "sale-deed", fileName: "dolil-d2-3-pond.pdf", mimeType: "application/pdf", sizeBytes: 590000, pageCount: 5, uploadedAt: "2026-08-02T10:00:00Z", uploadedById: "usr-fatema", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "RS-603", Khatian: "813", Owner: "Fatema Begum" } },
+  { id: "d-d2-4", parcelId: "p-d2-4", ownerId: "usr-fatema", type: "sale-deed", fileName: "dolil-d2-4-shed.pdf", mimeType: "application/pdf", sizeBytes: 620000, pageCount: 5, uploadedAt: "2026-08-03T11:00:00Z", uploadedById: "usr-fatema", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.03, extractedFields: { "Dag No": "RS-604", Khatian: "814", Owner: "Fatema Begum" } },
+
+  { id: "d-d3-1", parcelId: "p-d3-1", ownerId: "usr-rashed", type: "sale-deed", fileName: "dolil-d3-1.pdf", mimeType: "application/pdf", sizeBytes: 520411, pageCount: 2, uploadedAt: "2026-08-01T10:00:00Z", uploadedById: "usr-rashed", ocrStatus: "extracted", verificationStatus: "verified" },
+  { id: "d-d3-2", parcelId: "p-d3-2", ownerId: "usr-rashed", type: "sale-deed", fileName: "dolil-d3-2-paddy.pdf", mimeType: "application/pdf", sizeBytes: 742100, pageCount: 6, uploadedAt: "2026-08-05T09:00:00Z", uploadedById: "usr-rashed", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "RS-702", Khatian: "902", Owner: "Rashed Khan", Area: "65 decimal" } },
+  { id: "d-d3-3", parcelId: "p-d3-3", ownerId: "usr-rashed", type: "sale-deed", fileName: "dolil-d3-3-homestead.pdf", mimeType: "application/pdf", sizeBytes: 685000, pageCount: 5, uploadedAt: "2026-08-06T10:15:00Z", uploadedById: "usr-rashed", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.03, extractedFields: { "Dag No": "RS-703", Khatian: "903", Owner: "Rashed Khan", Area: "8 katha" } },
+  { id: "d-d3-4", parcelId: "p-d3-4", ownerId: "usr-rashed", type: "inheritance-affidavit", fileName: "warish-d3-4-orchard.pdf", mimeType: "application/pdf", sizeBytes: 390000, pageCount: 4, uploadedAt: "2026-08-07T08:30:00Z", uploadedById: "usr-rashed", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.01, extractedFields: { "Dag No": "RS-704", Khatian: "904", Owner: "Rashed Khan", Area: "85 decimal" } },
+  { id: "d-d3-5", parcelId: "p-d3-5", ownerId: "usr-rashed", type: "sale-deed", fileName: "dolil-d3-5-shop.pdf", mimeType: "application/pdf", sizeBytes: 812000, pageCount: 7, uploadedAt: "2026-08-08T11:45:00Z", uploadedById: "usr-rashed", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.04, extractedFields: { "Dag No": "RS-705", Khatian: "905", Owner: "Rashed Khan", Area: "4 katha" } },
+
+  { id: "d-d4-1", parcelId: "p-d4-1", ownerId: "usr-noor", type: "sale-deed", fileName: "dolil-d4-1.pdf", mimeType: "application/pdf", sizeBytes: 520411, pageCount: 2, uploadedAt: "2026-08-01T10:00:00Z", uploadedById: "usr-noor", ocrStatus: "extracted", verificationStatus: "verified" },
+  { id: "d-d4-2", parcelId: "p-d4-2", ownerId: "usr-noor", type: "sale-deed", fileName: "dolil-d4-2-compound.pdf", mimeType: "application/pdf", sizeBytes: 610000, pageCount: 5, uploadedAt: "2026-08-04T09:30:00Z", uploadedById: "usr-noor", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "BS-302", Khatian: "1202", Owner: "Noor Jahan" } },
+  { id: "d-d4-3", parcelId: "p-d4-3", ownerId: "usr-noor", type: "inheritance-affidavit", fileName: "warish-d4-3-crop.pdf", mimeType: "application/pdf", sizeBytes: 340000, pageCount: 3, uploadedAt: "2026-08-05T10:00:00Z", uploadedById: "usr-noor", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.01, extractedFields: { "Dag No": "BS-303", Khatian: "1203", Owner: "Noor Jahan" } },
+  { id: "d-d4-4", parcelId: "p-d4-4", ownerId: "usr-noor", type: "sale-deed", fileName: "dolil-d4-4-commercial.pdf", mimeType: "application/pdf", sizeBytes: 780000, pageCount: 6, uploadedAt: "2026-08-06T11:15:00Z", uploadedById: "usr-noor", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.04, extractedFields: { "Dag No": "BS-304", Khatian: "1204", Owner: "Noor Jahan" } },
+
+  { id: "d-d5-1", parcelId: "p-d5-1", ownerId: "usr-habib", type: "sale-deed", fileName: "dolil-d5-1.pdf", mimeType: "application/pdf", sizeBytes: 520411, pageCount: 2, uploadedAt: "2026-08-01T10:00:00Z", uploadedById: "usr-habib", ocrStatus: "extracted", verificationStatus: "verified" },
+  { id: "d-d5-2", parcelId: "p-d5-2", ownerId: "usr-habib", type: "sale-deed", fileName: "dolil-d5-2.pdf", mimeType: "application/pdf", sizeBytes: 520411, pageCount: 2, uploadedAt: "2026-08-01T10:00:00Z", uploadedById: "usr-habib", ocrStatus: "extracted", verificationStatus: "verified" },
+  { id: "d-d5-3", parcelId: "p-d5-3", ownerId: "usr-habib", type: "sale-deed", fileName: "dolil-d5-3-warehouse.pdf", mimeType: "application/pdf", sizeBytes: 920000, pageCount: 8, uploadedAt: "2026-08-07T09:45:00Z", uploadedById: "usr-habib", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.03, extractedFields: { "Dag No": "BS-403", Khatian: "1403", Owner: "Habib Molla" } },
+  { id: "d-d5-4", parcelId: "p-d5-4", ownerId: "usr-habib", type: "sale-deed", fileName: "dolil-d5-4-homestead.pdf", mimeType: "application/pdf", sizeBytes: 810000, pageCount: 7, uploadedAt: "2026-08-08T10:30:00Z", uploadedById: "usr-habib", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "BS-404", Khatian: "1404", Owner: "Habib Molla" } },
+
 ];
 
 // ---------------------------------------------------------------------------
