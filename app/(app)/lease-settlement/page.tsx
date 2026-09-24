@@ -75,7 +75,6 @@ function makeSchema(t: Dictionary) {
       areaDecimals: z.string(),
       termYears: z.string(),
       purpose: z.string().min(1, t.pages.leaseSettlement.errors.purposeRequired),
-      paymentMethod: z.enum(["bkash", "nagad", "card"]),
     })
     .refine((d) => Number(d.areaDecimals) > 0, {
       message: t.pages.leaseSettlement.errors.areaRequired,
@@ -117,13 +116,11 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
       areaDecimals: prefilledPlot ? String(prefilledPlot.areaDecimals) : "",
       termYears: "",
       purpose: "",
-      paymentMethod: "bkash",
     },
   });
 
   // useWatch (vs watch()) keeps the component React-Compiler friendly.
   const landUse = useWatch({ control, name: "landUse" });
-  const paymentMethod = useWatch({ control, name: "paymentMethod" });
 
   const fee = policy
     ? {
@@ -132,15 +129,25 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
       }
     : null;
 
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [pendingValues, setPendingValues] = useState<FormValues | null>(null);
+
   function onSubmit(values: FormValues) {
+    setPendingValues(values);
+    setPaymentDialogOpen(true);
+  }
+
+  function handlePaymentConfirm(method: PaymentMethod) {
+    if (!pendingValues) return;
+    
     apply.mutate(
       {
-        landUse: values.landUse,
-        locationDescription: values.locationDescription,
-        areaDecimals: Number(values.areaDecimals),
-        termYears: Number(values.termYears),
-        purpose: values.purpose,
-        paymentMethod: values.paymentMethod,
+        landUse: pendingValues.landUse,
+        locationDescription: pendingValues.locationDescription,
+        areaDecimals: Number(pendingValues.areaDecimals),
+        termYears: Number(pendingValues.termYears),
+        purpose: pendingValues.purpose,
+        paymentMethod: method,
         khasPlotId: prefilledPlot?.id,
       },
       {
@@ -148,6 +155,7 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
           toast.success(t.pages.leaseSettlement.appliedTitle, {
             description: t.pages.leaseSettlement.appliedBody(application.applicationNo),
           });
+          setPaymentDialogOpen(false);
           onDone();
         },
         onError: () =>
@@ -159,6 +167,7 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
   }
 
   return (
+    <>
     <Card className="gap-4 px-5">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <div className="grid gap-2 sm:grid-cols-2">
@@ -256,41 +265,11 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
               {fee ? f.money(fee) : "—"}
             </span>
           </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {PAYMENT_METHODS.map((option) => {
-              const Icon = option.icon;
-              const active = paymentMethod === option.value;
-              return (
-                <button
-                  type="button"
-                  key={option.value}
-                  onClick={() => setValue("paymentMethod", option.value)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left transition-colors",
-                    active
-                      ? "border-primary ring-1 ring-primary"
-                      : "border-border hover:bg-muted/50",
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      "size-4 shrink-0",
-                      active ? "text-marker" : "text-muted-foreground",
-                    )}
-                  />
-                  <span className="text-sm font-medium text-foreground">
-                    {t.pages.leaseSettlement.paymentMethods[option.value]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
           <p className="text-xs text-muted-foreground">{t.pages.leaseSettlement.paymentNote}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" size="sm" disabled={apply.isPending}>
-            {apply.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          <Button type="submit" size="sm">
             {fee ? t.pages.leaseSettlement.confirmPay(f.money(fee)) : t.pages.leaseSettlement.pay}
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={onDone} disabled={apply.isPending}>
@@ -299,6 +278,15 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
         </div>
       </form>
     </Card>
+    <PaymentConfirmationDialog
+      open={paymentDialogOpen}
+      onOpenChange={setPaymentDialogOpen}
+      amount={fee ? f.money(fee) : ""}
+      defaultMethod="bkash"
+      busy={apply.isPending}
+      onConfirm={handlePaymentConfirm}
+    />
+    </>
   );
 }
 
