@@ -10,7 +10,6 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { useStatusMeta } from "@/lib/i18n/status";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -163,7 +162,7 @@ export default function GrievanceDetailPage({
         </Card>
       )}
 
-      {role !== "citizen" && !isResolved && (
+      {role === "admin" && !isResolved && (
         <Card className="p-6 space-y-4">
           <h3 className="font-semibold">{t.pages.grievances.resolveTitle}</h3>
           <Textarea

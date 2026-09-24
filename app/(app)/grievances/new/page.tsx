@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -34,12 +34,12 @@ const CATEGORY_ICONS: Record<GrievanceCategory, React.ElementType> = {
 function makeSchema(t: Dictionary) {
   return z.object({
     category: z.enum(["technical", "delay", "staff-conduct", "corruption"], {
-      message: "Please select a complaint category.",
+      message: t.pages.grievances.categoryRequired,
     }),
     description: z
       .string()
-      .min(20, "Description must be at least 20 characters.")
-      .max(2000, "Description cannot exceed 2000 characters."),
+      .min(20, t.pages.grievances.descriptionTooShort)
+      .max(2000, t.pages.grievances.descriptionTooLong),
   });
 }
 
@@ -53,7 +53,6 @@ export default function NewGrievancePage() {
   const {
     control,
     handleSubmit,
-    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
@@ -62,19 +61,19 @@ export default function NewGrievancePage() {
     },
   });
 
-  const selectedCategory = watch("category");
+  const selectedCategory = useWatch({ control, name: "category" });
   const fileGrievance = useFileGrievance();
 
   const onSubmit = async (data: FormValues) => {
     try {
       const created = await fileGrievance.mutateAsync(data);
-      toast.success("Complaint submitted", {
-        description: `Case ID: ${created.caseNumber}`,
+      toast.success(t.pages.grievances.submittedTitle, {
+        description: t.pages.grievances.submittedBody(created.caseNumber),
       });
       router.push(`/grievances/${created.id}`);
-    } catch (err: any) {
-      toast.error("Submission failed", {
-        description: err.message || "An error occurred while submitting your complaint.",
+    } catch {
+      toast.error(t.pages.grievances.submissionFailed, {
+        description: t.pages.grievances.submissionFailedBody,
       });
     }
   };
@@ -98,7 +97,7 @@ export default function NewGrievancePage() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
         <div className="space-y-4">
-          <label className="text-sm font-medium">Select category</label>
+          <label className="text-sm font-medium">{t.pages.grievances.selectCategory}</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {(["technical", "delay", "staff-conduct", "corruption"] as GrievanceCategory[]).map(
               (cat) => {
@@ -149,19 +148,18 @@ export default function NewGrievancePage() {
             <p className="text-sm font-medium text-destructive">{errors.category.message}</p>
           )}
 
-          {selectedCategory && ["staff-conduct", "corruption"].includes(selectedCategory) && (
+          {selectedCategory && (
             <div className="flex items-start gap-3 rounded-lg bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
               <Info className="mt-0.5 size-4 shrink-0" />
               <p>
-                Complaints of this nature are highly sensitive. They will bypass the local land office 
-                and be routed directly to a supervisory administrator for independent review.
+                {t.pages.grievances.routingNotice}
               </p>
             </div>
           )}
         </div>
 
         <div className="space-y-4">
-          <label className="text-sm font-medium">Description</label>
+          <label className="text-sm font-medium">{t.pages.grievances.descriptionLabel}</label>
           <Controller
             name="description"
             control={control}
@@ -169,7 +167,7 @@ export default function NewGrievancePage() {
               <Textarea
                 {...field}
                 className="min-h-[150px] resize-none"
-                placeholder="Please describe the issue in detail. Include dates, names, or transaction IDs if applicable..."
+                placeholder={t.pages.grievances.descriptionPlaceholder}
               />
             )}
           />
@@ -181,11 +179,11 @@ export default function NewGrievancePage() {
         <div className="flex justify-end">
           <Button type="submit" disabled={fileGrievance.isPending} className="w-full sm:w-auto">
             {fileGrievance.isPending ? (
-              "Submitting..."
+              t.pages.grievances.submitting
             ) : (
               <>
                 <Send className="mr-2 size-4" />
-                Submit complaint
+                {t.pages.grievances.submitComplaint}
               </>
             )}
           </Button>

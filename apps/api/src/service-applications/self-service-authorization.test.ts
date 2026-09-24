@@ -1,7 +1,7 @@
 import { INestApplication, Module, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuditService } from "../audit/audit.service";
 import { AccessTokenGuard } from "../auth/access-token.guard";
 import { issueAuthTokens } from "../auth/dev-current-user";
@@ -70,13 +70,26 @@ describe("self-service authorization", () => {
       serviceApplicationEvent: { create: async () => ({}) },
       grievance: {
         findUnique: async () => grievance,
+        findFirst: async () => null,
+        count: async () => 0,
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          grievance = data;
+          return grievance;
+        },
         update: async ({ data }: { data: Record<string, unknown> }) => {
           grievance = { ...grievance, ...data };
           return grievance;
         },
       },
+      user: {
+        findUnique: async ({ where }: { where: { id: string } }) =>
+          where.id === "usr-ayesha"
+            ? { id: "usr-ayesha", name: "Ayesha Siddika", role: "citizen", jurisdictionId: "j-mouza" }
+            : null,
+        findMany: async () => [{ id: "usr-admin", name: "Registry Administrator", role: "admin" }],
+      },
       grievanceEvent: { create: async () => ({}) },
-      appNotification: { create: async () => ({}), updateMany: async () => ({ count: 0 }) },
+      appNotification: { create: vi.fn().mockResolvedValue({}), updateMany: async () => ({ count: 0 }) },
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prismaFixture),
     };
     auditFixture = { append: async () => undefined };
@@ -137,30 +150,63 @@ describe("self-service authorization", () => {
       expect(grievance.status).toBe("submitted");
     });
 
-    it("refuses an officer it isn't routed to", async () => {
+    it("refuses every land-office officer, including a legacy assignee", async () => {
       await request(app.getHttpServer())
         .patch("/grievances/g-1/resolve")
-        .set("authorization", bearer("usr-officer2", "land-office"))
+        .set("authorization", bearer("usr-officer", "land-office"))
         .send(resolution)
         .expect(403);
       expect(grievance.status).toBe("submitted");
     });
 
-    it("lets the assigned officer resolve it", async () => {
-      await request(app.getHttpServer())
-        .patch("/grievances/g-1/resolve")
-        .set("authorization", bearer("usr-officer", "land-office"))
-        .send(resolution)
-        .expect(200);
-      expect(grievance.status).toBe("resolved");
-    });
-
-    it("lets an administrator step in", async () => {
+    it("lets an administrator resolve it and notifies the citizen", async () => {
       await request(app.getHttpServer())
         .patch("/grievances/g-1/resolve")
         .set("authorization", bearer("usr-admin", "admin"))
         .send(resolution)
         .expect(200);
+      expect(grievance.status).toBe("resolved");
+      expect((prismaFixture.appNotification as { create: ReturnType<typeof vi.fn> }).create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: "usr-ayesha",
+          severity: "success",
+          title: "Grievance resolved",
+          href: "/grievances/g-1",
+        }),
+      });
+    });
+  });
+
+  describe("filing a grievance", () => {
+    it("keeps the grievance queue out of the land-office portal", async () => {
+      await request(app.getHttpServer())
+        .get("/grievances")
+        .set("authorization", bearer("usr-officer", "land-office"))
+        .expect(403);
+    });
+
+    it("routes every complaint to admin and notifies both admin and citizen", async () => {
+      const response = await request(app.getHttpServer())
+        .post("/grievances")
+        .set("authorization", bearer("usr-ayesha", "citizen"))
+        .send({
+          category: "technical",
+          description: "The payment receipt page repeatedly fails to load.",
+        })
+        .expect(201);
+
+      expect(response.body).toMatchObject({
+        filedById: "usr-ayesha",
+        escalatedToId: "usr-admin",
+      });
+      expect(response.body.assignedOfficerId).toBeUndefined();
+      const createNotification = (prismaFixture.appNotification as { create: ReturnType<typeof vi.fn> }).create;
+      expect(createNotification).toHaveBeenCalledWith({
+        data: expect.objectContaining({ userId: "usr-ayesha", title: "Grievance submitted" }),
+      });
+      expect(createNotification).toHaveBeenCalledWith({
+        data: expect.objectContaining({ userId: "usr-admin", title: "New grievance assigned" }),
+      });
     });
   });
 

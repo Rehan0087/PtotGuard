@@ -469,15 +469,13 @@ async function escalateOverdueGrievances(now: Date = new Date()) {
   }
 }
 
-/** Mirrors assertHandler() in GrievancesController, plus its not-decided guard. */
+/** Mirrors assertAdministrator() in GrievancesController, plus its not-decided guard. */
 function grievanceForHandler(id: string, request: Request) {
-  const denied = requireRole(request, "land-office", "admin");
+  const denied = requireRole(request, "admin");
   if (denied) return denied;
   const me = currentUser(request);
   const grievance = db.grievances.find((g) => g.id === id);
   if (!grievance) return notFound("Grievance not found");
-  const handles = me.role === "admin" || grievance.assignedOfficerId === me.id || grievance.escalatedToId === me.id;
-  if (!handles) return forbidden("This grievance is not assigned to you");
   if (grievance.status === "resolved" || grievance.status === "dismissed") {
     return conflict("This grievance has already been decided.");
   }
@@ -4564,32 +4562,32 @@ export const handlers = [
 
 
   // Complaints & grievances ------------------------------------------------
-  // Mirrors GrievancesController. Service complaints route to the land office
-  // above the filer's mouza, conduct/corruption straight to an administrator
-  // (routeGrievance); only the officer it is routed to — or an admin — moves it.
+  // Mirrors GrievancesController. Every citizen complaint routes directly to
+  // the admin portal; land-office users cannot read or decide grievances.
 
   http.get(`${API}/grievances`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen", "admin");
+    if (denied) return denied;
     await escalateOverdueGrievances();
     const me = currentUser(request);
     const items = db.grievances
-      .filter((g) =>
-        me.role === "citizen"
-          ? g.filedById === me.id
-          : g.assignedOfficerId === me.id || g.escalatedToId === me.id,
-      )
+      .filter((g) => me.role === "admin" || g.filedById === me.id)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return HttpResponse.json(items);
   }),
 
   http.get(`${API}/grievances/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "citizen", "admin");
+    if (denied) return denied;
     await escalateOverdueGrievances();
     const me = currentUser(request);
     const grievance = db.grievances.find((g) => g.id === params.id);
     if (!grievance) return notFound("Grievance not found");
-    const involved = [grievance.filedById, grievance.assignedOfficerId, grievance.escalatedToId].includes(me.id);
-    if (!involved && me.role !== "admin") return forbidden("Not authorized to view this grievance");
+    if (me.role !== "admin" && grievance.filedById !== me.id) {
+      return forbidden("Not authorized to view this grievance");
+    }
     const timeline = db.grievanceEvents
       .filter((e) => e.grievanceId === grievance.id)
       .sort((a, b) => a.at.localeCompare(b.at));
@@ -4610,14 +4608,11 @@ export const handlers = [
     if (description.length < 20 || description.length > 2000) {
       return unprocessable({ description: { code: "invalid-length", min: 20, max: 2000 } });
     }
-    const active = (role: string) => db.users.filter((u) => u.role === role && u.status === "active");
-    const { assignedOfficerId, escalatedToId } = routeGrievance(
-      body.category as GrievanceCategory,
-      me.jurisdictionId,
-      active("land-office"),
-      active("admin"),
-      db.jurisdictions,
-    );
+    const activeAdmins = db.users.filter((u) => u.role === "admin" && u.status === "active");
+    const { escalatedToId } = routeGrievance(activeAdmins);
+    if (!escalatedToId) {
+      return conflict("No active administrator is available to receive this complaint");
+    }
 
     const now = new Date();
     const at = now.toISOString();
@@ -4631,7 +4626,6 @@ export const handlers = [
       description,
       filedById: me.id,
       filedByName: me.name,
-      assignedOfficerId,
       escalatedToId,
       slaDeadline: deadline.toISOString(),
       createdAt: at,
@@ -4641,10 +4635,7 @@ export const handlers = [
     db.grievanceEvents.push({ id: `ge-${crypto.randomUUID()}`, grievanceId: grievance.id, at, type: "filed", title: "Grievance filed", actorId: me.id, actorName: me.name });
     await appendAudit({ entityType: "grievance", entityId: grievance.id, action: "create", actorId: me.id, actorName: me.name, payload: { caseNumber: grievance.caseNumber, category: grievance.category } });
     db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: me.id, at, severity: "success", title: "Grievance submitted", body: `Your complaint ${grievance.caseNumber} has been successfully submitted.`, read: false, href: `/grievances/${grievance.id}` });
-    const assignedTo = assignedOfficerId ?? escalatedToId;
-    if (assignedTo) {
-      db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: assignedTo, at, severity: "info", title: "New grievance assigned", body: `${grievance.caseNumber} requires your review.`, read: false, href: `/grievances/${grievance.id}` });
-    }
+    db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: escalatedToId, at, severity: "info", title: "New grievance assigned", body: `${grievance.caseNumber} requires your review.`, read: false, href: `/grievances/${grievance.id}` });
     return HttpResponse.json(grievance, { status: 201 });
   }),
 

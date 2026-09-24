@@ -5,6 +5,7 @@ import type { Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { KhasLandPlot } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/provider";
 
 /**
  * A live slippy map for browsing Khas Land Plots.
@@ -20,6 +21,7 @@ export function KhasLandMap({
   onSelect?: (plot: KhasLandPlot) => void;
   className?: string;
 }) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
 
@@ -64,7 +66,9 @@ export function KhasLandMap({
 
         shape
           .addTo(map)
-          .bindTooltip(`${plot.dagNo} (${plot.mouza}) - ${plot.areaDecimals} dec`)
+          .bindTooltip(
+            `${t.pages.leaseSettlement.dagNo}: ${plot.dagNo} (${plot.mouza}) - ${plot.areaDecimals} ${t.pages.leaseSettlement.decimals}`,
+          )
           .on("click", () => {
             if (onSelect && plot.status === "available") {
               onSelect(plot);
@@ -88,7 +92,7 @@ export function KhasLandMap({
       map?.remove();
       mapRef.current = null;
     };
-  }, [plots, selectedId, onSelect]);
+  }, [plots, selectedId, onSelect, t]);
 
   return <div ref={containerRef} className={cn("z-0 h-72 w-full rounded-lg", className)} />;
 }

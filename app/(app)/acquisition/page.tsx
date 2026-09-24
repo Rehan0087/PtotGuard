@@ -99,7 +99,13 @@ function AppealForm({ application, onDone }: { application: ServiceApplication; 
   return (
     <div className="space-y-3 rounded-lg bg-muted/40 p-3">
       <Select value={outcome} onValueChange={(value) => setOutcome(value as AcquisitionAppealOutcome)}>
-        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-full">
+          <SelectValue>
+            {outcome === "withdraw"
+              ? t.pages.acquisition.appealWithdraw
+              : t.pages.acquisition.appealIncrease}
+          </SelectValue>
+        </SelectTrigger>
         <SelectContent>
           <SelectItem value="withdraw">{t.pages.acquisition.appealWithdraw}</SelectItem>
           <SelectItem value="increase-compensation">{t.pages.acquisition.appealIncrease}</SelectItem>
@@ -257,7 +263,22 @@ function AppealDecision({ application }: { application: ServiceApplication }) {
     <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
       <div className="text-sm font-medium">{t.pages.acquisition.appealPending}</div>
       <p className="text-sm text-muted-foreground">{details.appeal?.reason}</p>
-      <Select value={decision} onValueChange={(value) => setDecision(value as AcquisitionAppealDecision)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="withdraw">{t.pages.acquisition.decisionWithdraw}</SelectItem><SelectItem value="increase-compensation">{t.pages.acquisition.decisionIncrease}</SelectItem><SelectItem value="proceed">{t.pages.acquisition.decisionProceed}</SelectItem></SelectContent></Select>
+      <Select value={decision} onValueChange={(value) => setDecision(value as AcquisitionAppealDecision)}>
+        <SelectTrigger className="w-full min-w-0">
+          <SelectValue>
+            {decision === "withdraw"
+              ? t.pages.acquisition.decisionWithdraw
+              : decision === "increase-compensation"
+                ? t.pages.acquisition.decisionIncrease
+                : t.pages.acquisition.decisionProceed}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="withdraw">{t.pages.acquisition.decisionWithdraw}</SelectItem>
+          <SelectItem value="increase-compensation">{t.pages.acquisition.decisionIncrease}</SelectItem>
+          <SelectItem value="proceed">{t.pages.acquisition.decisionProceed}</SelectItem>
+        </SelectContent>
+      </Select>
       {decision === "increase-compensation" ? <Input type="number" min={(details.awardAmount ?? 0) + 1} value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={t.pages.acquisition.newAmount} /> : null}
       <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder={t.pages.acquisition.decisionNote} />
       <Button size="sm" disabled={!valid || decide.isPending} onClick={() => decide.mutate({ decision, awardAmount: decision === "increase-compensation" ? Number(amount) : undefined, note: note.trim() || undefined }, { onSuccess: () => toast.success(t.pages.acquisition.decisionSaved), onError: () => toast.error(t.pages.acquisition.failedTitle) })}>{decide.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}{t.pages.acquisition.saveDecision}</Button>

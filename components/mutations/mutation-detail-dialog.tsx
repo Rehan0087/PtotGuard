@@ -337,8 +337,8 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                                 disabled={runOcr.isPending || document.ocrStatus === "processing"}
                                 onClick={() => {
                                   runOcr.mutate(document.id, {
-                                    onSuccess: () => toast.success("OCR completed"),
-                                    onError: () => toast.error("OCR failed"),
+                                    onSuccess: () => toast.success(t.pages.mutations.ocrCompleted),
+                                    onError: () => toast.error(t.pages.mutations.ocrFailed),
                                   });
                                 }}
                               >
@@ -347,7 +347,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                                 ) : (
                                   <ScanLine className="size-4 mr-2" />
                                 )}
-                                Run OCR
+                                {t.pages.mutations.runOcr}
                               </Button>
                             ) : null}
                           </div>
@@ -355,7 +355,9 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                       </li>
                       {document.extractedFields && Object.keys(document.extractedFields).length > 0 ? (
                         <li className="bg-muted/30 px-3 py-2 text-xs">
-                          <div className="font-medium mb-1 text-muted-foreground">Extracted Fields:</div>
+                          <div className="font-medium mb-1 text-muted-foreground">
+                            {t.pages.mutations.extractedFields}:
+                          </div>
                           <div className="grid grid-cols-2 gap-2">
                             {Object.entries(document.extractedFields).map(([key, value]) => (
                               <div key={key}>

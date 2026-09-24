@@ -247,16 +247,18 @@ function AssignAgentCard({ disputeId }: { disputeId: string }) {
 
   function submit() {
     assign.mutate(demoAgentId, {
-      onSuccess: () => toast.success("Field agent assigned successfully"),
-      onError: () => toast.error("Failed to assign field agent"),
+      onSuccess: () => toast.success(t.pages.dispute.agentAssigned),
+      onError: () => toast.error(t.pages.dispute.agentAssignmentFailed),
     });
   }
 
   return (
     <Card className="gap-3 px-4">
-      <h3 className="font-heading text-sm font-semibold text-foreground">Assign Field Agent</h3>
+      <h3 className="font-heading text-sm font-semibold text-foreground">
+        {t.pages.dispute.assignAgentTitle}
+      </h3>
       <p className="text-xs text-muted-foreground">
-        Assign a field agent to verify this case on the ground.
+        {t.pages.dispute.assignAgentDescription}
       </p>
 
       <Button
@@ -264,7 +266,7 @@ function AssignAgentCard({ disputeId }: { disputeId: string }) {
         disabled={assign.isPending}
         onClick={submit}
       >
-        Assign field agent
+        {t.pages.dispute.assignAgentAction}
       </Button>
     </Card>
   );
