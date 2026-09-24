@@ -40,5 +40,9 @@ export interface LandDocument {
   fraudScore?: number;
   /** Key/value pairs pulled by OCR, e.g. { "Plot No": "142/3-B" }. */
   extractedFields?: Record<string, string>;
+  /** Evidence surfaced by the AI screening pass. It is advisory, never a decision. */
+  ocrFindings?: string[];
+  /** Model identifier retained for audit/reproducibility. */
+  ocrModel?: string;
   thumbnailUrl?: string;
 }

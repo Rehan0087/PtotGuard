@@ -180,6 +180,24 @@ describe("mutation workflow writes", () => {
     }));
   });
 
+  it("keeps a submitted mutation blocked until the officer verifies every OCR document", async () => {
+    const f = fixture();
+    f.tx.landDocument.findMany.mockResolvedValue([
+      { ...document, verificationStatus: "unverified" },
+    ]);
+
+    const error = await f.controller.startVerification("m-1", request())
+      .catch((caught) => caught as ValidationError);
+
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).getResponse()).toMatchObject({
+      error: "validation_failed",
+      field: "documentIds",
+      reason: { code: "documents-not-verified", documentIds: ["doc-1"] },
+    });
+    noWrites(f);
+  });
+
   it("persists all verification evidence and opens the policy-defined objection window", async () => {
     const f = fixture("under-primary-verification");
     await f.controller.completeVerification("m-1", checks, request());

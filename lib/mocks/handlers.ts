@@ -1371,7 +1371,7 @@ export const handlers = [
     if (missing.length) {
       return unprocessable({ documentIds: { code: "mutation-documents-missing", documentIds: missing } });
     }
-    const documentReview = mutationDocumentGate(documents, "ocr", db.policies.fraudScoreThreshold);
+    const documentReview = mutationDocumentGate(documents, "officer", db.policies.fraudScoreThreshold);
     if (!documentReview.ok) return unprocessable({ documentIds: documentReview.reason });
     const previousStatus = mutation.status;
     const at = now.toISOString();

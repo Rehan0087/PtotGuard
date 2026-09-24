@@ -231,6 +231,10 @@ model LandDocument {
   fraudScore         Float?
   /// Record<string, string> pulled by OCR — see LandDocument.extractedFields.
   extractedFields    Json?
+  /// AI screening evidence. Advisory only; the officer owns the decision.
+  ocrFindings         Json?
+  /// Model identifier retained for audit/reproducibility.
+  ocrModel            String?
   thumbnailUrl       String?
 
   @@index([parcelId])

@@ -26,13 +26,6 @@ import { DocumentDecisionDto } from "./document-decision.dto";
 import { UpdateDocumentFieldsDto } from "./update-document-fields.dto";
 import { UploadDocumentDto } from "./upload-document.dto";
 
-// Stands in for the async OCR + fraud-scoring worker (BullMQ → a real model
-// in production) — same simulated shape and delay as the mock's own
-// scheduleOcrWorker(), so a real deployment's UI polls and resolves exactly
-// like it does against the mock. `fraudScore` is a fixed placeholder, not a
-// model output — see the fraud-review queue's own note on this.
-const OCR_WORKER_MS = 6000;
-
 @Controller("documents")
 export class DocumentsController {
   constructor(
@@ -47,15 +40,46 @@ export class DocumentsController {
         const doc = await this.prisma.landDocument.findUnique({ where: { id: documentId } });
         if (!doc || (doc.ocrStatus !== "processing" && doc.ocrStatus !== "pending")) return;
 
-        const { ocrStatus, extractedFields } = await this.ocrService.runOcr(
-          doc.parcelId || null,
-          doc.fileName
+        const [parcel, policy] = await Promise.all([
+          doc.parcelId ? this.prisma.parcel.findUnique({ where: { id: doc.parcelId } }) : null,
+          this.prisma.policy.findUnique({ where: { id: "singleton" } }),
+        ]);
+        const result = await this.ocrService.runOcr({
+          parcelId: doc.parcelId,
+          fileName: doc.fileName,
+          mimeType: doc.mimeType,
+          documentType: doc.type,
+          registered: parcel ? { dagNo: parcel.dagNo, khatianNo: parcel.khatianNo } : undefined,
+        });
+        const registerReview = result.ocrStatus === "extracted"
+          ? extractionReview(
+              { ...doc, ocrStatus: result.ocrStatus, extractedFields: result.extractedFields } as unknown as LandDocument,
+              parcel as unknown as Parcel | undefined,
+            )
+          : null;
+        const findings = [
+          ...result.findings,
+          ...(registerReview?.issues
+            .filter((issue) => issue.kind === "mismatch")
+            .map((issue) => `${issue.field} does not match the registered record (${issue.scanned} vs ${issue.registered}).`) ?? []),
+        ];
+        const shouldFlag = result.ocrStatus === "extracted" && (
+          findings.length > 0 ||
+          registerReview?.mustEscalate === true ||
+          (result.fraudScore ?? 0) >= (policy?.fraudScoreThreshold ?? 1)
         );
 
         await this.prisma.$transaction(async (tx) => {
           await tx.landDocument.update({
             where: { id: documentId },
-            data: { ocrStatus, fraudScore: 0.04, extractedFields },
+            data: {
+              ocrStatus: result.ocrStatus,
+              extractedFields: result.extractedFields,
+              fraudScore: result.fraudScore,
+              ocrFindings: findings,
+              ocrModel: result.model,
+              verificationStatus: shouldFlag ? "flagged" : "unverified",
+            },
           });
 
           const ownerId = doc.ownerId ?? doc.uploadedById;
@@ -64,9 +88,13 @@ export class DocumentsController {
               id: `n-${randomUUID()}`,
               userId: ownerId,
               at: new Date(),
-              severity: "success",
-              title: "Document processed",
-              body: `Text was extracted from ${doc.fileName}. It is now awaiting officer verification.`,
+              severity: result.ocrStatus === "failed" ? "critical" : shouldFlag ? "warning" : "success",
+              title: result.ocrStatus === "failed" ? "Document OCR failed" : shouldFlag ? "Document needs review" : "Document processed",
+              body: result.ocrStatus === "failed"
+                ? `${doc.fileName} could not be read and remains blocked.`
+                : shouldFlag
+                  ? `${doc.fileName} was routed to fraud review for an officer decision.`
+                  : `Text was extracted from ${doc.fileName}. It is now awaiting officer verification.`,
               content: { code: "document-processed", fileName: doc.fileName },
               read: false,
               href: "/documents",
@@ -269,7 +297,13 @@ export class DocumentsController {
 
     const updated = await this.prisma.landDocument.update({
       where: { id },
-      data: { ocrStatus: "processing", verificationStatus: "unverified" },
+      data: {
+        ocrStatus: "processing",
+        verificationStatus: "unverified",
+        fraudScore: null,
+        ocrFindings: [],
+        ocrModel: null,
+      },
     });
 
     this.scheduleOcrWorker(updated.id, updated.parcelId ?? undefined);
@@ -289,15 +323,46 @@ export class DocumentsController {
       data: { ocrStatus: "processing" },
     });
 
-    const { ocrStatus, extractedFields } = await this.ocrService.runOcr(
-      doc.parcelId || null,
-      doc.fileName
+    const [parcel, policy] = await Promise.all([
+      doc.parcelId ? this.prisma.parcel.findUnique({ where: { id: doc.parcelId } }) : null,
+      this.prisma.policy.findUnique({ where: { id: "singleton" } }),
+    ]);
+    const result = await this.ocrService.runOcr({
+      parcelId: doc.parcelId,
+      fileName: doc.fileName,
+      mimeType: doc.mimeType,
+      documentType: doc.type,
+      registered: parcel ? { dagNo: parcel.dagNo, khatianNo: parcel.khatianNo } : undefined,
+    });
+    const registerReview = result.ocrStatus === "extracted"
+      ? extractionReview(
+          { ...doc, ocrStatus: result.ocrStatus, extractedFields: result.extractedFields } as unknown as LandDocument,
+          parcel as unknown as Parcel | undefined,
+        )
+      : null;
+    const findings = [
+      ...result.findings,
+      ...(registerReview?.issues
+        .filter((issue) => issue.kind === "mismatch")
+        .map((issue) => `${issue.field} does not match the registered record (${issue.scanned} vs ${issue.registered}).`) ?? []),
+    ];
+    const shouldFlag = result.ocrStatus === "extracted" && (
+      findings.length > 0 ||
+      registerReview?.mustEscalate === true ||
+      (result.fraudScore ?? 0) >= (policy?.fraudScoreThreshold ?? 1)
     );
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.landDocument.update({
         where: { id },
-        data: { ocrStatus, extractedFields, fraudScore: 0.04 },
+        data: {
+          ocrStatus: result.ocrStatus,
+          extractedFields: result.extractedFields,
+          fraudScore: result.fraudScore,
+          ocrFindings: findings,
+          ocrModel: result.model,
+          verificationStatus: shouldFlag ? "flagged" : "unverified",
+        },
       });
 
       const actorId = currentUserId(req);
@@ -306,7 +371,12 @@ export class DocumentsController {
         entityId: updated.id,
         action: "status-change",
         actorId,
-        payload: { fileName: updated.fileName, ocrStatus },
+        payload: {
+          fileName: updated.fileName,
+          ocrStatus: result.ocrStatus,
+          routedToFraudReview: shouldFlag,
+          findingCount: findings.length,
+        },
       });
 
       return updated;
