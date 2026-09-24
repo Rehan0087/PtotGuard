@@ -320,7 +320,7 @@ export class MutationsController {
       }
       const documentReview = mutationDocumentGate(
         documents,
-        "ocr",
+        "officer",
         policy?.fraudScoreThreshold ?? 1,
       );
       if (!documentReview.ok) throw new ValidationError(documentReview.reason, "documentIds");

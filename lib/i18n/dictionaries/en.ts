@@ -1703,6 +1703,7 @@ export const en = {
     },
 
     fraudReview: {
+      aiFindings: "AI screening findings",
       description:
         "Documents flagged by automated scoring — image forensics, stamp checks, and field mismatches. Clear them as genuine or reject them.",
       emptyTitle: "Queue clear",
