@@ -20,8 +20,6 @@ import type {
   UserStatus,
   ServiceApplicationStatus,
   GrievanceStatus,
-  LandListingStatus,
-  LandListingInquiryStatus,
 } from "@/lib/types";
 
 export interface StatusMeta {
@@ -123,18 +121,4 @@ export const grievanceStatusTone: Record<GrievanceStatus, StatusTone> = {
   escalated: "flagged",
   resolved: "verified",
   dismissed: "flagged",
-};
-
-export const landListingStatusTone: Record<LandListingStatus, StatusTone> = {
-  active: "verified",
-  "under-transfer": "review",
-  sold: "neutral",
-  withdrawn: "draft",
-};
-
-export const landListingInquiryStatusTone: Record<LandListingInquiryStatus, StatusTone> = {
-  open: "pending",
-  accepted: "verified",
-  declined: "flagged",
-  withdrawn: "draft",
 };

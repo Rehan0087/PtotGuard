@@ -176,7 +176,6 @@ export const en = {
     revenueCases: "Revenue cases",
     leaseSettlement: "Lease & settlement",
     acquisition: "Acquisition & requisition",
-    marketplace: "Land marketplace",
 
     appointments: "Appointments",
     payments: "Payments",
@@ -222,18 +221,7 @@ export const en = {
       resolved: "Resolved",
       dismissed: "Dismissed",
     },
-    landListing: {
-      active: "Listed",
-      "under-transfer": "Under transfer",
-      sold: "Sold",
-      withdrawn: "Withdrawn",
-    },
-    landListingInquiry: {
-      open: "Open",
-      accepted: "Accepted",
-      declined: "Declined",
-      withdrawn: "Withdrawn",
-    },
+
     dispute: {
       submitted: "Submitted",
       "under-land-office-review": "Land Office review",
@@ -2477,60 +2465,6 @@ export const en = {
       emptyBody: "Fees you pay while filing a mutation or applying for a service will appear here.",
     },
 
-    marketplace: {
-      description: "Sell land you own, or find land other citizens have listed for sale.",
-      tabs: { browse: "Browse", mine: "My listings", interests: "My interests" },
-
-      priceLabel: "Asking price",
-      newListing: "List a parcel",
-      formTitle: "List a parcel for sale",
-      parcelLabel: "Which parcel?",
-      parcelPlaceholder: "You have no parcels to list.",
-      askingPriceLabel: "Asking price (BDT)",
-      descriptionLabel: "Description",
-      descriptionPlaceholder: "Location, access, boundary notes — anything a buyer should know.",
-      submitListing: "Publish listing",
-      listedTitle: "Listing published",
-      listedBody: "Your parcel is now visible to other citizens.",
-      failedTitle: "Couldn't complete that",
-      failedBody: "Please try again in a moment.",
-      errors: {
-        parcelRequired: "Choose a parcel.",
-        priceRequired: "Enter an asking price.",
-        descriptionRequired: "Add a short description.",
-        restricted: "This parcel has a restriction on record that blocks a transfer, so it can't be listed.",
-        alreadyListed: "This parcel already has an active or under-transfer listing.",
-      },
-
-      browseEmptyTitle: "No listings yet",
-      browseEmptyBody: "Check back later, or list your own parcel for sale.",
-      expressInterest: "Express interest",
-      interestFormTitle: "Express interest",
-      messageLabel: "Message (optional)",
-      messagePlaceholder: "Tell the seller why you're interested, or ask a question.",
-      sendInterest: "Send",
-      interestSentTitle: "Interest sent",
-      interestSentBody: "The seller has been notified.",
-
-      minesEmptyTitle: "You haven't listed anything",
-      minesEmptyBody: "List a parcel you own to reach interested buyers.",
-      inquiriesLabel: "Interest received",
-      noInquiriesYet: "No interest yet.",
-      accept: "Accept",
-      decline: "Decline",
-      acceptedTitle: "Interest accepted",
-      acceptedBody: "Now file the ownership transfer to finish the sale.",
-      declinedTitle: "Interest declined",
-      continueToMutation: "File the transfer",
-      withdrawListing: "Withdraw listing",
-      reactivateListing: "Reactivate listing",
-
-      interestsEmptyTitle: "No interests yet",
-      interestsEmptyBody: "Parcels you express interest in will show up here.",
-      withdrawInterest: "Withdraw",
-      bySeller: (name: string) => `Listed by ${name}`,
-    },
-
     manual: {
       heading: "User manual",
       description:
@@ -2624,20 +2558,6 @@ export const en = {
           ],
           note: "Small agricultural holdings below the exemption limit owe nothing.",
           link: { href: "/land-tax", label: "Land development tax" },
-        },
-        {
-          id: "marketplace",
-          title: "Buying and selling on the land marketplace",
-          summary:
-            "List a parcel you own for sale, or find land other citizens are selling. The actual transfer still goes through a mutation.",
-          steps: [
-            "To sell, open Land marketplace, go to My listings and list a parcel with an asking price and description.",
-            "To buy, browse listings, open one and express interest, with an optional message to the seller.",
-            "The seller accepts one buyer. The listing moves to Under transfer and the seller is taken to a mutation form with the buyer already filled in.",
-            "When the land office approves the transfer, the listing is marked Sold. If it is rejected, the listing goes back on the market.",
-          ],
-          note: "A parcel with a blocking restriction cannot be listed, and a parcel can only have one open listing at a time.",
-          link: { href: "/marketplace", label: "Land marketplace" },
         },
         {
           id: "disputes",

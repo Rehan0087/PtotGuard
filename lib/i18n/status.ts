@@ -15,8 +15,6 @@ import {
   userStatusTone,
   verificationStatusTone,
   grievanceStatusTone,
-  landListingStatusTone,
-  landListingInquiryStatusTone,
 } from "@/lib/status";
 import { useT } from "./provider";
 
@@ -70,8 +68,6 @@ export function useStatusMeta() {
         hearing: pair(hearingStatusTone, t.status.hearing),
         user: pair(userStatusTone, t.status.user),
         grievance: pair(grievanceStatusTone, t.status.grievance),
-        landListing: pair(landListingStatusTone, t.status.landListing),
-        landListingInquiry: pair(landListingInquiryStatusTone, t.status.landListingInquiry),
       };
     },
     [t],

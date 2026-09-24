@@ -28,7 +28,6 @@ const ICONS: Record<string, LucideIcon> = {
   faraiz: Calculator,
   survey: Map,
   "land-tax": Wallet,
-  marketplace: Store,
   disputes: Scale,
   payments: Receipt,
   help: CircleHelp,
