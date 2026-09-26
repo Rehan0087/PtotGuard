@@ -48,6 +48,9 @@ import type {
   KhasLandPlot,
   AcquisitionAppealDecision,
   AcquisitionAppealOutcome,
+  CommunityPost,
+  CommunityPostKind,
+  CommunityVoteValue,
 
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
@@ -82,6 +85,45 @@ export function useJurisdictions() {
     queryKey: ["jurisdictions"],
     queryFn: () => api.get<Jurisdiction[]>("/jurisdictions"),
     staleTime: Infinity,
+  });
+}
+
+// --- Community ------------------------------------------------------------
+export function useCommunityPosts() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["community", role],
+    queryFn: () => api.get<CommunityPost[]>("/community"),
+  });
+}
+
+export function useCreateCommunityPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { title: string; body: string; kind: CommunityPostKind }) =>
+      api.post<CommunityPost>("/community", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["community"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}
+
+export function useCommentOnCommunityPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, body }: { postId: string; body: string }) =>
+      api.post<CommunityPost>(`/community/${postId}/comments`, { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["community"] }),
+  });
+}
+
+export function useVoteOnCommunityPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, value }: { postId: string; value: CommunityVoteValue }) =>
+      api.post<CommunityPost>(`/community/${postId}/vote`, { value }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["community"] }),
   });
 }
 

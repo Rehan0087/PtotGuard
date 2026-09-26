@@ -18,4 +18,5 @@ export * from "./inheritance";
 export * from "./audit";
 export * from "./policy";
 export * from "./grievance";
+export * from "./community";
 export * from "./api";

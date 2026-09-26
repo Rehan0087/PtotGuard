@@ -103,6 +103,9 @@ model User {
   notifications                 AppNotification[]
   auditActions                  AuditEvent[]
   assistantConversation         AssistantConversation?
+  communityPosts                CommunityPost[]           @relation("CommunityPostAuthor")
+  communityComments             CommunityComment[]        @relation("CommunityCommentAuthor")
+  communityVotes                CommunityVote[]
 
   @@index([jurisdictionId])
   @@map("users")
@@ -717,6 +720,54 @@ model AppNotification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+// --- Community ----------------------------------------------------------
+
+model CommunityPost {
+  id        String   @id
+  authorId  String
+  author    User     @relation("CommunityPostAuthor", fields: [authorId], references: [id])
+  title     String
+  body      String
+  /// CommunityPostKind: "discussion" | "announcement"
+  kind      String   @default("discussion")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments CommunityComment[]
+  votes    CommunityVote[]
+
+  @@index([createdAt])
+  @@index([kind, createdAt])
+  @@map("community_posts")
+}
+
+model CommunityComment {
+  id        String        @id
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User          @relation("CommunityCommentAuthor", fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime      @default(now())
+
+  @@index([postId, createdAt])
+  @@map("community_comments")
+}
+
+model CommunityVote {
+  postId  String
+  post    CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User          @relation(fields: [userId], references: [id])
+  /// -1 for a down-vote, 1 for an up-vote.
+  value   Int
+  votedAt DateTime      @default(now())
+
+  @@id([postId, userId])
+  @@index([userId])
+  @@map("community_votes")
 }
 
 // --- Khas Land Plots ----------------------------------------------------

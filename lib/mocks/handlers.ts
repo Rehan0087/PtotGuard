@@ -21,6 +21,9 @@ import type {
   Role,
   ServiceApplication,
   User,
+  CommunityPost,
+  CommunityPostKind,
+  CommunityVoteValue,
 } from "@/lib/types";
 import { ROLES } from "@/lib/types";
 import {
@@ -109,6 +112,20 @@ function currentUser(request: Request): User {
   if (authenticated) return authenticated;
   const id = db.CURRENT_USER_BY_ROLE[getRole(request)];
   return db.users.find((u) => u.id === id)!;
+}
+
+function communityPostResponse(postId: string, viewerId: string): CommunityPost | undefined {
+  const post = db.communityPosts.find((candidate) => candidate.id === postId);
+  if (!post) return undefined;
+  const comments = db.communityComments.filter((comment) => comment.postId === postId);
+  const votes = db.communityVotes.filter((vote) => vote.postId === postId);
+  return {
+    ...post,
+    score: votes.reduce((sum, vote) => sum + vote.value, 0),
+    viewerVote: votes.find((vote) => vote.userId === viewerId)?.value ?? 0,
+    commentCount: comments.length,
+    comments,
+  };
 }
 
 function completeMockAcquisition(
@@ -4459,6 +4476,108 @@ export const handlers = [
       .filter((e) => e.entityType === params.entityType && e.entityId === params.id)
       .reverse();
     return HttpResponse.json(events);
+  }),
+
+  // Community --------------------------------------------------------------
+  http.get(`${API}/community`, async ({ request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const posts = [...db.communityPosts].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "announcement" ? -1 : 1;
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+    return HttpResponse.json(
+      posts.map((post) => communityPostResponse(post.id, me.id)).filter(Boolean),
+    );
+  }),
+
+  http.post(`${API}/community`, async ({ request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const body = (await request.json()) as { title?: string; body?: string; kind?: CommunityPostKind };
+    const title = body.title?.trim() ?? "";
+    const message = body.body?.trim() ?? "";
+    const kind = body.kind ?? "discussion";
+    if (title.length < 4 || title.length > 140 || message.length < 8 || message.length > 5000) {
+      return badRequest("Community post is invalid");
+    }
+    if (kind === "announcement" && me.role !== "land-office") {
+      return HttpResponse.json(
+        { error: "forbidden", message: "Only the land office can publish announcements" },
+        { status: 403 },
+      );
+    }
+    const at = new Date().toISOString();
+    const post = {
+      id: `community-${crypto.randomUUID()}`,
+      authorId: me.id,
+      authorName: me.name,
+      authorRole: me.role,
+      title,
+      body: message,
+      kind,
+      createdAt: at,
+      updatedAt: at,
+    };
+    db.communityPosts.unshift(post);
+    if (kind === "announcement") {
+      for (const recipient of db.users.filter((user) => user.id !== me.id && user.status === "active")) {
+        db.notifications.unshift({
+          id: `n-${crypto.randomUUID()}`,
+          userId: recipient.id,
+          at,
+          severity: "info",
+          title: "New land-office announcement",
+          body: title,
+          content: { code: "community-announcement", postId: post.id, title },
+          read: false,
+          href: `/community#${post.id}`,
+        });
+      }
+    }
+    return HttpResponse.json(communityPostResponse(post.id, me.id), { status: 201 });
+  }),
+
+  http.post(`${API}/community/:id/comments`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const postId = String(params.id);
+    if (!db.communityPosts.some((post) => post.id === postId)) return notFound("Community post not found");
+    const body = (await request.json()) as { body?: string };
+    const message = body.body?.trim() ?? "";
+    if (!message || message.length > 2000) return badRequest("Comment is invalid");
+    db.communityComments.push({
+      id: `community-comment-${crypto.randomUUID()}`,
+      postId,
+      authorId: me.id,
+      authorName: me.name,
+      authorRole: me.role,
+      body: message,
+      createdAt: new Date().toISOString(),
+    });
+    return HttpResponse.json(communityPostResponse(postId, me.id), { status: 201 });
+  }),
+
+  http.post(`${API}/community/:id/vote`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const postId = String(params.id);
+    if (!db.communityPosts.some((post) => post.id === postId)) return notFound("Community post not found");
+    const body = (await request.json()) as { value?: CommunityVoteValue };
+    if (body.value !== 1 && body.value !== -1) return badRequest("Vote must be 1 or -1");
+    const index = db.communityVotes.findIndex((vote) => vote.postId === postId && vote.userId === me.id);
+    if (index >= 0 && db.communityVotes[index].value === body.value) {
+      db.communityVotes.splice(index, 1);
+    } else if (index >= 0) {
+      db.communityVotes[index].value = body.value;
+    } else {
+      db.communityVotes.push({ postId, userId: me.id, value: body.value });
+    }
+    return HttpResponse.json(communityPostResponse(postId, me.id));
   }),
 
   // Notifications ----------------------------------------------------------

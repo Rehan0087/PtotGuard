@@ -12,6 +12,7 @@ import {
   HelpCircle,
   BookOpen,
   MessageCircleWarning,
+  MessagesSquare,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -60,6 +61,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "profile", href: "/profile", icon: UserCog },
       { labelKey: "citizenServices", href: "/portal", icon: LayoutGrid },
       { labelKey: "grievances", href: "/grievances", icon: MessageCircleWarning },
+      { labelKey: "community", href: "/community", icon: MessagesSquare },
       { labelKey: "faq", href: "/faq", icon: HelpCircle },
       { labelKey: "manual", href: "/manual", icon: BookOpen },
     ],
@@ -75,6 +77,7 @@ export const NAV: Record<Role, PortalNav> = {
         href: "/land-officer-responsibilities",
         icon: LayoutGrid,
       },
+      { labelKey: "community", href: "/community", icon: MessagesSquare },
     ],
   },
   "field-agent": {
@@ -83,12 +86,16 @@ export const NAV: Record<Role, PortalNav> = {
     items: [
       { labelKey: "assignedVisits", href: "/field", icon: MapPin },
       { labelKey: "acquisition", href: "/acquisition", icon: Landmark },
+      { labelKey: "community", href: "/community", icon: MessagesSquare },
     ],
   },
   mediator: {
     portalKey: "settlementOffice",
     home: "/cases",
-    items: [{ labelKey: "cases", href: "/cases", icon: Gavel }],
+    items: [
+      { labelKey: "cases", href: "/cases", icon: Gavel },
+      { labelKey: "community", href: "/community", icon: MessagesSquare },
+    ],
   },
   admin: {
     portalKey: "administration",
@@ -100,6 +107,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "jurisdictions", href: "/jurisdictions", icon: Building2 },
       { labelKey: "policies", href: "/policies", icon: SlidersHorizontal },
       { labelKey: "grievances", href: "/grievances", icon: MessageCircleWarning },
+      { labelKey: "community", href: "/community", icon: MessagesSquare },
     ],
   },
 };

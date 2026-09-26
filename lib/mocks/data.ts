@@ -29,6 +29,9 @@ import type {
   GeoPolygon,
   Grievance,
   GrievanceEvent,
+  CommunityPost,
+  CommunityComment,
+  CommunityVoteValue,
 } from "@/lib/types";
 import type { FieldSurveyGpsPoint } from "@/lib/types";
 import type { MockSyncReceipt } from "./field-survey-sync-contract";
@@ -828,6 +831,37 @@ export const policies = {
 };
 
 // ---------------------------------------------------------------------------
+// Community — shared by every authenticated role.
+// ---------------------------------------------------------------------------
+export const communityPosts: Omit<CommunityPost, "score" | "viewerVote" | "commentCount" | "comments">[] = [
+  {
+    id: "community-1", authorId: "usr-officer", authorName: "Nasrin Akter", authorRole: "land-office",
+    title: "Digital mutation help desk this Thursday",
+    body: "The Debidwar Land Office will run a walk-in help desk from 10:00 AM to 2:00 PM. Bring your application number and original identity document.",
+    kind: "announcement", createdAt: "2026-09-25T08:30:00Z", updatedAt: "2026-09-25T08:30:00Z",
+  },
+  {
+    id: "community-2", authorId: "usr-ayesha", authorName: "Ayesha Siddika", authorRole: "citizen",
+    title: "What should I bring to a boundary survey?",
+    body: "My first field survey is next week. Which documents are useful to have ready for the field agent?",
+    kind: "discussion", createdAt: "2026-09-24T11:15:00Z", updatedAt: "2026-09-24T11:15:00Z",
+  },
+];
+
+export const communityComments: CommunityComment[] = [
+  {
+    id: "community-comment-1", postId: "community-2", authorId: "usr-agent", authorName: "Rahim Uddin", authorRole: "field-agent",
+    body: "Keep the latest khatian, deed copy, and any earlier survey map ready. The assigned agent can confirm if anything else is needed.",
+    createdAt: "2026-09-24T12:05:00Z",
+  },
+];
+
+export const communityVotes: { postId: string; userId: string; value: CommunityVoteValue }[] = [
+  { postId: "community-1", userId: "usr-ayesha", value: 1 },
+  { postId: "community-1", userId: "usr-agent", value: 1 },
+  { postId: "community-2", userId: "usr-officer", value: 1 },
+];
+
 // Notifications (citizen inbox is richest for the demo)
 // ---------------------------------------------------------------------------
 export const notifications: AppNotification[] = [

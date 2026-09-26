@@ -49,6 +49,8 @@ export function useNotificationText() {
           return t.notifications["land-tax-reminder"](c.dagNo, c.assessmentYear, c.amount);
         case "revenue-case-filed":
           return t.notifications["revenue-case-filed"](c.caseNumber, c.dagNo, c.amount);
+        case "community-announcement":
+          return t.notifications["community-announcement"](c.title);
         case "welcome":
           return t.notifications.welcome();
         default:

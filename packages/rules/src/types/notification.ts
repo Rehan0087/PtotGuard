@@ -24,6 +24,7 @@ export type NotificationContent =
   | { code: "mutation-verification"; mutationNumber: string; dagNo: string }
   | { code: "land-tax-reminder"; dagNo: string; assessmentYear: number; amount: number }
   | { code: "revenue-case-filed"; caseNumber: string; dagNo: string; amount: number }
+  | { code: "community-announcement"; postId: string; title: string }
   | { code: "welcome" };
 
 export interface AppNotification {
