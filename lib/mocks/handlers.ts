@@ -70,7 +70,7 @@ import {
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
-import { DEMO_PASSWORD, findDemoAccount } from "../demo-accounts";
+import { DEMO_PASSWORD } from "../demo-accounts";
 import { hydrateMutationState } from "./mutation-store";
 import { hydrateProfileState, persistProfileState } from "./profile-store";
 import { applyMockProfileUpdate, MockProfileUpdateError } from "../field-profile";
@@ -614,10 +614,8 @@ export const handlers = [
   http.post(`${API}/auth/login`, async ({ request }) => {
     await latency();
     const body = (await request.json()) as { email?: string; password?: string };
-    const account = body.email ? findDemoAccount(body.email) : undefined;
     const normalizedEmail = body.email?.trim().toLowerCase();
-    const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail)
-      ?? (account ? db.users.find((candidate) => candidate.id === db.CURRENT_USER_BY_ROLE[account.role]) : undefined);
+    const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
     // Mirrors auth.controller.ts: suspended refuses, an invitation is taken
     // up by using it. The password itself stays the fixture one here — the
     // mock has never checked a real hash.

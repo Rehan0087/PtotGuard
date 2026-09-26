@@ -146,12 +146,12 @@ export const users: User[] = [
     createdAt: "2023-02-08T09:00:00Z",
   },
   {
-    id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@settlement.gov.bd",
+    id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@landtribunal.gov.bd",
     role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer (Retd. Judge)", status: "active",
     createdAt: "2020-09-01T09:00:00Z",
   },
   {
-    id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@settlement.gov.bd",
+    id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@landtribunal.gov.bd",
     role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer", status: "active",
     createdAt: "2021-03-15T09:00:00Z",
   },
