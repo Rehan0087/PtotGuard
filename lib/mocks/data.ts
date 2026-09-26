@@ -87,6 +87,30 @@ export const users: User[] = [
     createdAt: "2024-06-19T09:00:00Z",
   },
   {
+    id: "usr-fatema", name: "Fatema Begum", email: "demo2@example.bd", phone: "+8801922-111111",
+    role: "citizen", jurisdictionId: "j-rajamehar", nationalId: "•••• •••• 3312", status: "active",
+    profileDetails: { nameBn: "ফাতেমা বেগম", occupation: "Homemaker", bloodGroup: "AB+", gender: "Female", birthDate: "1990-03-08", currentAddress: "Village: Rajamehar, Upazila: Debidwar, Cumilla", permanentAddress: "Rajamehar, Debidwar, Cumilla", fatherName: "Hafizur Rahman", motherName: "Kulsum Begum" },
+    createdAt: "2025-01-15T09:00:00Z",
+  },
+  {
+    id: "usr-rashed", name: "Rashed Khan", email: "demo3@example.bd", phone: "+8801933-222222",
+    role: "citizen", jurisdictionId: "j-debidwar", nationalId: "•••• •••• 5589", status: "active",
+    profileDetails: { nameBn: "রাশেদ খান", occupation: "Engineer", bloodGroup: "A-", gender: "Male", birthDate: "1988-07-22", currentAddress: "Debidwar Upazila, Cumilla", permanentAddress: "Debidwar, Cumilla", fatherName: "Lutfor Khan", motherName: "Rahela Begum" },
+    createdAt: "2025-03-20T09:00:00Z",
+  },
+  {
+    id: "usr-noor", name: "Noor Jahan", email: "demo4@example.bd", phone: "+8801944-333333",
+    role: "citizen", jurisdictionId: "j-payalgacha", nationalId: "•••• •••• 7741", status: "active",
+    profileDetails: { nameBn: "নূর জাহান", occupation: "Teacher", bloodGroup: "O-", gender: "Female", birthDate: "1992-12-14", currentAddress: "Payalgacha, Barura, Cumilla", permanentAddress: "Payalgacha, Barura, Cumilla", fatherName: "Abul Kashem", motherName: "Amena Khatun" },
+    createdAt: "2025-06-10T09:00:00Z",
+  },
+  {
+    id: "usr-habib", name: "Habib Molla", email: "demo5@example.bd", phone: "+8801955-444444",
+    role: "citizen", jurisdictionId: "j-barura", nationalId: "•••• •••• 9923", status: "active",
+    profileDetails: { nameBn: "হাবিব মোল্লা", occupation: "Businessman", bloodGroup: "B-", gender: "Male", birthDate: "1975-04-30", currentAddress: "Barura Upazila, Cumilla", permanentAddress: "Barura, Cumilla", fatherName: "Wahab Molla", motherName: "Fatema Molla" },
+    createdAt: "2025-08-05T09:00:00Z",
+  },
+  {
     id: "usr-officer", name: "Nasrin Akter", email: "n.akter@minland.gov.bd", phone: "+8801712-345678",
     role: "land-office", jurisdictionId: "j-debidwar", title: "Sub-Registrar", status: "active",
     profileDetails: { nameBn: "নাসরিন আক্তার", fatherName: "Abdul Hakim", motherName: "Rahima Begum", birthDate: "1987-08-19", bloodGroup: "B+", gender: "Female", occupation: "Government Officer", currentAddress: "Debidwar, Cumilla", permanentAddress: "Cumilla, Bangladesh" },
@@ -119,12 +143,12 @@ export const users: User[] = [
     createdAt: "2023-02-08T09:00:00Z",
   },
   {
-    id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@settlement.gov.bd",
+    id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@landtribunal.gov.bd",
     role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer (Retd. Judge)", status: "active",
     createdAt: "2020-09-01T09:00:00Z",
   },
   {
-    id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@settlement.gov.bd",
+    id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@landtribunal.gov.bd",
     role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer", status: "active",
     createdAt: "2021-03-15T09:00:00Z",
   },
@@ -227,6 +251,42 @@ export const parcels: Parcel[] = [
     landUse: "mixed", area: { value: 38, unit: "decimal" }, ownerId: "usr-karim", ownerName: "Md. Karim Uddin",
     ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.556, lng: 90.995 }, boundary: square({ lat: 23.556, lng: 90.995 }, 0.0007),
     marketValue: { amount: 3350000, currency: "BDT" }, registeredAt: "2014-06-21T00:00:00Z", lastMutationAt: "2026-08-28T10:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d2-1", ulpin: "ILR-CUM-DEB-000010", dagNo: "RS-601", khatianNo: "811", title: "Paddy plot, Rajamehar (Fatema)", jurisdictionId: "j-rajamehar",
+    landUse: "agricultural", area: { value: 55, unit: "decimal" }, ownerId: "usr-fatema", ownerName: "Fatema Begum",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.548, lng: 90.988 }, boundary: square({ lat: 23.548, lng: 90.988 }),
+    marketValue: { amount: 3300000, currency: "BDT" }, registeredAt: "2022-05-10T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d2-2", ulpin: "ILR-CUM-DEB-000011", dagNo: "RS-602", khatianNo: "812", title: "Homestead plot, Rajamehar (Fatema)", jurisdictionId: "j-rajamehar",
+    landUse: "residential", area: { value: 4, unit: "katha" }, ownerId: "usr-fatema", ownerName: "Fatema Begum",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.547, lng: 90.987 }, boundary: square({ lat: 23.547, lng: 90.987 }, 0.0005),
+    marketValue: { amount: 2100000, currency: "BDT" }, registeredAt: "2023-11-18T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d3-1", ulpin: "ILR-CUM-DEB-000012", dagNo: "RS-701", khatianNo: "901", title: "Commercial plot, Debidwar (Rashed)", jurisdictionId: "j-debidwar",
+    landUse: "commercial", area: { value: 6, unit: "katha" }, ownerId: "usr-rashed", ownerName: "Rashed Khan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.552, lng: 90.984 }, boundary: square({ lat: 23.552, lng: 90.984 }, 0.0005),
+    marketValue: { amount: 8500000, currency: "BDT" }, registeredAt: "2021-08-22T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d4-1", ulpin: "ILR-CUM-BAR-000003", dagNo: "BS-301", khatianNo: "1201", title: "Agricultural plot, Payalgacha (Noor)", jurisdictionId: "j-payalgacha",
+    landUse: "agricultural", area: { value: 80, unit: "decimal" }, ownerId: "usr-noor", ownerName: "Noor Jahan",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.361, lng: 91.034 }, boundary: square({ lat: 23.361, lng: 91.034 }, 0.001),
+    marketValue: { amount: 4800000, currency: "BDT" }, registeredAt: "2023-03-05T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d5-1", ulpin: "ILR-CUM-BAR-000004", dagNo: "BS-401", khatianNo: "1401", title: "Riverside land, Barura (Habib)", jurisdictionId: "j-barura",
+    landUse: "mixed", area: { value: 95, unit: "decimal" }, ownerId: "usr-habib", ownerName: "Habib Molla",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.420, lng: 91.010 }, boundary: square({ lat: 23.420, lng: 91.010 }, 0.0012),
+    marketValue: { amount: 5700000, currency: "BDT" }, registeredAt: "2020-12-01T00:00:00Z", openDisputeCount: 0,
+  },
+  {
+    id: "p-d5-2", ulpin: "ILR-CUM-BAR-000005", dagNo: "BS-402", khatianNo: "1402", title: "Orchard, Barura (Habib)", jurisdictionId: "j-barura",
+    landUse: "agricultural", area: { value: 45, unit: "decimal" }, ownerId: "usr-habib", ownerName: "Habib Molla",
+    ownershipType: "sole", registryStatus: "verified", centroid: { lat: 23.421, lng: 91.011 }, boundary: square({ lat: 23.421, lng: 91.011 }),
+    marketValue: { amount: 2800000, currency: "BDT" }, registeredAt: "2022-07-15T00:00:00Z", openDisputeCount: 0,
   },
 ];
 
