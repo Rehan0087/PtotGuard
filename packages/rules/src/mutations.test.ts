@@ -251,8 +251,8 @@ describe("mutation objection summary", () => {
   it.each([
     [{}, { total: 0, unresolved: 0, status: "not-started" }],
     [{ objectionStartDate: fromNow(-1), objectionWindowEndsAt: fromNow(2) }, { total: 0, unresolved: 0, status: "window-open" }],
-    [{ objectionStartDate: fromNow(-4), objectionWindowEndsAt: fromNow(-1), objections: [objection()] }, { total: 1, unresolved: 1, status: "unresolved" }],
-    [{ objectionStartDate: fromNow(-4), objectionWindowEndsAt: fromNow(-1), objections: [{ ...objection(), status: "resolved" }] }, { total: 1, unresolved: 0, status: "clear" }],
+    [{ objectionStartDate: fromNow(-4), objectionWindowEndsAt: fromNow(-1), objections: [objection()] as MutationObjection[] }, { total: 1, unresolved: 1, status: "unresolved" }],
+    [{ objectionStartDate: fromNow(-4), objectionWindowEndsAt: fromNow(-1), objections: [{ ...objection(), status: "resolved" }] as MutationObjection[] }, { total: 1, unresolved: 0, status: "clear" }],
   ] as const)("computes renderable counts and status for %j", (overrides, expected) => {
     expect(mutationObjectionSummary(mutation(overrides), NOW)).toEqual(expected);
   });
