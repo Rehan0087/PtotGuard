@@ -1,5 +1,5 @@
 /**
- * MSW request handlers — a mock of the frozen PlotGuard Core API. Response shapes
+ * MSW request handlers — a mock of the frozen VhumiShetu Core API. Response shapes
  * match the planned NestJS backend exactly, so swapping MSW for the live API is a
  * config change (see lib/api-client.ts), not a rewrite. Paths after the /api base
  * mirror the frozen spec. Writes mutate the in-memory arrays for the session.

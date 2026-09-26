@@ -1,6 +1,6 @@
 # @plotguard/api
 
-The real PlotGuard backend — NestJS + Postgres, behind the same frozen API
+The real VhumiShetu backend — NestJS + Postgres, behind the same frozen API
 spec the frontend's mock (`lib/mocks/handlers.ts` in the web app) already
 implements. The frontend uses this persistent backend by default; set
 `NEXT_PUBLIC_API_MOCKING=enabled` only to use the mock — nothing in a screen

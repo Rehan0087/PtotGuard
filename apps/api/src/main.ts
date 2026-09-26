@@ -65,7 +65,7 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port);
-  new Logger("bootstrap").log(`PlotGuard API on http://localhost:${port}/${API_PREFIX}`);
+  new Logger("bootstrap").log(`VhumiShetu API on http://localhost:${port}/${API_PREFIX}`);
 }
 
 void bootstrap();

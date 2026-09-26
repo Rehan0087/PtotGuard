@@ -36,16 +36,16 @@ const plural = (count: number, word: string) => `${n(count)} ${word}${count === 
 export const en = {
   // ── <head> ───────────────────────────────────────────────────────────────
   meta: {
-    title: "PlotGuard — Land Records & Dispute Resolution",
+    title: "VhumiShetu — Land Records & Dispute Resolution",
     /** Next.js title template; `%s` is the page's own title. */
-    titleTemplate: "%s · PlotGuard",
+    titleTemplate: "%s · VhumiShetu",
     description:
       "A civic platform for secure land records, mutations, dispute resolution, and field surveys.",
   },
 
   // ── Cross-cutting vocabulary ─────────────────────────────────────────────
   common: {
-    appName: "PlotGuard",
+    appName: "VhumiShetu",
     tagline: "Land Registry",
     loading: "Loading…",
     save: "Save",
@@ -335,22 +335,29 @@ export const en = {
       body: `The land office filed ${caseNumber} for BDT ${amount} due on dag ${dagNo}.`,
     }),
     welcome: () => ({
-      title: "Welcome to PlotGuard",
+      title: "Welcome to VhumiShetu",
       body: "Your account is active. You can now search records and track disputes.",
     }),
   },
 
   assistant: {
-    launcherLabel: "Chat with the PlotGuard assistant",
-    panelTitle: "PlotGuard Assistant",
+    launcherLabel: "Chat with the VhumiShetu assistant",
+    panelTitle: "VhumiShetu Assistant",
+    panelSubtitle: "AI-powered land records guide",
     greeting:
-      "Hi! Ask me about your parcels, applications, or disputes, or how any PlotGuard service works.",
+      "Hi! I'm your VhumiShetu assistant. Ask me how to pay land tax, transfer ownership, file a dispute, or anything about your land records.",
     placeholder: "Type your question…",
     send: "Send",
     reset: "Start over",
     thinking: "Thinking…",
     errorGeneric: "Something went wrong. Please try again.",
     errorRateLimited: "You've sent a lot of messages — please wait a few minutes and try again.",
+    quickPrompts: [
+      "How do I pay land tax?",
+      "How do I transfer ownership?",
+      "How do I file a dispute?",
+      "Show my parcels",
+    ],
   },
 
   disputeEvents: {
@@ -1017,7 +1024,7 @@ export const en = {
       issuedDone: "Done",
       roleUpdatedBody: (name: string) => `${name}'s role was updated.`,
       cannotChangeOwnRole: "You cannot change your own role.",
-      description: "People with access to PlotGuard across every portal and jurisdiction.",
+      description: "People with access to VhumiShetu across every portal and jurisdiction.",
       emptyTitle: "No users found",
       colName: "Name",
       colRole: "Role",
@@ -1669,7 +1676,7 @@ export const en = {
         correctionReasonRequired: "Describe the correction to be made.",
         heirRelationshipRequired: "Enter your relationship to the deceased owner.",
       },
-      toOwnerHint: "The new owner needs a PlotGuard account — search by the email or phone they registered with.",
+      toOwnerHint: "The new owner needs a VhumiShetu account — search by the email or phone they registered with.",
       toOwnerNoMatch: "No registered account matches that. Ask them to create one first.",
       changeRecipient: "Change",
       // Correction-specific
@@ -1679,7 +1686,7 @@ export const en = {
       // Inheritance-specific
       heirRelationshipLabel: "Relationship to deceased",
       heirRelationshipPlaceholder: "e.g. Son, Daughter, Spouse, Brother",
-      heirNote: "The heir must have a PlotGuard account — search by their email or phone.",
+      heirNote: "The heir must have a VhumiShetu account — search by their email or phone.",
       // Partition-specific
       partitionNoteLabel: "Partition schedule",
       partitionNotePlaceholder: "Describe how the land is divided among the parties (shares, areas, arrangement)",
@@ -2232,7 +2239,7 @@ export const en = {
         downloadAppStore: "Download on App Store",
         socialHeading: "Follow Us",
         techSupportLabel: "Technical Support By",
-        techPartner1: "PlotGuard",
+        techPartner1: "VhumiShetu",
         techPartner2: "TechBD",
         techPartner3: "DataForge",
         copyright: "Copyright © 2026 BhumiSetu",
@@ -2252,7 +2259,7 @@ export const en = {
       employeeId: "Employee ID",
       nationalId: "National ID",
       contactTitle: "Personal and contact details",
-      contactDescription: "Changes are saved to your authenticated PlotGuard account.",
+      contactDescription: "Changes are saved to your authenticated VhumiShetu account.",
       name: "Full name",
       email: "Email address",
       phone: "Phone number",
@@ -2322,7 +2329,7 @@ export const en = {
     faq: {
       heading: "Frequently Asked Questions",
       description:
-        "Answers to common questions about land registration, services, and PlotGuard features.",
+        "Answers to common questions about land registration, services, and VhumiShetu features.",
       items: [
         {
           id: "1",
@@ -2443,7 +2450,7 @@ export const en = {
     manual: {
       heading: "User manual",
       description:
-        "How to use PlotGuard as a citizen — from signing in to transferring land. Each section ends with a link to the screen it describes.",
+        "How to use VhumiShetu as a citizen — from signing in to transferring land. Each section ends with a link to the screen it describes.",
       contentsLabel: "In this manual",
       openLabel: "Open",
       sections: [
@@ -2525,7 +2532,7 @@ export const en = {
           id: "land-tax",
           title: "Paying land development tax",
           summary:
-            "Land development tax is paid yearly for each holding. PlotGuard works out what you owe, including any arrears.",
+            "Land development tax is paid yearly for each holding. VhumiShetu works out what you owe, including any arrears.",
           steps: [
             "Open Land development tax and pick a parcel.",
             "Check the assessment — this year's amount plus any unpaid past years.",
@@ -2575,13 +2582,13 @@ export const en = {
     },
 
     about: {
-      heading: "About PlotGuard",
+      heading: "About VhumiShetu",
       description:
         "A digital land-records and dispute-resolution service for citizens, land offices and settlement officers in Bangladesh.",
       mission: {
         title: "Our mission & vision",
         body: [
-          "PlotGuard brings land services to citizens online. Records, transfers, tax, disputes and complaints all happen in one place, instead of across many offices and paper files.",
+          "VhumiShetu brings land services to citizens online. Records, transfers, tax, disputes and complaints all happen in one place, instead of across many offices and paper files.",
           "Our goal is land records every citizen can trust. Every change is checked by the right officer, recorded with who made it and when, and visible to the owner. A transfer can't happen without the recorded owner filing it, and a plot under a court order can't change hands.",
         ],
         points: [
@@ -2594,7 +2601,7 @@ export const en = {
       structure: {
         title: "Organizational structure",
         intro:
-          "Land administration in Bangladesh runs from the Ministry of Land down to the union level. PlotGuard mirrors that chain.",
+          "Land administration in Bangladesh runs from the Ministry of Land down to the union level. VhumiShetu mirrors that chain.",
         levels: [
           { name: "Ministry of Land", detail: "Sets land policy and oversees land administration nationwide." },
           { name: "Divisional Commissioner", detail: "Supervises land administration across the districts of a division and hears appeals." },
@@ -2606,7 +2613,7 @@ export const en = {
       officers: {
         title: "Officer directory",
         intro:
-          "These are the officers you deal with in PlotGuard and what to contact each about. To reach a named officer, contact your upazila land office.",
+          "These are the officers you deal with in VhumiShetu and what to contact each about. To reach a named officer, contact your upazila land office.",
         roles: [
           { name: "Land office officer", detail: "Verifies mutations, collects land tax, reviews documents and handles complaints about service." },
           { name: "Field agent (surveyor)", detail: "Visits plots to check boundaries and inspect land for mutations and disputes." },
