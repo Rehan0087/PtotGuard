@@ -1,5 +1,5 @@
 /**
- * Shared primitives used across the PlotGuard domain model.
+ * Shared primitives used across the VhumiShetu domain model.
  * Both the mock layer and the real API conform to these shapes.
  */
 

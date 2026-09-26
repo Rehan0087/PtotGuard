@@ -1,5 +1,5 @@
 /**
- * PlotGuard domain model — barrel export.
+ * VhumiShetu domain model — barrel export.
  * Import from "../types" everywhere.
  */
 export * from "./common";

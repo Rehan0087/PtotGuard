@@ -1,4 +1,4 @@
-# PlotGuard
+# VhumiShetu
 
 Civic land-records app. Frontend-first phase.
 

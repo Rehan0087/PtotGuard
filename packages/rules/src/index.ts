@@ -6,7 +6,7 @@
  * same check can explain itself in English or Bangla in the client and be
  * enforced verbatim by the server.
  *
- * Both sides of PlotGuard are meant to consume this package rather than
+ * Both sides of VhumiShetu are meant to consume this package rather than
  * reimplement it. The tests next to each module are the specification —
  * `pnpm --filter @plotguard/rules test`.
  */

@@ -1,6 +1,6 @@
 import type { ID, ISODateString } from "./common";
 
-/** The five PlotGuard portals. Drives routing, nav, and permissions. */
+/** The five VhumiShetu portals. Drives routing, nav, and permissions. */
 export type Role = "citizen" | "land-office" | "field-agent" | "mediator" | "admin";
 
 export const ROLES: Role[] = [

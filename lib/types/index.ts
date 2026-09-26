@@ -1,5 +1,5 @@
 /**
- * PlotGuard domain model — re-exported from the shared package.
+ * VhumiShetu domain model — re-exported from the shared package.
  *
  * The types themselves now live in `@plotguard/rules`, next to the rules that
  * operate on them, so the backend consumes one package rather than copying a

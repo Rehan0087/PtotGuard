@@ -1,4 +1,4 @@
-# PlotGuard
+# VhumiShetu
 
 A civic platform for secure land records, ownership mutations, dispute resolution, and
 field surveys. Five role-based portals — **Citizen**, **Land Office**, **Field Agent**,

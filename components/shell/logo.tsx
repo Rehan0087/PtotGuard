@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
 
 /**
- * The PlotGuard mark — a surveyed parcel: boundary polygon, an internal
+ * The VhumiShetu mark — a surveyed parcel: boundary polygon, an internal
  * subdivision line, and an amber survey marker pinned at the top vertex.
  */
-export function PlotGuardMark({ className }: { className?: string }) {
+export function VhumiShetuMark({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 28 28"
@@ -44,7 +44,7 @@ export function Logo({
   const t = useT();
   return (
     <Link href="/" className={cn("flex items-center gap-2.5 hover:opacity-90 transition-opacity", className)}>
-      <PlotGuardMark className="size-7 shrink-0 text-sidebar-foreground" />
+      <VhumiShetuMark className="size-7 shrink-0 text-sidebar-foreground" />
       <div className="leading-none">
         <div className="font-heading text-[15px] font-semibold tracking-tight text-sidebar-foreground">
           {t.common.appName}
