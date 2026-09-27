@@ -172,15 +172,16 @@ export function LandServicesSection() {
                 key={card.id}
                 href={card.href}
                 className={cn(
-                  "relative overflow-hidden bg-white rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.05)] border border-slate-200/80 p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 min-h-[170px] group",
+                  "relative overflow-hidden bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-slate-200/60 p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:shadow-2xl hover:shadow-[#074726]/10 hover:-translate-y-2 transition-all duration-500 min-h-[180px] group",
                   card.id === "techGrievance" && "sm:col-span-2 lg:col-span-1"
                 )}
               >
                 {/* Top Accent Bar */}
-                <div className={cn("absolute top-0 left-0 right-0 h-2 w-full", card.barColor)} />
+                <div className={cn("absolute top-0 left-0 right-0 h-2 w-full transition-all duration-500 group-hover:h-full group-hover:opacity-5", card.barColor)} />
+                <div className={cn("absolute top-0 left-0 right-0 h-2 w-full group-hover:h-3 transition-all duration-300", card.barColor)} />
 
                 {/* Card Icon */}
-                <div className={cn("w-14 h-14 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-105 shadow-sm", card.iconBg)}>
+                <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center mb-5 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6 shadow-sm", card.iconBg)}>
                   {card.isTakaIcon || !Icon ? (
                     <span className="text-2xl font-black text-[#ff9800] leading-none">৳</span>
                   ) : (
@@ -198,14 +199,17 @@ export function LandServicesSection() {
         </div>
 
         {/* Integrated Mouza Pill Announcement Banner */}
-        <div className="flex justify-center my-12">
+        <div className="flex justify-center my-14">
           <Link
             href="/portal?tab=purbachal"
-            className="bg-[#074726] hover:bg-[#05351c] text-white font-semibold text-xs sm:text-sm md:text-base px-6 sm:px-8 py-3 rounded-lg shadow-md border border-[#074726] text-center transition-all duration-200 hover:scale-[1.01]"
+            className="bg-[#074726] hover:bg-[#05351c] text-white font-semibold text-xs sm:text-sm md:text-base px-8 sm:px-10 py-4 rounded-xl shadow-lg shadow-[#074726]/20 border border-[#074726] text-center transition-all duration-300 hover:scale-[1.03] hover:shadow-xl hover:shadow-[#074726]/30 relative overflow-hidden group"
           >
-            {locale === "bn"
-              ? "রাজউক পূর্বাচল নতুন শহর প্রকল্পের সকল মৌজার সমন্বিত তথ্য"
-              : "Integrated Mouza Information of RAJUK Purbachal New Town Project"}
+            <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out"></div>
+            <span className="relative z-10">
+              {locale === "bn"
+                ? "রাজউক পূর্বাচল নতুন শহর প্রকল্পের সকল মৌজার সমন্বিত তথ্য"
+                : "Integrated Mouza Information of RAJUK Purbachal New Town Project"}
+            </span>
           </Link>
         </div>
 
@@ -245,11 +249,11 @@ export function LandServicesSection() {
 
             {/* Right Question Mark Graphics */}
             <div className="lg:col-span-4 hidden lg:flex items-center justify-center relative min-h-[280px]">
-              <div className="relative flex items-center justify-center">
-                <div className="w-48 h-48 rounded-full bg-emerald-100/60 border border-emerald-200 flex items-center justify-center">
-                  <span className="text-9xl font-black text-[#074726]/80 select-none">?</span>
+              <div className="relative flex items-center justify-center group cursor-default">
+                <div className="w-48 h-48 rounded-full bg-emerald-100/60 border border-emerald-200 flex items-center justify-center transition-transform duration-700 group-hover:scale-110 shadow-inner">
+                  <span className="text-9xl font-black text-[#074726]/80 select-none transition-transform duration-500 group-hover:-rotate-12">?</span>
                 </div>
-                <div className="absolute -top-4 -right-2 w-14 h-14 rounded-full bg-[#074726] text-white flex items-center justify-center font-bold text-2xl shadow-lg rotate-12">
+                <div className="absolute -top-4 -right-2 w-16 h-16 rounded-full bg-gradient-to-br from-[#074726] to-emerald-600 text-white flex items-center justify-center font-bold text-3xl shadow-xl rotate-12 transition-all duration-700 group-hover:rotate-45 group-hover:scale-110">
                   ?
                 </div>
               </div>
