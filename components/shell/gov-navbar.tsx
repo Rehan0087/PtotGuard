@@ -177,7 +177,7 @@ export function GovNavbar() {
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-1.5 text-white hover:bg-white/10 rounded-md"
-              aria-label="Toggle Navigation"
+              aria-label={locale === "bn" ? "নেভিগেশন খুলুন বা বন্ধ করুন" : "Toggle navigation"}
             >
               {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>

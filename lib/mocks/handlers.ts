@@ -65,11 +65,12 @@ import {
   validIncreasedAward,
 
   routeGrievance,
+  shouldEscalateGrievance,
   type GrievanceCategory,
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
-import { DEMO_PASSWORD, findDemoAccount } from "../demo-accounts";
+import { DEMO_PASSWORD } from "../demo-accounts";
 import { hydrateMutationState } from "./mutation-store";
 import { hydrateProfileState, persistProfileState } from "./profile-store";
 import { applyMockProfileUpdate, MockProfileUpdateError } from "../field-profile";
@@ -443,15 +444,38 @@ function conflict(message: string, reason?: unknown) {
   return HttpResponse.json({ error: "conflict", message, reason }, { status: 409 });
 }
 
-/** Mirrors assertHandler() in GrievancesController, plus its not-decided guard. */
+/** Mirrors GrievancesController.escalateOverdue() — runs before any grievance read. */
+async function escalateOverdueGrievances(now: Date = new Date()) {
+  const admin = db.users
+    .filter((u) => u.role === "admin" && u.status === "active")
+    .sort((a, b) => a.id.localeCompare(b.id))[0];
+  if (!admin) return;
+  for (const grievance of db.grievances) {
+    if (!shouldEscalateGrievance(grievance, now)) continue;
+    const at = now.toISOString();
+    const from = grievance.status;
+    Object.assign(grievance, { status: "escalated", escalatedToId: admin.id, escalatedAt: at, updatedAt: at });
+    db.grievanceEvents.push({
+      id: `ge-${crypto.randomUUID()}`, grievanceId: grievance.id, at, type: "escalated",
+      title: "Escalated — response deadline missed",
+      description: `No resolution by the deadline, so the complaint was passed to ${admin.name}.`,
+      actorName: "System",
+    });
+    await appendAudit({ entityType: "grievance", entityId: grievance.id, action: "status-change", actorId: admin.id, actorName: "System", payload: { from, to: "escalated", reason: "sla-missed", automatic: true } });
+    db.notifications.unshift(
+      { id: `n-${crypto.randomUUID()}`, userId: admin.id, at, severity: "warning", title: "Grievance escalated to you", body: `${grievance.caseNumber} missed its response deadline and needs your attention.`, read: false, href: `/grievances/${grievance.id}` },
+      { id: `n-${crypto.randomUUID()}`, userId: grievance.filedById, at, severity: "info", title: "Your complaint was escalated", body: `${grievance.caseNumber} was not resolved in time, so it has been passed to an administrator.`, read: false, href: `/grievances/${grievance.id}` },
+    );
+  }
+}
+
+/** Mirrors assertAdministrator() in GrievancesController, plus its not-decided guard. */
 function grievanceForHandler(id: string, request: Request) {
-  const denied = requireRole(request, "land-office", "admin");
+  const denied = requireRole(request, "admin");
   if (denied) return denied;
   const me = currentUser(request);
   const grievance = db.grievances.find((g) => g.id === id);
   if (!grievance) return notFound("Grievance not found");
-  const handles = me.role === "admin" || grievance.assignedOfficerId === me.id || grievance.escalatedToId === me.id;
-  if (!handles) return forbidden("This grievance is not assigned to you");
   if (grievance.status === "resolved" || grievance.status === "dismissed") {
     return conflict("This grievance has already been decided.");
   }
@@ -540,10 +564,17 @@ function scheduleOcrWorker(documentId: string, parcelId?: string, delayMs = OCR_
   }, delayMs);
 }
 
+function isMutationDocument(documentId: string) {
+  return db.mutations.some((mutation) => mutation.documentIds.includes(documentId));
+}
+
 // Seeded documents that are already mid-flight drain shortly after load, so the
 // pipeline is visible on a first visit and polling doesn't run forever.
 db.documents
-  .filter((d) => d.ocrStatus === "processing" || d.ocrStatus === "pending")
+  .filter((d) =>
+    (d.ocrStatus === "processing" || d.ocrStatus === "pending") &&
+    db.mutations.some((mutation) => mutation.documentIds.includes(d.id)),
+  )
   .forEach((d, i) => scheduleOcrWorker(d.id, d.parcelId, 7000 + i * 5000));
 
 const API = "/api";
@@ -590,10 +621,8 @@ export const handlers = [
   http.post(`${API}/auth/login`, async ({ request }) => {
     await latency();
     const body = (await request.json()) as { email?: string; password?: string };
-    const account = body.email ? findDemoAccount(body.email) : undefined;
     const normalizedEmail = body.email?.trim().toLowerCase();
-    const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail)
-      ?? (account ? db.users.find((candidate) => candidate.id === db.CURRENT_USER_BY_ROLE[account.role]) : undefined);
+    const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
     // Mirrors auth.controller.ts: suspended refuses, an invitation is taken
     // up by using it. The password itself stays the fixture one here — the
     // mock has never checked a real hash.
@@ -1072,6 +1101,9 @@ export const handlers = [
     if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
+    if (!isMutationDocument(doc.id)) {
+      return unprocessable({ documentId: { code: "document-not-in-mutation" } });
+    }
     doc.ocrStatus = "processing";
     doc.verificationStatus = "unverified";
     // Re-queue for real, so a retry drains the same way a fresh upload does.
@@ -1091,6 +1123,9 @@ export const handlers = [
     if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
+    if (!isMutationDocument(doc.id)) {
+      return unprocessable({ documentId: { code: "document-not-in-mutation" } });
+    }
     const { decision } = (await request.json()) as {
       decision: "verify" | "reject" | "flag";
     };
@@ -1145,6 +1180,9 @@ export const handlers = [
     if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
+    if (!isMutationDocument(doc.id)) {
+      return unprocessable({ documentId: { code: "document-not-in-mutation" } });
+    }
     const { fields } = (await request.json()) as { fields: Record<string, string> };
     doc.extractedFields = { ...doc.extractedFields, ...fields };
     return HttpResponse.json(doc);
@@ -1184,12 +1222,11 @@ export const handlers = [
       sizeBytes: body.sizeBytes ?? 250_000,
       uploadedAt: new Date().toISOString(),
       uploadedById: me.id,
-      // Upload returns immediately; the OCR/fraud worker fills these in later.
-      ocrStatus: "processing" as const,
+      // Library uploads remain private until attached to a mutation filing.
+      ocrStatus: "pending" as const,
       verificationStatus: "unverified" as const,
     };
     db.documents.unshift(doc);
-    scheduleOcrWorker(doc.id, body.parcelId);
     return HttpResponse.json(doc, { status: 201 });
   }),
 
@@ -1199,11 +1236,16 @@ export const handlers = [
     const owner = url.searchParams.get("owner");
     const fraud = url.searchParams.get("fraud");
     const ocr = url.searchParams.get("ocr");
+    const mutation = url.searchParams.get("mutation");
     let items = db.documents.slice();
     if (owner === "me") items = items.filter((d) => d.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((d) => d.ownerId === owner);
     // fraud=true means "awaiting fraud review": still flagged, not yet decided.
     if (fraud === "true") items = items.filter((d) => d.verificationStatus === "flagged");
+    if (mutation === "true") {
+      const mutationDocumentIds = new Set(db.mutations.flatMap((item) => item.documentIds));
+      items = items.filter((d) => mutationDocumentIds.has(d.id));
+    }
     if (ocr) items = items.filter((d) => d.ocrStatus === ocr);
     items.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
     return HttpResponse.json(paginate(items, url));
@@ -1242,6 +1284,29 @@ export const handlers = [
     }
 
     const me = currentUser(request);
+    const requestedDocumentIds = [...new Set(body.documentIds ?? [])];
+    const selectedDocuments = db.documents.filter((document) =>
+      requestedDocumentIds.includes(document.id),
+    );
+    const missing = requestedDocumentIds.filter((id) =>
+      !selectedDocuments.some((document) => document.id === id),
+    );
+    if (missing.length) {
+      return unprocessable({
+        documentIds: { code: "mutation-documents-missing", documentIds: missing },
+      });
+    }
+    const foreign = selectedDocuments.filter((document) =>
+      document.ownerId !== me.id || document.parcelId !== parcel.id,
+    );
+    if (foreign.length) {
+      return unprocessable({
+        documentIds: {
+          code: "mutation-documents-foreign",
+          documentIds: foreign.map((document) => document.id),
+        },
+      });
+    }
     const seq = 1300 + db.mutations.length;
     const now = new Date().toISOString();
     const mutation: Mutation = {
@@ -1258,7 +1323,7 @@ export const handlers = [
       toOwnerName: toOwner.name,
       requestedById: me.id,
       requestedAt: now,
-      documentIds: body.documentIds ?? [],
+      documentIds: requestedDocumentIds,
       objections: [],
       deedNumber: body.deedNumber,
       deedDate: body.deedDate,
@@ -1270,6 +1335,16 @@ export const handlers = [
       updatedAt: now,
     };
     db.mutations.unshift(mutation);
+
+    for (const documentId of mutation.documentIds) {
+      const document = db.documents.find((item) =>
+        item.id === documentId && item.ownerId === me.id && item.parcelId === parcel.id,
+      );
+      if (document?.ocrStatus === "pending") {
+        document.ocrStatus = "processing";
+        scheduleOcrWorker(document.id, document.parcelId);
+      }
+    }
 
     await appendAudit({
       entityType: "mutation",
@@ -4538,30 +4613,32 @@ export const handlers = [
 
 
   // Complaints & grievances ------------------------------------------------
-  // Mirrors GrievancesController. Service complaints route to the land office
-  // above the filer's mouza, conduct/corruption straight to an administrator
-  // (routeGrievance); only the officer it is routed to — or an admin — moves it.
+  // Mirrors GrievancesController. Every citizen complaint routes directly to
+  // the admin portal; land-office users cannot read or decide grievances.
 
   http.get(`${API}/grievances`, async ({ request }) => {
     await latency();
+    const denied = requireRole(request, "citizen", "admin");
+    if (denied) return denied;
+    await escalateOverdueGrievances();
     const me = currentUser(request);
     const items = db.grievances
-      .filter((g) =>
-        me.role === "citizen"
-          ? g.filedById === me.id
-          : g.assignedOfficerId === me.id || g.escalatedToId === me.id,
-      )
+      .filter((g) => me.role === "admin" || g.filedById === me.id)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return HttpResponse.json(items);
   }),
 
   http.get(`${API}/grievances/:id`, async ({ params, request }) => {
     await latency();
+    const denied = requireRole(request, "citizen", "admin");
+    if (denied) return denied;
+    await escalateOverdueGrievances();
     const me = currentUser(request);
     const grievance = db.grievances.find((g) => g.id === params.id);
     if (!grievance) return notFound("Grievance not found");
-    const involved = [grievance.filedById, grievance.assignedOfficerId, grievance.escalatedToId].includes(me.id);
-    if (!involved && me.role !== "admin") return forbidden("Not authorized to view this grievance");
+    if (me.role !== "admin" && grievance.filedById !== me.id) {
+      return forbidden("Not authorized to view this grievance");
+    }
     const timeline = db.grievanceEvents
       .filter((e) => e.grievanceId === grievance.id)
       .sort((a, b) => a.at.localeCompare(b.at));
@@ -4582,14 +4659,11 @@ export const handlers = [
     if (description.length < 20 || description.length > 2000) {
       return unprocessable({ description: { code: "invalid-length", min: 20, max: 2000 } });
     }
-    const active = (role: string) => db.users.filter((u) => u.role === role && u.status === "active");
-    const { assignedOfficerId, escalatedToId } = routeGrievance(
-      body.category as GrievanceCategory,
-      me.jurisdictionId,
-      active("land-office"),
-      active("admin"),
-      db.jurisdictions,
-    );
+    const activeAdmins = db.users.filter((u) => u.role === "admin" && u.status === "active");
+    const { escalatedToId } = routeGrievance(activeAdmins);
+    if (!escalatedToId) {
+      return conflict("No active administrator is available to receive this complaint");
+    }
 
     const now = new Date();
     const at = now.toISOString();
@@ -4603,7 +4677,6 @@ export const handlers = [
       description,
       filedById: me.id,
       filedByName: me.name,
-      assignedOfficerId,
       escalatedToId,
       slaDeadline: deadline.toISOString(),
       createdAt: at,
@@ -4613,10 +4686,7 @@ export const handlers = [
     db.grievanceEvents.push({ id: `ge-${crypto.randomUUID()}`, grievanceId: grievance.id, at, type: "filed", title: "Grievance filed", actorId: me.id, actorName: me.name });
     await appendAudit({ entityType: "grievance", entityId: grievance.id, action: "create", actorId: me.id, actorName: me.name, payload: { caseNumber: grievance.caseNumber, category: grievance.category } });
     db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: me.id, at, severity: "success", title: "Grievance submitted", body: `Your complaint ${grievance.caseNumber} has been successfully submitted.`, read: false, href: `/grievances/${grievance.id}` });
-    const assignedTo = assignedOfficerId ?? escalatedToId;
-    if (assignedTo) {
-      db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: assignedTo, at, severity: "info", title: "New grievance assigned", body: `${grievance.caseNumber} requires your review.`, read: false, href: `/grievances/${grievance.id}` });
-    }
+    db.notifications.unshift({ id: `n-${crypto.randomUUID()}`, userId: escalatedToId, at, severity: "info", title: "New grievance assigned", body: `${grievance.caseNumber} requires your review.`, read: false, href: `/grievances/${grievance.id}` });
     return HttpResponse.json(grievance, { status: 201 });
   }),
 
@@ -4691,6 +4761,9 @@ export const handlers = [
     const me = currentUser(request);
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
+    if (!isMutationDocument(doc.id)) {
+      return unprocessable({ documentId: { code: "document-not-in-mutation" } });
+    }
     const parcel = doc.parcelId ? db.parcels.find((p) => p.id === doc.parcelId) : undefined;
     doc.ocrStatus = "extracted";
     doc.fraudScore = 0.04;

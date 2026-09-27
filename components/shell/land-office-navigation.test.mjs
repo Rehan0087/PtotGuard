@@ -3,13 +3,13 @@ import test from "node:test";
 import { NAV } from "../../lib/nav.ts";
 import { LAND_OFFICER_RESPONSIBILITIES } from "../../lib/land-officer-responsibilities.ts";
 
-test("land-office sidebar has three flat destination links", () => {
+test("land-office sidebar excludes complaints and grievances", () => {
   const items = NAV["land-office"].items;
 
   assert.deepEqual(
     items.map((item) => ({ labelKey: item.labelKey, href: item.href })),
     [
-      { labelKey: "dashboard", href: "/records" },
+      { labelKey: "dashboard", href: "/dashboard" },
       { labelKey: "profile", href: "/profile" },
       {
         labelKey: "landOfficerResponsibilities",
@@ -20,13 +20,23 @@ test("land-office sidebar has three flat destination links", () => {
   assert.equal(items.some((item) => "children" in item), false);
 });
 
+test("citizen sidebar exposes complaints and grievances as a direct destination", () => {
+  const items = NAV.citizen.items;
+
+  assert.equal(
+    items.some((item) => item.labelKey === "grievances" && item.href === "/grievances"),
+    true,
+  );
+});
+
 test("responsibilities page keeps every former land-office feature", () => {
   assert.deepEqual(
     LAND_OFFICER_RESPONSIBILITIES.map((service) => service.href),
     [
       "/records",
       "/mutations",
-      "/land-admin",
+      "/disputes",
+      "/land-tax",
       "/revenue-cases",
       "/lease-settlement",
       "/acquisition",

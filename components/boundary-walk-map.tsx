@@ -5,6 +5,7 @@ import type { Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { LocalGpsPoint } from "@/lib/field-offline/types";
 import type { Parcel } from "@/lib/types";
+import { useT } from "@/lib/i18n/provider";
 
 export function BoundaryWalkMap({
   parcel,
@@ -13,6 +14,7 @@ export function BoundaryWalkMap({
   parcel: Parcel | null;
   points: LocalGpsPoint[];
 }) {
+  const t = useT();
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,5 +65,11 @@ export function BoundaryWalkMap({
     };
   }, [parcel, points]);
 
-  return <div ref={container} className="z-0 h-56 w-full rounded-lg" aria-label="GPS boundary track" />;
+  return (
+    <div
+      ref={container}
+      className="z-0 h-56 w-full rounded-lg"
+      aria-label={t.common.gpsBoundaryTrack}
+    />
+  );
 }

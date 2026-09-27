@@ -11,6 +11,7 @@ import {
   Query,
   Req,
   UseGuards,
+  Optional,
 } from "@nestjs/common";
 import type { Request } from "express";
 import type { Prisma } from "@prisma/client";
@@ -36,6 +37,7 @@ import { ConflictError, NotFoundError, ValidationError } from "../common/domain-
 import { pageParams, paginate } from "../common/pagination";
 import { currentUserId } from "../auth/dev-current-user";
 import { findParcelView } from "../parcels/parcel-view";
+import { DocumentOcrService } from "../documents/document-ocr.service";
 import { MutationDecisionDto } from "./mutation-decision.dto";
 import { CreateMutationDto } from "./create-mutation.dto";
 import { CompleteVerificationDto } from "./complete-verification.dto";
@@ -68,6 +70,7 @@ export class MutationsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Optional() private readonly documentOcr?: DocumentOcrService,
   ) {}
 
   @Get()
@@ -206,7 +209,30 @@ export class MutationsController {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const requestedDocumentIds = [...new Set(body.documentIds ?? [])];
+    if (requestedDocumentIds.length) {
+      const documents = await this.prisma.landDocument.findMany({
+        where: { id: { in: requestedDocumentIds } },
+      });
+      const missing = requestedDocumentIds.filter((id) =>
+        !documents.some((document) => document.id === id));
+      if (missing.length) {
+        throw new ValidationError(
+          { code: "mutation-documents-missing", documentIds: missing },
+          "documentIds",
+        );
+      }
+      const foreign = documents.filter((document) =>
+        document.ownerId !== actorId || document.parcelId !== parcel.id);
+      if (foreign.length) {
+        throw new ValidationError(
+          { code: "mutation-documents-foreign", documentIds: foreign.map(({ id }) => id) },
+          "documentIds",
+        );
+      }
+    }
+
+    const createdMutation = await this.prisma.$transaction(async (tx) => {
       // Same fragile-but-consistent numbering as disputes/jurisdictions
       // elsewhere in this codebase: a running count, not a DB sequence. A
       // real deployment would want the latter; matching existing precedent
@@ -241,7 +267,7 @@ export class MutationsController {
           toOwnerId: isCorrection ? parcel.ownerId : toOwner!.id,
           toOwnerName: isCorrection ? parcel.owner.name : toOwner!.name,
           requestedById: actorId,
-          documentIds: body.documentIds ?? [],
+          documentIds: requestedDocumentIds,
           deedNumber: body.deedNumber,
           deedDate: body.deedDate ? new Date(body.deedDate) : undefined,
           metadata: (body.metadata as Prisma.InputJsonValue) ?? undefined,
@@ -251,6 +277,18 @@ export class MutationsController {
           transactionId: `TXN-${randomUUID().slice(0, 8).toUpperCase()}`,
         },
       });
+
+      if (created.documentIds.length) {
+        await tx.landDocument.updateMany({
+          where: {
+            id: { in: created.documentIds },
+            ownerId: actorId,
+            parcelId: parcel.id,
+            ocrStatus: "pending",
+          },
+          data: { ocrStatus: "processing" },
+        });
+      }
 
       await this.audit.append(tx, {
         entityType: "mutation",
@@ -297,6 +335,11 @@ export class MutationsController {
 
       return created;
     });
+
+    for (const documentId of createdMutation.documentIds) {
+      this.documentOcr?.schedule(documentId, createdMutation.parcelId);
+    }
+    return createdMutation;
   }
 
   @UseGuards(AccessTokenGuard, RolesGuard)

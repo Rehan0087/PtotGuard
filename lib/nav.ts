@@ -60,6 +60,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
       { labelKey: "profile", href: "/profile", icon: UserCog },
       { labelKey: "citizenServices", href: "/portal", icon: LayoutGrid },
+      { labelKey: "grievances", href: "/grievances", icon: MessageCircleWarning },
       { labelKey: "faq", href: "/faq", icon: HelpCircle },
       { labelKey: "manual", href: "/manual", icon: BookOpen },
       { labelKey: "communityBuild", href: "/community", icon: Users },

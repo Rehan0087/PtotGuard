@@ -4,8 +4,8 @@ import type { ID, ISODateString } from "./common";
  * Complaint / Grievance Redressal — citizen complaints against the land office
  * or its staff. Distinct from Dispute (citizen-vs-citizen land conflict).
  *
- * Key routing rule: staff-conduct and corruption complaints bypass the
- * implicated officer's queue and route to a supervisor or admin instead.
+ * Key routing rule: every complaint goes directly to an administrator and
+ * never appears in the land-office portal.
  */
 
 export type GrievanceCategory =
@@ -50,9 +50,9 @@ export interface Grievance {
   description: string;
   filedById: ID;
   filedByName: string;
-  /** Set to null for staff-conduct/corruption so the accused officer's queue is bypassed. */
+  /** Legacy field retained for persisted records; new complaints never assign an officer. */
   assignedOfficerId?: ID;
-  /** For conduct/corruption: routed to the supervisor instead. */
+  /** Administrator responsible for reviewing and resolving the complaint. */
   escalatedToId?: ID;
   resolutionNote?: string;
   /** 1-5 citizen satisfaction rating, filled when status = "resolved" or "dismissed". */

@@ -669,9 +669,9 @@ export default function NewMutationPage() {
                 </Row>
               ) : null}
 
-              <Row label="Documents">
+              <Row label={t.pages.newMutation.rowDocuments}>
                 {documentIds.length > 0
-                  ? `${documentIds.length} document(s) attached`
+                  ? t.pages.newMutation.attachedDocuments(documentIds.length)
                   : t.pages.newMutation.notSpecified}
               </Row>
 

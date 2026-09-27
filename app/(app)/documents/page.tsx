@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Upload, Loader2 } from "lucide-react";
+import { FileText, Upload } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { UploadDocumentDialog } from "@/components/upload-document-dialog";
 import { EmptyState } from "@/components/empty-state";
@@ -28,9 +28,6 @@ export default function DocumentsPage() {
   const { data, isLoading } = useDocuments({ owner: "me" });
   const [uploadOpen, setUploadOpen] = useState(false);
   const docs = data?.items ?? [];
-  const processing = docs.filter(
-    (d) => d.ocrStatus === "processing" || d.ocrStatus === "pending",
-  ).length;
 
   return (
     <div className="space-y-6">
@@ -46,13 +43,6 @@ export default function DocumentsPage() {
           {t.pages.documents.upload}
         </Button>
       </PageHeader>
-
-      {processing > 0 ? (
-        <div className="flex items-center gap-2.5 rounded-lg border border-pending/30 bg-pending-soft px-4 py-2.5 text-sm text-pending">
-          <Loader2 className="size-4 shrink-0 animate-spin" />
-          {t.pages.documents.reading(processing)}
-        </div>
-      ) : null}
 
       <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
         {isLoading ? (
@@ -74,7 +64,6 @@ export default function DocumentsPage() {
               <TableRow className="bg-muted/40">
                 <TableHead>{t.pages.documents.colDocument}</TableHead>
                 <TableHead>{t.pages.documents.colType}</TableHead>
-                <TableHead>{t.pages.documents.colOcr}</TableHead>
                 <TableHead>{t.pages.documents.colVerification}</TableHead>
                 <TableHead className="text-right">{t.pages.documents.colUploaded}</TableHead>
               </TableRow>
@@ -98,9 +87,6 @@ export default function DocumentsPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {t.domain.documentType[d.type]}
-                  </TableCell>
-                  <TableCell>
-                    <StatusMetaBadge meta={s.ocr[d.ocrStatus]} dot={false} />
                   </TableCell>
                   <TableCell>
                     <StatusMetaBadge meta={s.verification[d.verificationStatus]} />

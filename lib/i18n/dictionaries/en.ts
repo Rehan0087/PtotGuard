@@ -78,6 +78,7 @@ export const en = {
     byteUnits: { b: "B", kb: "KB", mb: "MB" },
     somethingWentWrong: "Something went wrong",
     tryAgain: "Please try again.",
+    gpsBoundaryTrack: "GPS boundary track",
     payment: {
       title: "Confirm payment",
       description: (amount: string) => `Pay ${amount} through the secure demo checkout.`,
@@ -118,6 +119,15 @@ export const en = {
       unread ? `Notifications, ${n(unread)} unread` : "Notifications",
     markAllRead: "Mark all read",
     allCaughtUp: "You're all caught up.",
+    markAsRead: "Mark as read",
+    today: "Today",
+    thisWeek: "This week",
+    earlier: "Earlier",
+    profileVerifiedBy: "Profile verified by",
+    phoneNumber: "Phone number",
+    email: "Email",
+    nationalId: "National ID",
+    birthCertificate: "Birth certificate",
   },
 
   // ── Sign-in ───────────────────────────────────────────────────────────────
@@ -132,9 +142,8 @@ export const en = {
     errorTitle: "We couldn't find that account",
     errorBody: "Check the email address, or pick one of the demo accounts below.",
     wrongPasswordTitle: "That password doesn't match",
-    wrongPasswordBody: "Try the demo password below, or pick a demo account to fill both fields.",
+    wrongPasswordBody: "Check the password and try again, or pick a demo account to fill both fields.",
     demoAccountsLabel: "Demo accounts",
-    demoPasswordHint: "Demo password:",
   },
 
   // ── Portals and their sidebar entries ────────────────────────────────────
@@ -361,6 +370,17 @@ export const en = {
     ],
   },
 
+  /** Grievance timeline titles by event type — the stored title is English. */
+  grievanceEvents: {
+    filed: "Grievance filed",
+    assigned: "Assigned",
+    "status-change": "Status updated",
+    resolved: "Grievance resolved",
+    dismissed: "Grievance dismissed",
+    escalated: "Escalated — response deadline missed",
+    rated: "Rating submitted",
+  },
+
   disputeEvents: {
     filed: "Dispute filed",
     assigned: (to: string) => `Assigned to ${to}`,
@@ -584,9 +604,12 @@ export const en = {
 
     grievances: {
       description: "Submit complaints about technical errors, delays, staff conduct, or corruption.",
+      adminDescription: "Review citizen complaints, inspect their details, and record the resolution.",
       file: "File a complaint",
       emptyTitle: "No complaints filed",
       emptyBody: "If you experience any issues or misconduct with land office services, report it here.",
+      adminEmptyTitle: "No complaints received",
+      adminEmptyBody: "Citizen complaints will appear here when they are submitted.",
       category: {
         technical: "Technical Error",
         delay: "Unreasonable Delay",
@@ -599,7 +622,36 @@ export const en = {
         staffConduct: "Misbehavior or negligence by staff",
         corruption: "Demand for bribes or illicit acts",
       },
+      selectCategory: "Select category",
+      categoryRequired: "Please select a complaint category.",
+      descriptionLabel: "Description",
+      descriptionPlaceholder: "Describe the issue in detail, including relevant dates, names, or transaction IDs.",
+      descriptionTooShort: "Description must be at least 20 characters.",
+      descriptionTooLong: "Description cannot exceed 2,000 characters.",
+      routingNotice: "Your complaint will be routed directly to the administration team for review.",
+      submitting: "Submitting…",
+      submitComplaint: "Submit complaint",
+      submittedTitle: "Complaint submitted",
+      submittedBody: (caseNumber: string) => `Case ID: ${caseNumber}`,
+      submissionFailed: "Submission failed",
+      submissionFailedBody: "An error occurred while submitting your complaint.",
       ratingDescription: "How satisfied are you with the resolution?",
+      filedOn: (date: string) => `Filed ${date}`,
+      detailsTitle: "Complaint details",
+      resolutionTitle: "Resolution",
+      submitRating: "Submit rating",
+      resolveTitle: "Resolve complaint",
+      resolvePlaceholder: "Explain how this issue was resolved or why it was dismissed...",
+      resolveNoteTooShort: "Write at least 10 characters explaining the outcome.",
+      resolveFailed: "Couldn't save the resolution. Please try again.",
+      dismiss: "Dismiss",
+      markResolved: "Mark resolved",
+      timeline: "Timeline",
+      sla: {
+        onTrack: (days: number) => (days <= 1 ? "Response due within a day" : `Response due in ${days} days`),
+        overdue: (days: number) => `Response overdue by ${days} day${days === 1 ? "" : "s"}`,
+        escalated: (date: string) => `Escalated to an administrator on ${date}`,
+      },
     },
 
     leaseSettlement: {
@@ -639,6 +691,31 @@ export const en = {
       paymentNote: "By proceeding, you agree to the terms of the settlement policy. The fee is non-refundable.",
       confirmPay: (amount: string) => `Pay ${amount}`,
       pay: "Pay",
+      selectedPlot: "Selected plot",
+      backToMap: "Back to map",
+      plotSelectionHelp: "Select an available plot from the map or list, or skip to apply manually.",
+      skipMapSelection: "Skip map selection",
+      availablePlots: "Available plots",
+      dagNo: "Dag No.",
+      decimals: "decimals",
+      applyForPlot: "Apply for this plot",
+      noAvailablePlots: "No plots are currently available.",
+      applicationFeeSuffix: "Application fee",
+      activeUntil: "Active until",
+      payLeaseFee: (amount: string) => `Pay lease fee (${amount})`,
+      viewReceipt: "View receipt",
+      renewLease: "Renew lease",
+      leaseFeePaidTitle: "Lease fee paid successfully",
+      paymentFailed: "Payment failed",
+      renewedTitle: "Lease renewed for 1 year",
+      renewalFailed: "Renewal failed",
+      receiptTitle: "Lease payment receipt",
+      applicationNo: "Application No.",
+      paymentDate: "Payment date",
+      amountPaid: "Amount paid",
+      validUntil: "Valid until",
+      notAvailable: "N/A",
+      receiptNote: "This is a system-generated receipt and does not require a physical signature. It validates one year of land lease.",
       approvedTitle: "Application approved",
       rejectedTitle: "Application rejected",
       closed: "Closed",
@@ -1004,6 +1081,7 @@ export const en = {
       revenueCaseFilingFee: "Filing fee",
       revenueCaseFilingFeeHint: "Flat fee, BDT — the same for a miscellaneous case or an appeal.",
       leaseSettlementSection: "Lease & settlement",
+      leaseSettlementApplicationFee: "Application fee",
       leaseSettlementAgriculturalFee: "Agricultural land fee",
       leaseSettlementNonAgriculturalFee: "Non-agricultural land fee",
       saved: "Policies updated successfully.",
@@ -1045,8 +1123,7 @@ export const en = {
     },
 
     documents: {
-      description:
-        "Title deeds, affidavits, and receipts you've submitted, with OCR and verification status.",
+      description: "Title deeds, affidavits, and receipts you've submitted.",
       upload: "Upload document",
       reading: (count: number) =>
         `Reading ${n(count)} document${count === 1 ? "" : "s"} — this page updates on its own.`,
@@ -1295,6 +1372,11 @@ export const en = {
       hearing: "Hearing",
       parties: "Parties",
       evidence: "Evidence",
+      assignAgentTitle: "Assign field agent",
+      assignAgentDescription: "Assign a field agent to verify this case on the ground.",
+      assignAgentAction: "Assign field agent",
+      agentAssigned: "Field agent assigned successfully",
+      agentAssignmentFailed: "Failed to assign field agent",
       execute: {
         title: "Execute ruling",
         description:
@@ -1425,6 +1507,10 @@ export const en = {
       transfersTo: "transfers to",
       requested: (when: string) => `Requested ${when}`,
       documentCount: (count: number) => `${n(count)} ${count === 1 ? "document" : "documents"}`,
+      ocrCompleted: "OCR completed",
+      ocrFailed: "OCR failed",
+      runOcr: "Run OCR",
+      extractedFields: "Extracted fields",
       fee: (amount: string) => `Fee ${amount}`,
       decided: (when: string) => `Decided ${when}`,
       windowCloses: (ago: string, on: string) =>
@@ -1651,6 +1737,8 @@ export const en = {
       rowType: "Type",
       rowToOwner: "New owner",
       rowDeed: "Deed",
+      rowDocuments: "Documents",
+      attachedDocuments: (count: number) => `${n(count)} ${count === 1 ? "document" : "documents"} attached`,
       rowPayment: "Payment",
       notSpecified: "Not specified",
       filedAs: (name: string) =>
@@ -2562,7 +2650,7 @@ export const en = {
           steps: [
             "To file a dispute, open Disputes, choose the parcel and the type of dispute, and describe what happened.",
             "The land office reviews it, a field agent may visit, and the case can go to a settlement officer for a hearing.",
-            "To complain about a delay, staff conduct or corruption, open Complaints & Grievances. Complaints about staff go to an administrator, never to the officer involved.",
+            "To complain about a delay, technical problem, staff conduct or corruption, open Complaints & Grievances in the sidebar. Every complaint goes directly to an administrator.",
             "When a complaint is resolved, you can rate how it was handled.",
           ],
           note: "Track every case from its own page. Each step is recorded with a date.",
@@ -2628,10 +2716,10 @@ export const en = {
         intro:
           "These are the officers you deal with in VhumiShetu and what to contact each about. To reach a named officer, contact your upazila land office.",
         roles: [
-          { name: "Land office officer", detail: "Verifies mutations, collects land tax, reviews documents and handles complaints about service." },
+          { name: "Land office officer", detail: "Verifies mutations, collects land tax, and reviews land documents." },
           { name: "Field agent (surveyor)", detail: "Visits plots to check boundaries and inspect land for mutations and disputes." },
           { name: "Settlement officer", detail: "Hears land disputes and revenue cases and issues rulings." },
-          { name: "Administrator", detail: "Manages accounts and fees, and reviews complaints about staff conduct." },
+          { name: "Administrator", detail: "Manages accounts and fees, and reviews and resolves citizen complaints." },
         ],
       },
     },

@@ -4,10 +4,10 @@ import { AccessTokenGuard } from "../auth/access-token.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import type { Request } from "express";
-import { routeGrievance, type Jurisdiction } from "@plotguard/rules";
+import { OPEN_GRIEVANCE_STATUSES, routeGrievance, shouldEscalateGrievance, type GrievanceStatus } from "@plotguard/rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import { ConflictError, NotFoundError, ValidationError, ForbiddenError } from "../common/domain-exceptions";
+import { ConflictError, NotFoundError, ForbiddenError } from "../common/domain-exceptions";
 import { currentUserId, type AuthenticatedRequest } from "../auth/dev-current-user";
 import { CreateGrievanceDto } from "./create-grievance.dto";
 import { UpdateGrievanceStatusDto } from "./update-grievance-status.dto";
@@ -15,18 +15,13 @@ import { ResolveGrievanceDto } from "./resolve-grievance.dto";
 import { RateGrievanceDto } from "./rate-grievance.dto";
 
 /**
- * Only the officer a grievance is routed to (or the supervisor it was
- * escalated to) may move it — an admin may always step in. A staff-conduct
- * complaint must never be closable by any other officer in the office.
+ * Complaint decisions belong to administrators. The citizen can inspect and
+ * rate their own complaint, but land-office staff never handle one.
  */
-function assertHandler(
-  grievance: { assignedOfficerId: string | null; escalatedToId: string | null },
-  req: Request,
-): void {
+function assertAdministrator(req: Request): void {
   const user = (req as AuthenticatedRequest).user;
   if (user?.role === "admin") return;
-  if (user && (grievance.assignedOfficerId === user.id || grievance.escalatedToId === user.id)) return;
-  throw new ForbiddenError("This grievance is not assigned to you");
+  throw new ForbiddenError("Only an administrator can manage grievances");
 }
 
 @Controller("grievances")
@@ -36,8 +31,11 @@ export class GrievancesController {
     private readonly audit: AuditService,
   ) {}
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen", "admin")
   @Get()
   async findAll(@Req() req: Request) {
+    await this.escalateOverdue();
     const userId = currentUserId(req);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError("User not found");
@@ -49,14 +47,16 @@ export class GrievancesController {
       });
     } else {
       return this.prisma.grievance.findMany({
-        where: { OR: [{ assignedOfficerId: userId }, { escalatedToId: userId }] },
         orderBy: { createdAt: "desc" },
       });
     }
   }
 
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen", "admin")
   @Get(":id")
   async findOne(@Param("id") id: string, @Req() req: Request) {
+    await this.escalateOverdue();
     const grievance = await this.prisma.grievance.findUnique({
       where: { id },
       include: {
@@ -66,12 +66,9 @@ export class GrievancesController {
     if (!grievance) throw new NotFoundError("Grievance not found");
 
     const userId = currentUserId(req);
-    if (grievance.filedById !== userId && grievance.assignedOfficerId !== userId && grievance.escalatedToId !== userId) {
-      // Basic check, might need wider access for admins, but restricting to involved parties
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
-      if (user?.role !== "admin") {
-        throw new ForbiddenError("Not authorized to view this grievance");
-      }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user?.role !== "admin" && grievance.filedById !== userId) {
+      throw new ForbiddenError("Not authorized to view this grievance");
     }
 
     return {
@@ -89,18 +86,14 @@ export class GrievancesController {
     const filer = await this.prisma.user.findUnique({ where: { id: actorId } });
     if (!filer) throw new NotFoundError("User not found");
 
-    const [officers, admins, jurisdictions] = await Promise.all([
-      this.prisma.user.findMany({ where: { role: "land-office", status: "active" }, orderBy: { id: "asc" } }),
-      this.prisma.user.findMany({ where: { role: "admin", status: "active" }, orderBy: { id: "asc" } }),
-      this.prisma.jurisdiction.findMany(),
-    ]);
-    const { assignedOfficerId, escalatedToId } = routeGrievance(
-      body.category,
-      filer.jurisdictionId,
-      officers,
-      admins,
-      jurisdictions as unknown as Jurisdiction[],
-    );
+    const admins = await this.prisma.user.findMany({
+      where: { role: "admin", status: "active" },
+      orderBy: { id: "asc" },
+    });
+    const { escalatedToId } = routeGrievance(admins);
+    if (!escalatedToId) {
+      throw new ConflictError("No active administrator is available to receive this complaint");
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
@@ -134,7 +127,6 @@ export class GrievancesController {
           description: body.description,
           filedById: filer.id,
           filedByName: filer.name,
-          assignedOfficerId,
           escalatedToId,
           slaDeadline,
           createdAt: now,
@@ -179,28 +171,25 @@ export class GrievancesController {
         });
       }
 
-      const assignedTo = assignedOfficerId || escalatedToId;
-      if (assignedTo) {
-        await tx.appNotification.create({
-          data: {
-            id: `n-${randomUUID()}`,
-            userId: assignedTo,
-            at: now,
-            severity: "info",
-            title: "New grievance assigned",
-            body: `${created.caseNumber} requires your review.`,
-            read: false,
-            href: `/grievances/${created.id}`,
-          },
-        });
-      }
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: escalatedToId,
+          at: now,
+          severity: "info",
+          title: "New grievance assigned",
+          body: `${created.caseNumber} requires your review.`,
+          read: false,
+          href: `/grievances/${created.id}`,
+        },
+      });
 
       return created;
     });
   }
 
   @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles("land-office", "admin")
+  @Roles("admin")
   @Patch(":id/status")
   async updateStatus(
     @Param("id") id: string,
@@ -209,7 +198,7 @@ export class GrievancesController {
   ) {
     const grievance = await this.prisma.grievance.findUnique({ where: { id } });
     if (!grievance) throw new NotFoundError("Grievance not found");
-    assertHandler(grievance, req);
+    assertAdministrator(req);
 
     if (["resolved", "dismissed"].includes(grievance.status)) {
       throw new ConflictError("This grievance has already been decided.");
@@ -262,7 +251,7 @@ export class GrievancesController {
   }
 
   @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles("land-office", "admin")
+  @Roles("admin")
   @Patch(":id/resolve")
   async resolve(
     @Param("id") id: string,
@@ -271,7 +260,7 @@ export class GrievancesController {
   ) {
     const grievance = await this.prisma.grievance.findUnique({ where: { id } });
     if (!grievance) throw new NotFoundError("Grievance not found");
-    assertHandler(grievance, req);
+    assertAdministrator(req);
 
     if (["resolved", "dismissed"].includes(grievance.status)) {
       throw new ConflictError("This grievance has already been decided.");
@@ -382,5 +371,69 @@ export class GrievancesController {
 
       return updated;
     });
+  }
+
+  /**
+   * Sends every open grievance past its response deadline over the office's
+   * head. There is no job scheduler here, so this runs before any grievance
+   * is read — nobody can see one without it having been swept first. Each
+   * escalation is a conditional update, so two concurrent reads escalate a
+   * grievance once.
+   */
+  private async escalateOverdue(now: Date = new Date()) {
+    const overdue = await this.prisma.grievance.findMany({
+      where: {
+        status: { in: OPEN_GRIEVANCE_STATUSES },
+        escalatedToId: null,
+        slaDeadline: { lt: now },
+      },
+    });
+    const due = overdue.filter((g) =>
+      shouldEscalateGrievance({ ...g, status: g.status as GrievanceStatus }, now),
+    );
+    if (due.length === 0) return;
+
+    const admin = await this.prisma.user.findFirst({
+      where: { role: "admin", status: "active" },
+      orderBy: { id: "asc" },
+    });
+    if (!admin) return;
+
+    for (const grievance of due) {
+      await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.grievance.updateMany({
+          where: { id: grievance.id, escalatedToId: null, status: { in: OPEN_GRIEVANCE_STATUSES } },
+          data: { status: "escalated", escalatedToId: admin.id, escalatedAt: now, updatedAt: now },
+        });
+        if (count === 0) return;
+
+        await tx.grievanceEvent.create({
+          data: {
+            id: `ge-${randomUUID()}`,
+            grievanceId: grievance.id,
+            at: now,
+            type: "escalated",
+            title: "Escalated — response deadline missed",
+            description: `No resolution by the deadline, so the complaint was passed to ${admin.name}.`,
+            actorName: "System",
+          },
+        });
+        await this.audit.append(tx, {
+          entityType: "grievance",
+          entityId: grievance.id,
+          action: "status-change",
+          actorId: admin.id,
+          payload: { from: grievance.status, to: "escalated", reason: "sla-missed", automatic: true },
+        });
+        for (const notice of [
+          { userId: admin.id, severity: "warning", title: "Grievance escalated to you", body: `${grievance.caseNumber} missed its response deadline and needs your attention.` },
+          { userId: grievance.filedById, severity: "info", title: "Your complaint was escalated", body: `${grievance.caseNumber} was not resolved in time, so it has been passed to an administrator.` },
+        ]) {
+          await tx.appNotification.create({
+            data: { id: `n-${randomUUID()}`, at: now, read: false, href: `/grievances/${grievance.id}`, ...notice },
+          });
+        }
+      });
+    }
   }
 }

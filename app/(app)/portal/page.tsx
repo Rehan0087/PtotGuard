@@ -8,20 +8,19 @@ import {
   Home,
   Landmark,
   Sprout,
-  Building2,
   Scale,
   FileText,
   CalendarClock,
   Receipt,
   GitBranch,
-  MessageCircleWarning,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
 
 type Service = {
   navKey: keyof typeof import("@/lib/i18n/dictionaries/en").en.nav;
-  icon: any;
+  icon: LucideIcon;
   href: string;
   iconColor: string;
 };
@@ -38,7 +37,6 @@ const SERVICES: Service[] = [
   { navKey: "inheritance", icon: GitBranch, href: "/inheritance", iconColor: "text-purple-500 border-purple-500" },
   { navKey: "myDocuments", icon: FileText, href: "/documents", iconColor: "text-sky-500 border-sky-500" },
   { navKey: "disputes", icon: Scale, href: "/disputes", iconColor: "text-red-500 border-red-500" },
-  { navKey: "grievances", icon: MessageCircleWarning, href: "/grievances", iconColor: "text-amber-500 border-amber-500" },
   { navKey: "appointments", icon: CalendarClock, href: "/appointments", iconColor: "text-cyan-600 border-cyan-600" },
   { navKey: "payments", icon: Receipt, href: "/payments", iconColor: "text-emerald-500 border-emerald-500" },
 ];

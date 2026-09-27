@@ -107,7 +107,7 @@ export function NotificationsMenu() {
                     markRead.mutate(n.id);
                   }}
                   className="absolute right-2 top-2 hidden size-6 shrink-0 opacity-50 hover:opacity-100 group-hover:flex"
-                  aria-label="Mark as read"
+                  aria-label={t.shell.markAsRead}
                 >
                   <X className="size-3.5" />
                 </Button>
@@ -156,9 +156,9 @@ export function NotificationsMenu() {
             </p>
           ) : (
             <div className="py-1">
-              {renderGroup("Today", today)}
-              {renderGroup("This Week", thisWeek)}
-              {renderGroup("Earlier", earlier)}
+              {renderGroup(t.shell.today, today)}
+              {renderGroup(t.shell.thisWeek, thisWeek)}
+              {renderGroup(t.shell.earlier, earlier)}
             </div>
           )}
         </div>

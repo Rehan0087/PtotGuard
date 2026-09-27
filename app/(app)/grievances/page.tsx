@@ -10,12 +10,14 @@ import { Card } from "@/components/ui/card";
 import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { useStatusMeta } from "@/lib/i18n/status";
+import { grievanceSla } from "@plotguard/rules";
 import { useGrievances } from "@/hooks/queries";
 import { useT } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 import { useFmt } from "@/lib/i18n/format";
 import type { Grievance, GrievanceCategory } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
+import { useSessionStore } from "@/store/session";
 
 const CATEGORY_ICONS: Record<GrievanceCategory, React.ElementType> = {
   technical: ServerCrash,
@@ -29,6 +31,7 @@ function GrievanceCard({ grievance }: { grievance: Grievance }) {
   const f = useFmt();
   const s = useStatusMeta();
   const Icon = CATEGORY_ICONS[grievance.category];
+  const sla = grievanceSla(grievance);
 
   // Map camelCase to dictionary keys
   const categoryKey = grievance.category === "staff-conduct" ? "staffConduct" : grievance.category;
@@ -54,6 +57,13 @@ function GrievanceCard({ grievance }: { grievance: Grievance }) {
         <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 text-sm text-muted-foreground">
           <StatusMetaBadge meta={s.grievance[grievance.status]} />
           <time dateTime={grievance.createdAt}>{f.fromNow(grievance.createdAt)}</time>
+          {sla.state === "overdue" ? (
+            <span className="text-xs font-medium text-destructive">
+              {t.pages.grievances.sla.overdue(-(sla.daysLeft ?? 0))}
+            </span>
+          ) : sla.state === "on-track" ? (
+            <span className="text-xs">{t.pages.grievances.sla.onTrack(sla.daysLeft ?? 0)}</span>
+          ) : null}
         </div>
       </Card>
     </Link>
@@ -62,19 +72,26 @@ function GrievanceCard({ grievance }: { grievance: Grievance }) {
 
 export default function GrievancesPage() {
   const t = useT();
+  const role = useSessionStore((state) => state.role);
   const { data: grievances, isLoading } = useGrievances();
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={t.nav.portals.citizen}
+        eyebrow={role === "admin" ? t.nav.portals.administration : t.nav.portals.citizen}
         title={t.nav.grievances}
-        description={t.pages.grievances.description}
+        description={
+          role === "admin"
+            ? t.pages.grievances.adminDescription
+            : t.pages.grievances.description
+        }
       >
-        <Link href="/grievances/new" className={cn(buttonVariants({ size: "sm" }))}>
-          <Plus className="size-3.5" />
-          {t.pages.grievances.file}
-        </Link>
+        {role === "citizen" ? (
+          <Link href="/grievances/new" className={cn(buttonVariants({ size: "sm" }))}>
+            <Plus className="size-3.5" />
+            {t.pages.grievances.file}
+          </Link>
+        ) : null}
       </PageHeader>
 
       {isLoading ? (
@@ -86,12 +103,22 @@ export default function GrievancesPage() {
       ) : grievances?.length === 0 ? (
         <EmptyState
           icon={MessageCircleWarning}
-          title={t.pages.grievances.emptyTitle}
-          description={t.pages.grievances.emptyBody}
+          title={
+            role === "admin"
+              ? t.pages.grievances.adminEmptyTitle
+              : t.pages.grievances.emptyTitle
+          }
+          description={
+            role === "admin"
+              ? t.pages.grievances.adminEmptyBody
+              : t.pages.grievances.emptyBody
+          }
         >
-          <Link href="/grievances/new" className={cn(buttonVariants({ size: "sm" }))}>
-            {t.pages.grievances.file}
-          </Link>
+          {role === "citizen" ? (
+            <Link href="/grievances/new" className={cn(buttonVariants({ size: "sm" }))}>
+              {t.pages.grievances.file}
+            </Link>
+          ) : null}
         </EmptyState>
       ) : (
         <div className="space-y-2">

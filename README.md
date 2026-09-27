@@ -4,9 +4,9 @@ A civic platform for secure land records, ownership mutations, dispute resolutio
 field surveys. Five role-based portals — **Citizen**, **Land Office**, **Field Agent**,
 **Mediator**, and **Administrator** — over one shared record system.
 
-> **Status: persistent local stack ready.** The UI uses the real NestJS + Postgres API in
-> `apps/api` by default. MSW fixtures remain available for isolated UI work, but must be
-> explicitly enabled (see [Persistent local stack](#persistent-local-stack)).
+> **Status: persistent local stack ready.** A plain `pnpm dev` uses the MSW fixture API so
+> the frontend and demo logins work by themselves. Use `./demo.sh start` to run the real
+> NestJS + Postgres stack (see [Persistent local stack](#persistent-local-stack)).
 >
 > **Setting:** Cumilla District, Bangladesh — dag/khatian records, upazila/mouza hierarchy,
 > namjari (mutation), Faraiz + Hindu succession, BDT.
@@ -25,15 +25,14 @@ pnpm install
 pnpm dev
 ```
 
-Open <http://localhost:3000>. The app starts on the **Citizen** portal; use the
-**"Preview as"** switcher in the top bar to jump between all five portals (see
-[Dev role switcher](#dev-role-switcher)).
+Open <http://localhost:3000>. The app starts on the login screen. Choose a demo
+account and sign in with the password shown there.
 
 ### Scripts
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Dev server (Turbopack) |
+| `pnpm dev` | Standalone frontend dev server with the fixture API (Turbopack) |
 | `pnpm build` | Production build |
 | `pnpm start` | Serve the production build |
 | `pnpm lint` | ESLint |
@@ -193,7 +192,9 @@ Start the database, backend, and frontend together:
 ```
 
 The frontend proxies `/api` to `http://localhost:3001/api`, where NestJS writes to Postgres.
-Set `NEXT_PUBLIC_API_MOCKING=enabled` before starting Next.js only when you want fixture data.
+The persistent-stack runner sets `NEXT_PUBLIC_API_MOCKING=disabled`; a standalone
+`pnpm dev` defaults to fixture data. You can set the variable explicitly when starting
+Next.js to choose either mode.
 In mock mode, profile edits are stored in browser local storage so all editable profile fields
 survive a refresh; persistent-stack profile edits are stored in Postgres.
 Mutation workflow changes and their linked disputes/documents are stored in browser session

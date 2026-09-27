@@ -268,7 +268,7 @@ export default function PoliciesPage() {
             <NumberField
               control={control}
               name="leaseSettlementApplicationFeeBdt"
-              label="Application Fee"
+              label={p.leaseSettlementApplicationFee}
               suffix="BDT"
             />
             <NumberField
