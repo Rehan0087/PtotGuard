@@ -533,7 +533,6 @@ function NewApplicationFlow({ onDone }: { onDone: () => void }) {
                 <div className="text-xs text-muted-foreground mt-1 font-semibold">
                   Unit Price: ৳{plot.unitPricePerYear} / year | Total: ৳{plot.areaDecimals * (plot.unitPricePerYear ?? 0)} / year
                 </div>
-                </div>
                 
                 {selectedPlot?.id === plot.id && (
                   <Button size="sm" className="w-full mt-3" onClick={() => setShowForm(true)}>

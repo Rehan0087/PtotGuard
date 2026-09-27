@@ -168,6 +168,7 @@ export const en = {
     searchRecords: "Search records",
     myDocuments: "My documents",
     disputes: "Disputes",
+    communityBuild: "Community",
     grievances: "Complaints & Grievances",
     inheritance: "Inheritance",
     records: "Records",

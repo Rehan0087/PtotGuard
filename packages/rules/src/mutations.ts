@@ -77,7 +77,8 @@ export function mutationDocumentGate(
     return { ok: false, reason: { code: "ocr-pending", documentIds: pending.map(({ id }) => id) } };
   }
 
-  const failed = documents.filter((document) => document.ocrStatus === "failed");
+  const failed = documents.filter((document) => 
+    document.ocrStatus === "failed" && document.verificationStatus !== "verified");
   if (failed.length) {
     return { ok: false, reason: { code: "ocr-failed", documentIds: failed.map(({ id }) => id) } };
   }
@@ -85,7 +86,7 @@ export function mutationDocumentGate(
   const suspicious = documents.filter((document) =>
     document.verificationStatus === "flagged" ||
     document.verificationStatus === "rejected" ||
-    (typeof document.fraudScore === "number" && document.fraudScore >= fraudThreshold));
+    (document.verificationStatus !== "verified" && typeof document.fraudScore === "number" && document.fraudScore >= fraudThreshold));
   if (suspicious.length) {
     return {
       ok: false,

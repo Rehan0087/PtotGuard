@@ -687,6 +687,20 @@ export function useRunOcr() {
   });
 }
 
+export function useUpdateDocumentFields() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, fields }: { id: string; fields: Record<string, string> }) =>
+      api.patch<LandDocument>(`/documents/${id}/fields`, { fields }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      qc.invalidateQueries({ queryKey: ["mutation"] });
+      invalidateRecordViews(qc);
+    },
+  });
+}
+
 // --- Field reports ---------------------------------------------------------
 /** The signed-in agent's assigned reports (GET /field-reports/assigned). */
 export function useAssignedFieldReports() {

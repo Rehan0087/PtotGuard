@@ -32,6 +32,8 @@ import {
   useFlagMutationDispute,
   useUsers,
   useRunOcr,
+  useUpdateDocumentFields,
+  useDocumentDecision,
 } from "@/hooks/queries";
 import { mutationActionState } from "@/components/mutations/mutation-action-state";
 import {
@@ -92,6 +94,180 @@ function DefinitionList({ rows }: { rows: { label: string; value: React.ReactNod
         </div>
       ))}
     </dl>
+  );
+}
+
+function DocumentListItem({ document, verificationStatus }: { document: any, verificationStatus: string }) {
+  const t = useT();
+  const f = useFmt();
+  const s = useStatusMeta();
+  const role = useRole();
+  const runOcr = useRunOcr();
+  const updateFields = useUpdateDocumentFields();
+  const documentDecision = useDocumentDecision();
+  
+  const previewUrl = document.thumbnailUrl?.trim();
+  const canPreview = isUsableMutationPreviewUrl(previewUrl);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<Record<string, string>>({
+    "Dag No": "",
+    "Khatian": "",
+    "Owner": "",
+    "Stamp Value": "",
+    "Deed Date": "",
+    "Area": "",
+    "Mouza": "",
+    ...(document.extractedFields as Record<string, string> || {})
+  });
+
+  const handleSave = () => {
+    updateFields.mutate(
+      { id: document.id, fields: editData },
+      {
+        onSuccess: () => {
+          toast.success("Fields updated manually");
+          setIsEditing(false);
+        },
+        onError: () => toast.error("Failed to update fields"),
+      }
+    );
+  };
+
+  const showManualOption = role === "land-office" && (document.ocrStatus === "failed" || verificationStatus === "flagged" || document.ocrStatus === "extracted");
+
+  return (
+    <React.Fragment>
+      <li className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <FileText className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate font-medium text-foreground">{document.fileName}</span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t.domain.documentType[document.type as keyof typeof t.domain.documentType]} · {f.fileSize(document.sizeBytes)}
+            {document.pageCount ? ` · ${t.pages.mutations.documentPages(document.pageCount)}` : ""}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t.pages.mutations.documentUploaded(f.date(document.uploadedAt))}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <StatusMetaBadge meta={s.verification[verificationStatus as keyof typeof s.verification]} />
+          <div className="flex items-center gap-2">
+            {canPreview && previewUrl ? (
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {t.common.view}
+              </a>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {t.pages.mutations.documentUnavailable}
+              </span>
+            )}
+            {role === "land-office" ? (
+              <>
+                {verificationStatus !== "verified" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={documentDecision.isPending || document.ocrStatus === "processing"}
+                    onClick={() => {
+                      documentDecision.mutate(
+                        { id: document.id, decision: "verify" },
+                        {
+                          onSuccess: () => toast.success("Document verified"),
+                          onError: (error: any) => toast.error(error?.message || "Failed to verify document. Ensure fields are correct."),
+                        }
+                      );
+                    }}
+                  >
+                    Verify
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={runOcr.isPending || document.ocrStatus === "processing"}
+                  onClick={() => {
+                    runOcr.mutate(document.id, {
+                      onSuccess: () => toast.success("OCR completed"),
+                      onError: () => toast.error("OCR failed"),
+                    });
+                  }}
+                >
+                  {document.ocrStatus === "processing" ? (
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                  ) : (
+                    <ScanLine className="size-4 mr-2" />
+                  )}
+                  Run OCR
+                </Button>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </li>
+      {isEditing ? (
+        <li className="bg-muted/30 px-3 py-3 text-xs">
+          <div className="font-medium mb-2 flex items-center justify-between">
+            <span className="text-foreground">Manual Field Entry:</span>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>Cancel</Button>
+              <Button variant="default" size="sm" onClick={handleSave} disabled={updateFields.isPending}>
+                {updateFields.isPending ? <Loader2 className="size-3 mr-2 animate-spin" /> : null}
+                Save
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.keys(editData).map((key) => (
+              <div key={key} className="flex flex-col gap-1">
+                <label className="text-muted-foreground font-medium">{key}</label>
+                <Input 
+                  value={editData[key]} 
+                  onChange={(e) => setEditData({ ...editData, [key]: e.target.value })} 
+                  className="h-8 text-xs"
+                />
+              </div>
+            ))}
+          </div>
+        </li>
+      ) : (document.extractedFields && Object.keys(document.extractedFields).length > 0) || showManualOption ? (
+        <li className="bg-muted/30 px-3 py-2 text-xs relative group">
+          <div className="flex justify-between items-center mb-1">
+            <div className="font-medium text-muted-foreground">Extracted Fields:</div>
+            {showManualOption && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-6 text-[10px] px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => setIsEditing(true)}
+              >
+                Edit / Manual Entry
+              </Button>
+            )}
+          </div>
+          {document.extractedFields && Object.keys(document.extractedFields).length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(document.extractedFields).map(([key, value]) => (
+                <div key={key}>
+                  <span className="text-muted-foreground">{key}: </span>
+                  <span className="font-medium text-foreground">{value as string}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-muted-foreground italic text-xs py-1">No fields extracted. Click Edit to enter manually.</div>
+          )}
+        </li>
+      ) : null}
+    </React.Fragment>
   );
 }
 
@@ -293,84 +469,9 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
           <DetailSection title={t.pages.mutations.documents}>
             {presentation.documents.length ? (
               <ul className="divide-y divide-border">
-                {presentation.documents.map(({ document, verificationStatus }) => {
-                  const previewUrl = document.thumbnailUrl?.trim();
-                  const canPreview = isUsableMutationPreviewUrl(previewUrl);
-                  return (
-                    <React.Fragment key={document.id}>
-                      <li className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <FileText className="size-4 shrink-0 text-muted-foreground" />
-                            <span className="truncate font-medium text-foreground">{document.fileName}</span>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {t.domain.documentType[document.type]} · {f.fileSize(document.sizeBytes)}
-                            {document.pageCount ? ` · ${t.pages.mutations.documentPages(document.pageCount)}` : ""}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {t.pages.mutations.documentUploaded(f.date(document.uploadedAt))}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 flex-col items-end gap-2">
-                          <StatusMetaBadge meta={s.verification[verificationStatus]} />
-                          <div className="flex items-center gap-2">
-                            {canPreview && previewUrl ? (
-                              <a
-                                href={previewUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-                              >
-                                {t.common.view}
-                              </a>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                {t.pages.mutations.documentUnavailable}
-                              </span>
-                            )}
-                            {role === "land-office" ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={runOcr.isPending || document.ocrStatus === "processing"}
-                                onClick={() => {
-                                  runOcr.mutate(document.id, {
-                                    onSuccess: () => toast.success(t.pages.mutations.ocrCompleted),
-                                    onError: () => toast.error(t.pages.mutations.ocrFailed),
-                                  });
-                                }}
-                              >
-                                {document.ocrStatus === "processing" ? (
-                                  <Loader2 className="size-4 mr-2 animate-spin" />
-                                ) : (
-                                  <ScanLine className="size-4 mr-2" />
-                                )}
-                                {t.pages.mutations.runOcr}
-                              </Button>
-                            ) : null}
-                          </div>
-                        </div>
-                      </li>
-                      {document.extractedFields && Object.keys(document.extractedFields).length > 0 ? (
-                        <li className="bg-muted/30 px-3 py-2 text-xs">
-                          <div className="font-medium mb-1 text-muted-foreground">
-                            {t.pages.mutations.extractedFields}:
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {Object.entries(document.extractedFields).map(([key, value]) => (
-                              <div key={key}>
-                                <span className="text-muted-foreground">{key}: </span>
-                                <span className="font-medium text-foreground">{value as string}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </li>
-                      ) : null}
-                    </React.Fragment>
-                  );
-                })}
+                {presentation.documents.map(({ document, verificationStatus }) => (
+                  <DocumentListItem key={document.id} document={document} verificationStatus={verificationStatus} />
+                ))}
               </ul>
             ) : (
               <span className="text-sm text-muted-foreground">{t.common.none}</span>

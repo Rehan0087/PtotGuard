@@ -149,6 +149,11 @@ export default function LandingPage() {
             <div className="text-[4rem] md:text-[5rem] leading-none font-bold text-[#1c4532] tracking-tight group-hover:scale-110 transition-transform duration-500 hover:text-green-700 drop-shadow-sm">
               {locale === "bn" ? "১৬১২২" : "16122"}
             </div>
+            
+            <Link href="/login" className="mt-6 flex items-center gap-2 rounded-full bg-[#1c4532] px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-green-700 transition-all hover:-translate-y-1 hover:shadow-lg">
+              <Bot className="size-4" />
+              {locale === "bn" ? "এআই অ্যাসিস্ট্যান্ট ব্যবহার করুন" : "Try the AI assistant"}
+            </Link>
           </div>
         </div>
       </section>
@@ -297,14 +302,26 @@ export default function LandingPage() {
               50% { transform: translateY(-3px); }
               100% { transform: translateY(0); }
             }
+            @keyframes flyBirds {
+              0% { transform: translate(-100px, 50px) scale(0.8); }
+              50% { transform: translate(700px, -20px) scale(1); }
+              100% { transform: translate(1600px, 30px) scale(1.2); }
+            }
             .anim-cloud-1 { animation: floatClouds 60s linear infinite; }
             .anim-cloud-2 { animation: floatClouds 80s linear infinite 30s; }
             .anim-cloud-3 { animation: floatClouds 90s linear infinite 10s; }
             .anim-cloud-4 { animation: floatClouds 70s linear infinite 5s; }
             .anim-cloud-5 { animation: floatClouds 100s linear infinite 40s; }
             .anim-cloud-6 { animation: floatClouds 50s linear infinite 15s; }
+            .anim-cloud-7 { animation: floatClouds 75s linear infinite 20s; }
+            .anim-cloud-8 { animation: floatClouds 85s linear infinite 50s; }
+            .anim-cloud-9 { animation: floatClouds 65s linear infinite 35s; }
+            .anim-cloud-10 { animation: floatClouds 95s linear infinite 8s; }
             .anim-river { animation: riverFlow 10s ease-in-out infinite; }
             .anim-farmer { animation: farmerBob 4s ease-in-out infinite; }
+            .anim-birds { animation: flyBirds 25s linear infinite; }
+            .interactive-cloud { cursor: pointer; transition: transform 0.3s; }
+            .interactive-cloud:hover { transform: scale(1.1) translateY(-10px); }
           `}</style>
           
           {/* Sky gradient */}
@@ -318,35 +335,64 @@ export default function LandingPage() {
           <rect width="1440" height="420" fill="url(#sky)" />
           
           {/* Animated Clouds */}
-          <g className="anim-cloud-1" fill="#ffffff" opacity="0.5">
+          <g className="anim-cloud-1 interactive-cloud" fill="#ffffff" opacity="0.5">
             <ellipse cx="100" cy="80" rx="40" ry="20" />
             <ellipse cx="130" cy="70" rx="30" ry="25" />
             <ellipse cx="160" cy="80" rx="35" ry="18" />
           </g>
-          <g className="anim-cloud-2" fill="#ffffff" opacity="0.4">
+          <g className="anim-cloud-2 interactive-cloud" fill="#ffffff" opacity="0.4">
             <ellipse cx="300" cy="120" rx="50" ry="25" />
             <ellipse cx="340" cy="110" rx="40" ry="30" />
             <ellipse cx="380" cy="120" rx="45" ry="22" />
           </g>
-          <g className="anim-cloud-3" fill="#ffffff" opacity="0.3">
+          <g className="anim-cloud-3 interactive-cloud" fill="#ffffff" opacity="0.3">
             <ellipse cx="600" cy="60" rx="60" ry="30" />
             <ellipse cx="650" cy="50" rx="45" ry="35" />
             <ellipse cx="700" cy="60" rx="50" ry="25" />
           </g>
-          <g className="anim-cloud-4" fill="#ffffff" opacity="0.5">
+          <g className="anim-cloud-4 interactive-cloud" fill="#ffffff" opacity="0.5">
             <ellipse cx="850" cy="90" rx="45" ry="22" />
             <ellipse cx="890" cy="80" rx="35" ry="28" />
             <ellipse cx="930" cy="90" rx="40" ry="20" />
           </g>
-          <g className="anim-cloud-5" fill="#ffffff" opacity="0.25">
+          <g className="anim-cloud-5 interactive-cloud" fill="#ffffff" opacity="0.25">
             <ellipse cx="1100" cy="140" rx="70" ry="30" />
             <ellipse cx="1150" cy="130" rx="50" ry="35" />
             <ellipse cx="1200" cy="140" rx="60" ry="25" />
           </g>
-          <g className="anim-cloud-6" fill="#ffffff" opacity="0.6">
+          <g className="anim-cloud-6 interactive-cloud" fill="#ffffff" opacity="0.6">
             <ellipse cx="1350" cy="50" rx="30" ry="15" />
             <ellipse cx="1375" cy="45" rx="20" ry="20" />
             <ellipse cx="1400" cy="50" rx="25" ry="12" />
+          </g>
+
+          {/* Additional Animated Clouds */}
+          <g className="anim-cloud-7 interactive-cloud" fill="#ffffff" opacity="0.45">
+            <ellipse cx="250" cy="40" rx="50" ry="22" />
+            <ellipse cx="280" cy="30" rx="35" ry="25" />
+            <ellipse cx="320" cy="40" rx="40" ry="18" />
+          </g>
+          <g className="anim-cloud-8 interactive-cloud" fill="#ffffff" opacity="0.35">
+            <ellipse cx="780" cy="110" rx="40" ry="20" />
+            <ellipse cx="810" cy="100" rx="30" ry="25" />
+            <ellipse cx="840" cy="110" rx="35" ry="15" />
+          </g>
+          <g className="anim-cloud-9 interactive-cloud" fill="#ffffff" opacity="0.55">
+            <ellipse cx="1020" cy="65" rx="55" ry="25" />
+            <ellipse cx="1060" cy="55" rx="45" ry="30" />
+            <ellipse cx="1100" cy="65" rx="40" ry="22" />
+          </g>
+          <g className="anim-cloud-10 interactive-cloud" fill="#ffffff" opacity="0.25">
+            <ellipse cx="50" cy="100" rx="60" ry="25" />
+            <ellipse cx="90" cy="90" rx="40" ry="30" />
+            <ellipse cx="120" cy="100" rx="45" ry="20" />
+          </g>
+
+          {/* Animated Birds */}
+          <g className="anim-birds" stroke="#2c3e50" strokeWidth="2" fill="none">
+            <path d="M0,10 Q5,0 10,10 Q15,0 20,10" />
+            <path d="M30,5 Q35,-5 40,5 Q45,-5 50,5" />
+            <path d="M15,25 Q20,15 25,25 Q30,15 35,25" />
           </g>
 
           {/* Distant tree line */}
