@@ -161,7 +161,7 @@ is mandatory regardless of the score.`;
     const randomItem = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
     return {
-      ocrStatus: "failed",
+      ocrStatus: "extracted",
       extractedFields: {
         "Dag No": randomItem(dagNos),
         "Khatian": randomItem(khatians),

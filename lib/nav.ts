@@ -12,6 +12,7 @@ import {
   HelpCircle,
   BookOpen,
   MessageCircleWarning,
+  Users,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
 import type { Dictionary } from "@/lib/i18n";
@@ -61,6 +62,7 @@ export const NAV: Record<Role, PortalNav> = {
       { labelKey: "citizenServices", href: "/portal", icon: LayoutGrid },
       { labelKey: "faq", href: "/faq", icon: HelpCircle },
       { labelKey: "manual", href: "/manual", icon: BookOpen },
+      { labelKey: "communityBuild", href: "/community", icon: Users },
     ],
   },
   "land-office": {
@@ -75,6 +77,7 @@ export const NAV: Record<Role, PortalNav> = {
         icon: LayoutGrid,
       },
       { labelKey: "grievances", href: "/grievances", icon: MessageCircleWarning },
+      { labelKey: "communityBuild", href: "/community", icon: Users },
     ],
   },
   "field-agent": {

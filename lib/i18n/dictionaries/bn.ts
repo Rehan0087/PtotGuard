@@ -139,6 +139,7 @@ export const bn: Dictionary = {
     searchRecords: "রেকর্ড খুঁজুন",
     myDocuments: "আমার দলিলপত্র",
     disputes: "বিরোধ",
+    communityBuild: "কমিউনিটি বিল্ড",
     grievances: "অভিযোগ ও প্রতিকার",
     inheritance: "উত্তরাধিকার",
     records: "রেকর্ড",
