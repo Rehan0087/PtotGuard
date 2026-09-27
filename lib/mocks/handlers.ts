@@ -564,10 +564,17 @@ function scheduleOcrWorker(documentId: string, parcelId?: string, delayMs = OCR_
   }, delayMs);
 }
 
+function isMutationDocument(documentId: string) {
+  return db.mutations.some((mutation) => mutation.documentIds.includes(documentId));
+}
+
 // Seeded documents that are already mid-flight drain shortly after load, so the
 // pipeline is visible on a first visit and polling doesn't run forever.
 db.documents
-  .filter((d) => d.ocrStatus === "processing" || d.ocrStatus === "pending")
+  .filter((d) =>
+    (d.ocrStatus === "processing" || d.ocrStatus === "pending") &&
+    db.mutations.some((mutation) => mutation.documentIds.includes(d.id)),
+  )
   .forEach((d, i) => scheduleOcrWorker(d.id, d.parcelId, 7000 + i * 5000));
 
 const API = "/api";
@@ -1094,6 +1101,9 @@ export const handlers = [
     if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
+    if (!isMutationDocument(doc.id)) {
+      return unprocessable({ documentId: { code: "document-not-in-mutation" } });
+    }
     doc.ocrStatus = "processing";
     doc.verificationStatus = "unverified";
     // Re-queue for real, so a retry drains the same way a fresh upload does.
@@ -1113,6 +1123,9 @@ export const handlers = [
     if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
+    if (!isMutationDocument(doc.id)) {
+      return unprocessable({ documentId: { code: "document-not-in-mutation" } });
+    }
     const { decision } = (await request.json()) as {
       decision: "verify" | "reject" | "flag";
     };
@@ -1167,6 +1180,9 @@ export const handlers = [
     if (denied) return denied;
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
+    if (!isMutationDocument(doc.id)) {
+      return unprocessable({ documentId: { code: "document-not-in-mutation" } });
+    }
     const { fields } = (await request.json()) as { fields: Record<string, string> };
     doc.extractedFields = { ...doc.extractedFields, ...fields };
     return HttpResponse.json(doc);
@@ -1206,12 +1222,11 @@ export const handlers = [
       sizeBytes: body.sizeBytes ?? 250_000,
       uploadedAt: new Date().toISOString(),
       uploadedById: me.id,
-      // Upload returns immediately; the OCR/fraud worker fills these in later.
-      ocrStatus: "processing" as const,
+      // Library uploads remain private until attached to a mutation filing.
+      ocrStatus: "pending" as const,
       verificationStatus: "unverified" as const,
     };
     db.documents.unshift(doc);
-    scheduleOcrWorker(doc.id, body.parcelId);
     return HttpResponse.json(doc, { status: 201 });
   }),
 
@@ -1221,11 +1236,16 @@ export const handlers = [
     const owner = url.searchParams.get("owner");
     const fraud = url.searchParams.get("fraud");
     const ocr = url.searchParams.get("ocr");
+    const mutation = url.searchParams.get("mutation");
     let items = db.documents.slice();
     if (owner === "me") items = items.filter((d) => d.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((d) => d.ownerId === owner);
     // fraud=true means "awaiting fraud review": still flagged, not yet decided.
     if (fraud === "true") items = items.filter((d) => d.verificationStatus === "flagged");
+    if (mutation === "true") {
+      const mutationDocumentIds = new Set(db.mutations.flatMap((item) => item.documentIds));
+      items = items.filter((d) => mutationDocumentIds.has(d.id));
+    }
     if (ocr) items = items.filter((d) => d.ocrStatus === ocr);
     items.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
     return HttpResponse.json(paginate(items, url));
@@ -1264,6 +1284,29 @@ export const handlers = [
     }
 
     const me = currentUser(request);
+    const requestedDocumentIds = [...new Set(body.documentIds ?? [])];
+    const selectedDocuments = db.documents.filter((document) =>
+      requestedDocumentIds.includes(document.id),
+    );
+    const missing = requestedDocumentIds.filter((id) =>
+      !selectedDocuments.some((document) => document.id === id),
+    );
+    if (missing.length) {
+      return unprocessable({
+        documentIds: { code: "mutation-documents-missing", documentIds: missing },
+      });
+    }
+    const foreign = selectedDocuments.filter((document) =>
+      document.ownerId !== me.id || document.parcelId !== parcel.id,
+    );
+    if (foreign.length) {
+      return unprocessable({
+        documentIds: {
+          code: "mutation-documents-foreign",
+          documentIds: foreign.map((document) => document.id),
+        },
+      });
+    }
     const seq = 1300 + db.mutations.length;
     const now = new Date().toISOString();
     const mutation: Mutation = {
@@ -1280,7 +1323,7 @@ export const handlers = [
       toOwnerName: toOwner.name,
       requestedById: me.id,
       requestedAt: now,
-      documentIds: body.documentIds ?? [],
+      documentIds: requestedDocumentIds,
       objections: [],
       deedNumber: body.deedNumber,
       deedDate: body.deedDate,
@@ -1292,6 +1335,16 @@ export const handlers = [
       updatedAt: now,
     };
     db.mutations.unshift(mutation);
+
+    for (const documentId of mutation.documentIds) {
+      const document = db.documents.find((item) =>
+        item.id === documentId && item.ownerId === me.id && item.parcelId === parcel.id,
+      );
+      if (document?.ocrStatus === "pending") {
+        document.ocrStatus = "processing";
+        scheduleOcrWorker(document.id, document.parcelId);
+      }
+    }
 
     await appendAudit({
       entityType: "mutation",
@@ -4708,6 +4761,9 @@ export const handlers = [
     const me = currentUser(request);
     const doc = db.documents.find((d) => d.id === params.id);
     if (!doc) return notFound("Document not found");
+    if (!isMutationDocument(doc.id)) {
+      return unprocessable({ documentId: { code: "document-not-in-mutation" } });
+    }
     const parcel = doc.parcelId ? db.parcels.find((p) => p.id === doc.parcelId) : undefined;
     doc.ocrStatus = "extracted";
     doc.fraudScore = 0.04;

@@ -64,7 +64,10 @@ function fixture(status = "submitted") {
     },
     policy: { findUnique: vi.fn().mockResolvedValue({ id: "singleton", objectionWindowDays: 15, mutationFeeBdt: 500 }) },
     ownershipRecord: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), create: vi.fn().mockResolvedValue({}) },
-    landDocument: { findMany: vi.fn().mockResolvedValue([document]) },
+    landDocument: {
+      findMany: vi.fn().mockResolvedValue([document]),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     fieldReport: { findFirst: vi.fn().mockResolvedValue({ id: "fr-1", status: "completed", reviewedAt: now, disputeFound: false }) },
     appNotification: { create: vi.fn().mockResolvedValue({}) },
     landListing: { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn().mockResolvedValue({}) },
@@ -83,7 +86,16 @@ function fixture(status = "submitted") {
     $transaction: vi.fn().mockImplementation(async (callback) => callback(tx)),
   };
   const audit = { append: vi.fn().mockResolvedValue(undefined) };
-  return { mutation, parcel, tx, prisma, audit, controller: new MutationsController(prisma as never, audit as never) };
+  const documentOcr = { schedule: vi.fn() };
+  return {
+    mutation,
+    parcel,
+    tx,
+    prisma,
+    audit,
+    documentOcr,
+    controller: new MutationsController(prisma as never, audit as never, documentOcr as never),
+  };
 }
 
 function noWrites(f: ReturnType<typeof fixture>) {
@@ -435,6 +447,39 @@ describe("mutation read and filing compatibility", () => {
     f.prisma.parcel.findUnique.mockResolvedValue({ id: "p-1", dagNo: "42", ownerId: "usr-ayesha", owner: { name: "Ayesha" }, jurisdictionId: "j-local" });
     await f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash" }, request("citizen"));
     expect(f.tx.mutation.create).toHaveBeenCalledWith({ data: expect.objectContaining({ status: "submitted", fromOwnerId: "usr-ayesha", fromOwnerName: "Ayesha", requestedById: "usr-ayesha" }) });
+  });
+  it("queues only a citizen's parcel document when it is submitted with a mutation", async () => {
+    const f = fixture();
+    const pendingDocument = {
+      ...document,
+      ownerId: "usr-ayesha",
+      ocrStatus: "pending",
+      verificationStatus: "unverified",
+    };
+    f.prisma.parcel.findUnique.mockResolvedValue({
+      id: "p-1", dagNo: "42", ownerId: "usr-ayesha",
+      owner: { name: "Ayesha" }, jurisdictionId: "j-local",
+    });
+    f.prisma.landDocument.findMany.mockResolvedValue([pendingDocument]);
+
+    await f.controller.create({
+      parcelId: "p-1",
+      toOwnerId: "usr-new",
+      type: "sale",
+      paymentMethod: "bkash",
+      documentIds: ["doc-1"],
+    }, request("citizen"));
+
+    expect(f.tx.landDocument.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["doc-1"] },
+        ownerId: "usr-ayesha",
+        parcelId: "p-1",
+        ocrStatus: "pending",
+      },
+      data: { ocrStatus: "processing" },
+    });
+    expect(f.documentOcr.schedule).toHaveBeenCalledWith("doc-1", "p-1");
   });
   it("refuses a filing on a parcel the caller does not own, as not found", async () => {
     const f = fixture();
