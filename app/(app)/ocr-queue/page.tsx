@@ -467,7 +467,7 @@ function ExtractionCard({ doc, parcel }: { doc: LandDocument; parcel?: Parcel })
 
 export default function OcrQueuePage() {
   const t = useT();
-  const { data, isLoading } = useDocuments({ pageSize: 100 });
+  const { data, isLoading } = useDocuments({ mutation: "true", pageSize: 100 });
   const { data: parcelsData } = useParcels({ pageSize: 100 });
   const [stage, setStage] = useState<StageKey | null>(null);
 

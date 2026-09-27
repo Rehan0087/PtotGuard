@@ -142,9 +142,8 @@ export const en = {
     errorTitle: "We couldn't find that account",
     errorBody: "Check the email address, or pick one of the demo accounts below.",
     wrongPasswordTitle: "That password doesn't match",
-    wrongPasswordBody: "Try the demo password below, or pick a demo account to fill both fields.",
+    wrongPasswordBody: "Check the password and try again, or pick a demo account to fill both fields.",
     demoAccountsLabel: "Demo accounts",
-    demoPasswordHint: "Demo password:",
   },
 
   // ── Portals and their sidebar entries ────────────────────────────────────
@@ -1116,8 +1115,7 @@ export const en = {
     },
 
     documents: {
-      description:
-        "Title deeds, affidavits, and receipts you've submitted, with OCR and verification status.",
+      description: "Title deeds, affidavits, and receipts you've submitted.",
       upload: "Upload document",
       reading: (count: number) =>
         `Reading ${n(count)} document${count === 1 ? "" : "s"} — this page updates on its own.`,

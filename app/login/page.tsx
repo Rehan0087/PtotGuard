@@ -186,12 +186,6 @@ export default function LoginPage() {
                 </button>
               ))}
             </div>
-            <p className="text-center text-xs text-muted-foreground">
-              {t.login.demoPasswordHint}{" "}
-              <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
-                {DEMO_PASSWORD}
-              </code>
-            </p>
           </div>
         </div>
       </div>

@@ -608,7 +608,7 @@ export function useDocuments(params: ListParams = {}) {
       const working = items.some(
         (d) => d.ocrStatus === "processing" || d.ocrStatus === "pending",
       );
-      return working ? 2500 : false;
+      return role === "land-office" && working ? 2500 : false;
     },
   });
 }
