@@ -70,6 +70,8 @@ export interface ServiceApplication {
   status: ServiceApplicationStatus;
   /** Not every service is parcel-bound (e.g. an information-bank browse request). */
   parcelId?: ID;
+  /** Selected government plot for a khas-land lease application. */
+  khasPlotId?: ID;
   applicantId: ID;
   assignedOfficerId?: ID;
   assignedMediatorId?: ID;

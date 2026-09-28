@@ -232,6 +232,7 @@ model Dispute {
   /// order is meaningful (filed order) and rows are never queried from this side.
   evidenceDocumentIds String[]
   hearingDate         DateTime?
+  hearingLocation     String         @default("Upazilla settlement office")
   resolution          String?
   updatedAt           DateTime       @updatedAt
   /// Set once a land-office officer applies the ruling to the parcel record
@@ -573,6 +574,7 @@ model Hearing {
   /// matches attendance against these by normalised name, not by user id.
   parties     Json
   hearingDate DateTime?
+  location    String    @default("Upazilla settlement office")
   /// HearingSession[] — appended by POST .../sessions, never addressed singly.
   sessions    Json      @default("[]")
   ruling      String?
@@ -781,7 +783,8 @@ model CommunityVote {
   post      CommunityPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
   user      User              @relation(fields: [userId], references: [id])
 
-  @@unique([userId, postId, commentId])
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
   @@index([userId])
   @@index([postId])
   @@index([commentId])

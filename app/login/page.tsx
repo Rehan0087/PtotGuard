@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
@@ -37,14 +37,7 @@ export default function LoginPage() {
   const t = useT();
   const router = useRouter();
   const login = useSessionStore((s) => s.login);
-  const role = useSessionStore((s) => s.role);
-  const isAuthenticated = useSessionStore((s) => s.isAuthenticated);
-  const hasHydrated = useSessionStore((s) => s.hasHydrated);
   const [failure, setFailure] = useState<LoginFailure | { code: "api" } | null>(null);
-
-  useEffect(() => {
-    if (hasHydrated && isAuthenticated) router.replace(roleHome(role));
-  }, [hasHydrated, isAuthenticated, role, router]);
 
   const {
     register,
@@ -56,7 +49,7 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
 
-  async function onSubmit(values: FormValues) {
+  async function authenticate(values: FormValues) {
     try {
       const result = await api.post<LoginResponse>("/auth/login", values);
       setFailure(null);
@@ -69,6 +62,10 @@ export default function LoginPage() {
         setFailure({ code: "api" });
       }
     }
+  }
+
+  async function onSubmit(values: FormValues) {
+    await authenticate(values);
   }
 
   function fillDemoAccount(email: string) {
@@ -170,6 +167,7 @@ export default function LoginPage() {
                   key={account.email}
                   type="button"
                   onClick={() => fillDemoAccount(account.email)}
+                  aria-label={`Use ${account.name}, ${t.roles[account.role]}`}
                   className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
                 >
                   <span className="min-w-0">

@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsIn, IsString, MaxLength, MinLength } from "class-validator";
 
 const TYPES = ["boundary", "ownership", "inheritance", "encroachment", "fraud", "easement"] as const;
 const PRIORITIES = ["low", "medium", "high"] as const;
@@ -20,8 +20,6 @@ export class CreateDisputeDto {
   @MaxLength(1000)
   description!: string;
 
-  @IsOptional()
   @IsString()
-  @MaxLength(120)
-  respondentName?: string;
+  respondentId!: string;
 }

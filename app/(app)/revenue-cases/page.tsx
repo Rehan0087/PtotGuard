@@ -18,7 +18,7 @@ import { useStatusMeta } from "@/lib/i18n/status";
 import { useAssignRevenueCase, useFileRevenueCase, useLandTaxCollection, useRole, useServiceApplications, useUsers } from "@/hooks/queries";
 import type { LandTaxCollectionHolding, ServiceApplication } from "@/lib/types";
 
-type CaseDetails = { grounds?: string; hearingAt?: string; assessmentYear?: number; amountDue?: number; paidThroughYear?: number | null; dagNo?: string; ownerName?: string };
+type CaseDetails = { grounds?: string; hearingAt?: string; hearingLocation?: string; assessmentYear?: number; amountDue?: number; paidThroughYear?: number | null; dagNo?: string; ownerName?: string };
 
 export default function RevenueCasesPage() {
   return useRole() === "citizen" ? <CitizenRevenueCases /> : <OfficerRevenueCases />;
@@ -44,7 +44,7 @@ function CaseCard({ application, officer = false }: { application: ServiceApplic
       {details.amountDue != null ? <div className="text-destructive">{t.pages.revenueCases.amountDue(f.money({ amount: details.amountDue, currency: "BDT" }))}</div> : null}
       {details.assessmentYear ? <div className="text-xs text-muted-foreground">{t.pages.revenueCases.assessmentYear(f.digits(String(details.assessmentYear)))}</div> : null}
       {details.grounds ? <p className="mt-2">{details.grounds}</p> : null}
-      {details.hearingAt ? <p className="mt-2 text-disputed">{t.pages.revenueCases.hearingAtLabel(f.dateTime(details.hearingAt))}</p> : null}
+      {details.hearingAt ? <p className="mt-2 text-disputed">{t.pages.revenueCases.hearingAtLabel(f.dateTime(details.hearingAt))} · {details.hearingLocation ?? "Upazilla settlement office"}</p> : null}
     </div>
     {application.parcelId ? <Link href={`/parcels/${application.parcelId}`} className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "self-start")}>{t.pages.landTax.viewParcel}</Link> : null}
     {officer ? <AssignmentControls application={application} /> : null}

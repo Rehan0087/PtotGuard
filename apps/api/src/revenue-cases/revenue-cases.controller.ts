@@ -11,7 +11,7 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 import type { Policy, ServiceApplication } from "@prisma/client";
-import { assessLandTax, type Area, type LandTaxRates, type LandUse } from "@plotguard/rules";
+import { assessLandTax, HEARING_LOCATION, type Area, type LandTaxRates, type LandUse } from "@plotguard/rules";
 import { AccessTokenGuard } from "../auth/access-token.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
@@ -241,7 +241,11 @@ export class RevenueCasesController {
 
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
-      const details = { ...(application.details as Record<string, unknown>), hearingAt: body.hearingAt };
+      const details = {
+        ...(application.details as Record<string, unknown>),
+        hearingAt: body.hearingAt,
+        hearingLocation: HEARING_LOCATION,
+      };
       const updated = await tx.serviceApplication.update({
         where: { id },
         data: { status: "hearing-scheduled", details: details as never },
@@ -252,7 +256,12 @@ export class RevenueCasesController {
         entityId: updated.id,
         action: "status-change",
         actorId,
-        payload: { applicationNo: updated.applicationNo, status: updated.status, hearingAt: body.hearingAt },
+        payload: {
+          applicationNo: updated.applicationNo,
+          status: updated.status,
+          hearingAt: body.hearingAt,
+          hearingLocation: HEARING_LOCATION,
+        },
       });
 
       await tx.serviceApplicationEvent.create({
@@ -272,7 +281,7 @@ export class RevenueCasesController {
           userId: updated.applicantId,
           at: now,
           title: `Hearing scheduled for ${updated.applicationNo}`,
-          body: `Hearing scheduled for ${updated.applicationNo}`,
+          body: `Hearing scheduled for ${updated.applicationNo} at ${HEARING_LOCATION}.`,
           read: false,
           href: `/revenue-cases`,
         },

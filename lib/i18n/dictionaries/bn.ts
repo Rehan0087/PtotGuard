@@ -216,7 +216,7 @@ export const bn: Dictionary = {
     dispute: {
       submitted: "দাখিলকৃত",
       "under-land-office-review": "ভূমি অফিস পর্যালোচনাধীন",
-      "field-verified": "সরেজমিন যাচাইকৃত",
+      "field-verified": "মাঠ যাচাই সম্পন্ন",
       "forwarded-to-settlement": "সেটেলমেন্ট অফিসে প্রেরিত",
       "hearing-scheduled": "শুনানি নির্ধারিত",
       decided: "সিদ্ধান্তকৃত",
@@ -1630,7 +1630,7 @@ export const bn: Dictionary = {
       descriptionPlaceholder:
         "সমস্যাটি বর্ণনা করুন — জমির কোন অংশে, কবে থেকে শুরু, এবং অফিসের কাছে আপনি কী চান।",
       otherParty: "প্রতিপক্ষ",
-      otherPartyPlaceholder: "যাঁর বা যে প্রতিষ্ঠানের সঙ্গে বিরোধ, তাঁর নাম",
+      otherPartyPlaceholder: "যে নাগরিকের সঙ্গে বিরোধ, তাঁকে বেছে নিন",
       reviewAndSubmit: "পর্যালোচনা করে জমা দিন",
       rowParcel: "দাগ",
       rowType: "ধরন",
@@ -1658,6 +1658,7 @@ export const bn: Dictionary = {
       },
       errors: {
         parcelRequired: "এই বিরোধ যে দাগ নিয়ে, সেটি বেছে নিন।",
+        otherPartyRequired: "এই বিরোধের প্রতিপক্ষকে বেছে নিন।",
         descriptionShort: "অনুগ্রহ করে অন্তত ২০ অক্ষরে সমস্যাটি বর্ণনা করুন।",
         descriptionLong: "বিবরণ ১০০০ অক্ষরের মধ্যে রাখুন।",
       },

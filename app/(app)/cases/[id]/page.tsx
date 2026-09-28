@@ -170,6 +170,10 @@ export default function CaseDetailPage() {
             {t.pages.hearing.scheduledFor(f.dateTime(hearing.hearingDate))}
           </span>
         ) : null}
+        <span className="inline-flex items-center gap-1.5">
+          <MapPin className="size-3.5" />
+          {hearing.location}
+        </span>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

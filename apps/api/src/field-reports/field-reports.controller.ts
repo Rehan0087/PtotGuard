@@ -797,10 +797,13 @@ export class FieldReportsController {
         const dispute = await tx.dispute.findUnique({
           where: { id: updatedReport.disputeId },
         });
-        if (dispute && dispute.status === "field-visit-scheduled") {
+        if (
+          dispute &&
+          ["under-land-office-review", "under-review", "field-visit-scheduled"].includes(dispute.status)
+        ) {
           await tx.dispute.update({
             where: { id: dispute.id },
-            data: { status: "under-review", updatedAt: now },
+            data: { status: "field-verified", updatedAt: now },
           });
           await tx.disputeEvent.create({
             data: {
@@ -809,22 +812,22 @@ export class FieldReportsController {
               at: now,
               type: "field-visit",
               title: "Field survey filed",
-              content: { code: "field-visit-completed" },
+              content: { code: "field-verified" },
               description: body.notes,
               actorId,
             },
           });
 
-          if (dispute.filedById !== actorId) {
+          if (dispute.assignedOfficerId && dispute.assignedOfficerId !== actorId) {
             await tx.appNotification.create({
               data: {
                 id: `n-${randomUUID()}`,
-                userId: dispute.filedById,
+                userId: dispute.assignedOfficerId,
                 at: now,
                 severity: "info",
-                title: "Dispute status updated",
-                body: `Case ${dispute.caseNumber} status was updated to under-review.`,
-                content: { code: "dispute-status", caseNumber: dispute.caseNumber, status: "under-review" },
+                title: "Field verification complete",
+                body: `Case ${dispute.caseNumber} is field verification complete and ready to hand over to the Settlement Office.`,
+                content: { code: "dispute-status", caseNumber: dispute.caseNumber, status: "field-verified" },
                 read: false,
                 href: `/disputes/${dispute.id}`,
               },

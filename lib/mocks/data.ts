@@ -29,6 +29,8 @@ import type {
   GeoPolygon,
   Grievance,
   GrievanceEvent,
+  CommunityPost,
+  CommunityComment,
 } from "@/lib/types";
 import type { FieldSurveyGpsPoint } from "@/lib/types";
 import type { MockSyncReceipt } from "./field-survey-sync-contract";
@@ -480,7 +482,21 @@ export const parcelRestrictions: ParcelRestriction[] = [
   { id: "res-4", parcelId: "p-311", type: "mortgage", authority: "Janata Bank, Cumilla", referenceNo: "JB/MTG/2019/1188", note: "Discharged on repayment.", fromDate: "2019-11-02T00:00:00Z", toDate: "2025-01-30T00:00:00Z" },
 ];
 
-export const khasLandPlots: any[] = [
+export interface KhasLandPlotMock {
+  id: string;
+  mouza: string;
+  upazila: string;
+  district: string;
+  dagNo: string;
+  landUse: "agricultural" | "non-agricultural";
+  areaDecimals: number;
+  centroidLat: number;
+  centroidLng: number;
+  boundaryGeoJson: GeoPolygon;
+  status: "available" | "reserved" | "leased";
+}
+
+export const khasLandPlots: KhasLandPlotMock[] = [
   { id: "klp-1", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "110", landUse: "agricultural", areaDecimals: 50, centroidLat: 23.550, centroidLng: 90.990, boundaryGeoJson: square({ lat: 23.550, lng: 90.990 }), status: "available" },
   { id: "klp-2", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "115", landUse: "non-agricultural", areaDecimals: 12, centroidLat: 23.552, centroidLng: 90.992, boundaryGeoJson: square({ lat: 23.552, lng: 90.992 }), status: "available" },
   { id: "klp-3", mouza: "Payalgacha", upazila: "Barura", district: "Cumilla", dagNo: "220", landUse: "agricultural", areaDecimals: 120, centroidLat: 23.360, centroidLng: 91.030, boundaryGeoJson: square({ lat: 23.360, lng: 91.030 }), status: "available" },
@@ -793,9 +809,9 @@ export const fieldSurveySyncReceipts: MockSyncReceipt[] = [];
 // Hearings
 // ---------------------------------------------------------------------------
 export const hearings: Hearing[] = [
-  { id: "h-1", caseNumber: "HRG-2026-0044", disputeId: "ds-388", parcelDagNo: "CS-176", mediatorId: "usr-mediator", status: "in-hearing", parties: ["Md. Karim Uddin", "Sohel Rana"], hearingDate: "2026-07-26T05:30:00Z", sessions: [{ id: "s-1", at: "2026-07-19T05:30:00Z", summary: "Both deeds presented. Handwriting examiner appointed; next session scheduled.", attendees: ["Md. Karim Uddin", "Sohel Rana", "Shahida Khatun"] }] },
-  { id: "h-2", caseNumber: "HRG-2026-0039", disputeId: "ds-340", parcelDagNo: "BS-205", mediatorId: "usr-mediator", status: "scheduled", parties: ["Shanti Rani Das", "Upazila Land Office"], hearingDate: "2026-07-30T05:30:00Z", sessions: [] },
-  { id: "h-3", caseNumber: "HRG-2026-0031", disputeId: "ds-370", parcelDagNo: "RS-311/2", mediatorId: "usr-mediator", status: "ruled", parties: ["Md. Karim Uddin"], sessions: [{ id: "s-2", at: "2026-06-15T05:30:00Z", summary: "Name correction upheld.", attendees: ["Md. Karim Uddin", "Shahida Khatun"] }], ruling: "Khatian to reflect the corrected owner name. Case closed.", ruledAt: "2026-06-18T05:30:00Z" },
+  { id: "h-1", caseNumber: "HRG-2026-0044", disputeId: "ds-388", parcelDagNo: "CS-176", mediatorId: "usr-mediator", status: "in-hearing", parties: ["Md. Karim Uddin", "Sohel Rana"], hearingDate: "2026-07-26T05:30:00Z", location: "Upazilla settlement office", sessions: [{ id: "s-1", at: "2026-07-19T05:30:00Z", summary: "Both deeds presented. Handwriting examiner appointed; next session scheduled.", attendees: ["Md. Karim Uddin", "Sohel Rana", "Shahida Khatun"] }] },
+  { id: "h-2", caseNumber: "HRG-2026-0039", disputeId: "ds-340", parcelDagNo: "BS-205", mediatorId: "usr-mediator", status: "scheduled", parties: ["Shanti Rani Das", "Upazila Land Office"], hearingDate: "2026-07-30T05:30:00Z", location: "Upazilla settlement office", sessions: [] },
+  { id: "h-3", caseNumber: "HRG-2026-0031", disputeId: "ds-370", parcelDagNo: "RS-311/2", mediatorId: "usr-mediator", status: "ruled", parties: ["Md. Karim Uddin"], location: "Upazilla settlement office", sessions: [{ id: "s-2", at: "2026-06-15T05:30:00Z", summary: "Name correction upheld.", attendees: ["Md. Karim Uddin", "Shahida Khatun"] }], ruling: "Khatian to reflect the corrected owner name. Case closed.", ruledAt: "2026-06-18T05:30:00Z" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -838,6 +854,48 @@ export const notifications: AppNotification[] = [
   { id: "n-5", userId: "usr-ayesha", at: "2026-07-14T10:05:00Z", severity: "info", title: "Namjari in verification", body: "Inheritance mutation MUT-2026-01192 for dag RS-88 is being verified.", content: { code: "mutation-verification", mutationNumber: "MUT-2026-01192", dagNo: "RS-88" }, read: true, href: "/mutations?mutation=m-1192" },
   { id: "n-6", userId: "usr-ayesha", at: "2026-07-10T08:05:00Z", severity: "success", title: "Welcome to VhumiShetu", body: "Your account is active. You can now search records and track disputes.", content: { code: "welcome" }, read: true },
   { id: "n-7", userId: "usr-officer", at: "2026-07-21T09:02:00Z", severity: "warning", title: "New dispute assigned", body: "DSP-2026-00417 requires review.", content: { code: "dispute-assigned", caseNumber: "DSP-2026-00417" }, read: false, href: "/disputes" },
+];
+
+// ---------------------------------------------------------------------------
+// Community — shared by the standalone MSW demo and mirrored in Prisma seed.
+// ---------------------------------------------------------------------------
+export const communityComments: CommunityComment[] = [
+  {
+    id: "cc-1",
+    postId: "cp-1",
+    content: "Keep the payment receipt and the application number. The mutation page will show each verification step after submission.",
+    authorId: "usr-karim",
+    author: { id: "usr-karim", name: "Md. Karim Uddin", avatarUrl: null },
+    createdAt: "2026-09-27T10:30:00Z",
+    updatedAt: "2026-09-27T10:30:00Z",
+    parentId: null,
+    votes: [{ id: "cv-comment-1", value: 1, userId: "usr-ayesha", commentId: "cc-1", postId: null, createdAt: "2026-09-27T11:00:00Z" }],
+  },
+];
+
+export const communityPosts: CommunityPost[] = [
+  {
+    id: "cp-1",
+    title: "What should I keep after submitting an e-Namjari application?",
+    content: "I submitted a mutation request online. Which documents or reference numbers should I save while the land office reviews it?",
+    authorId: "usr-ayesha",
+    author: { id: "usr-ayesha", name: "Ayesha Siddika", avatarUrl: null },
+    createdAt: "2026-09-27T09:00:00Z",
+    updatedAt: "2026-09-27T09:00:00Z",
+    _count: { comments: 1, votes: 1 },
+    votes: [{ id: "cv-post-1", value: 1, userId: "usr-karim", postId: "cp-1", commentId: null, createdAt: "2026-09-27T10:00:00Z" }],
+  },
+  {
+    id: "cp-2",
+    title: "Tip: verify the mouza before searching by dag number",
+    content: "The same dag number can exist in more than one mouza. Selecting the district, upazila, and mouza first gave me the correct record.",
+    authorId: "usr-karim",
+    author: { id: "usr-karim", name: "Md. Karim Uddin", avatarUrl: null },
+    createdAt: "2026-09-26T14:15:00Z",
+    updatedAt: "2026-09-26T14:15:00Z",
+    _count: { comments: 0, votes: 0 },
+    votes: [],
+  },
 ];
 
 // ---------------------------------------------------------------------------

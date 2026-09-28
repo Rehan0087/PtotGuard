@@ -1,5 +1,7 @@
 import type { ID, ISODateString } from "./common";
 
+export const HEARING_LOCATION = "Upazilla settlement office";
+
 export type HearingStatus =
   | "scheduled"
   | "in-hearing"
@@ -29,6 +31,7 @@ export interface Hearing {
   status: HearingStatus;
   parties: string[];
   hearingDate?: ISODateString;
+  location: string;
   sessions: HearingSession[];
   ruling?: string;
   outcome?: MediationOutcome;
