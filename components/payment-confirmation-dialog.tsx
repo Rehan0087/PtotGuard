@@ -1,13 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
-import { CreditCard, Smartphone, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -21,33 +21,40 @@ const METHODS: {
   label: "bkash" | "nagad" | "card";
   color: string;
   bg: string;
+  image: string;
+  imageClassName: string;
 }[] = [
   {
     value: "bkash",
     label: "bkash",
     color: "text-pink-600",
     bg: "bg-pink-50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-800",
+    image: "/payment-methods/bkash.png",
+    imageClassName: "h-12 w-24",
   },
   {
     value: "nagad",
     label: "nagad",
     color: "text-orange-600",
     bg: "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800",
+    image: "/payment-methods/nagad.png",
+    imageClassName: "h-12 w-24",
   },
   {
     value: "card",
     label: "card",
     color: "text-blue-600",
     bg: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
+    image: "/payment-methods/card.png",
+    imageClassName: "h-16 w-16",
   },
 ];
 
-type Step = "method-and-number" | "pin";
+type Step = "method" | "details" | "pin";
 
 type Props = {
   open: boolean;
   amount: string;
-  defaultMethod: PaymentMethod;
   busy?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (method: PaymentMethod) => void;
@@ -55,30 +62,30 @@ type Props = {
 
 /**
  * Multi-step checkout dialog:
- *   Step 1 – Choose method (bKash / Nagad / Card) + enter account/card number
- *   Step 2 – PIN flash card to confirm payment
+ *   Step 1 – Choose method (bKash / Nagad / Card), and nothing else
+ *   Step 2 – Enter the selected wallet number or card details
+ *   Step 3 – Verify the bKash/Nagad PIN (cards pay after their details)
  * Account/card details and PIN never leave this component; the API receives
  * only the selected method after a successful PIN entry.
  */
 export function PaymentConfirmationDialog({
   open,
   amount,
-  defaultMethod,
   busy = false,
   onOpenChange,
   onConfirm,
 }: Props) {
   const t = useT();
-  const [method, setMethod] = useState<PaymentMethod>(defaultMethod);
+  const [method, setMethod] = useState<PaymentMethod | null>(null);
   const [account, setAccount] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvv, setCvv] = useState("");
   const [pin, setPin] = useState("");
-  const [step, setStep] = useState<Step>("method-and-number");
+  const [step, setStep] = useState<Step>("method");
   const [error, setError] = useState("");
 
   const isCard = method === "card";
-  const selectedMethod = METHODS.find((m) => m.value === method)!;
+  const selectedMethod = METHODS.find((m) => m.value === method);
 
   // ── Formatting helpers ────────────────────────────────────────────────────
   function formatCard(value: string) {
@@ -98,8 +105,9 @@ export function PaymentConfirmationDialog({
     return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
   }
 
-  // ── Step 1 validation → advance to PIN step ───────────────────────────────
+  // ── Details validation → mobile PIN or direct card confirmation ───────────
   function handleProceed() {
+    if (!method) return;
     const digits = account.replace(/\D/g, "");
     if (isCard && digits.length !== 16) {
       setError(t.common.payment.invalidNumber);
@@ -118,12 +126,17 @@ export function PaymentConfirmationDialog({
       return;
     }
     setError("");
+    if (isCard) {
+      onConfirm(method);
+      return;
+    }
     setPin("");
     setStep("pin");
   }
 
-  // ── Step 2 PIN validation → fire onConfirm ───────────────────────────────
+  // ── Mobile-wallet PIN validation → fire onConfirm ─────────────────────────
   function handleConfirmPin() {
+    if (!method) return;
     if (pin !== "1234") {
       setError(t.common.payment.invalidPin);
       return;
@@ -135,13 +148,13 @@ export function PaymentConfirmationDialog({
   // ── Reset when dialog closes ─────────────────────────────────────────────
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
-      setStep("method-and-number");
+      setStep("method");
       setAccount("");
       setExpiry("");
       setCvv("");
       setPin("");
       setError("");
-      setMethod(defaultMethod);
+      setMethod(null);
     }
     onOpenChange(nextOpen);
   }
@@ -156,8 +169,8 @@ export function PaymentConfirmationDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent showCloseButton={!busy} className="overflow-hidden p-0">
-        {/* ── Step 1: Method + Account Number ──────────────────────────── */}
-        {step === "method-and-number" && (
+        {/* ── Step 1: Method only ──────────────────────────────────────── */}
+        {step === "method" && (
           <div className="space-y-5 p-6">
             <DialogHeader>
               <DialogTitle>{t.common.payment.title}</DialogTitle>
@@ -169,8 +182,6 @@ export function PaymentConfirmationDialog({
               <span className="block text-sm font-medium text-foreground">{t.common.payment.method}</span>
               <div className="grid grid-cols-3 gap-2">
                 {METHODS.map((option) => {
-                  const Icon = option.value === "card" ? CreditCard : Smartphone;
-                  const isSelected = method === option.value;
                   return (
                     <button
                       type="button"
@@ -179,16 +190,25 @@ export function PaymentConfirmationDialog({
                       onClick={() => {
                         setMethod(option.value);
                         setAccount("");
+                        setExpiry("");
+                        setCvv("");
+                        setPin("");
                         setError("");
+                        setStep("details");
                       }}
                       className={cn(
-                        "flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 px-3 py-3 text-sm font-semibold transition-all",
-                        isSelected
-                          ? `${option.bg} ${option.color} border-current shadow-sm`
-                          : "border-border text-muted-foreground hover:border-muted-foreground/50",
+                        "flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-border bg-white px-3 py-3 text-sm font-semibold text-foreground transition-all hover:-translate-y-0.5 hover:border-muted-foreground/50 hover:shadow-sm dark:bg-white",
                       )}
                     >
-                      <Icon className="size-5" />
+                      <span className={cn("relative block", option.imageClassName)}>
+                        <Image
+                          src={option.image}
+                          alt=""
+                          fill
+                          sizes="96px"
+                          className="object-contain"
+                        />
+                      </span>
                       {option.label === "bkash"
                         ? "bKash"
                         : option.label === "nagad"
@@ -197,6 +217,40 @@ export function PaymentConfirmationDialog({
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <Button variant="ghost" onClick={() => handleOpenChange(false)} disabled={busy}>
+                {t.common.cancel}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2: Number or card details ───────────────────────────── */}
+        {step === "details" && method && selectedMethod && (
+          <div className="space-y-5 p-6">
+            <DialogHeader>
+              <DialogTitle>{t.common.payment.title}</DialogTitle>
+              <DialogDescription>{t.common.payment.description(amount)}</DialogDescription>
+            </DialogHeader>
+
+            <div className={cn("flex items-center gap-3 rounded-xl border p-3", selectedMethod.bg)}>
+              <span className={cn("relative block shrink-0", selectedMethod.imageClassName)}>
+                <Image
+                  src={selectedMethod.image}
+                  alt=""
+                  fill
+                  sizes="96px"
+                  className="object-contain"
+                />
+              </span>
+              <div>
+                <p className="font-semibold text-foreground">
+                  {method === "bkash" ? "bKash" : method === "nagad" ? "Nagad" : "Card"}
+                </p>
+                <p className="text-sm text-muted-foreground">{amount}</p>
               </div>
             </div>
 
@@ -209,7 +263,7 @@ export function PaymentConfirmationDialog({
                 inputMode="numeric"
                 autoComplete={isCard ? "cc-number" : "tel"}
                 placeholder={
-                  isCard ? t.common.payment.cardPlaceholder : t.common.payment.mobilePlaceholder
+                  isCard ? t.common.payment.cardNumber : t.common.payment.mobilePlaceholder
                 }
                 value={account}
                 onChange={(e) =>
@@ -259,18 +313,39 @@ export function PaymentConfirmationDialog({
             {error && <p className="text-sm text-destructive">{error}</p>}
 
             <div className="flex justify-end gap-2 pt-1">
-              <Button variant="ghost" onClick={() => handleOpenChange(false)} disabled={busy}>
-                {t.common.cancel}
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setStep("method");
+                  setMethod(null);
+                  setAccount("");
+                  setExpiry("");
+                  setCvv("");
+                  setError("");
+                }}
+                disabled={busy}
+              >
+                <ArrowLeft className="size-4" />
+                {t.common.payment.back}
               </Button>
-              <Button onClick={handleProceed} disabled={busy}>
-                {t.common.payment.verifyPin}
+              <Button
+                onClick={handleProceed}
+                disabled={busy}
+                className="gap-1.5"
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                {isCard
+                  ? busy
+                    ? t.common.payment.verifying
+                    : t.common.payment.pay(amount)
+                  : t.common.payment.verifyPin}
               </Button>
             </div>
           </div>
         )}
 
-        {/* ── Step 2: PIN Flash Card ────────────────────────────────────── */}
-        {step === "pin" && (
+        {/* ── Step 3: PIN Flash Card ────────────────────────────────────── */}
+        {step === "pin" && method && selectedMethod && (
           <div className="flex flex-col">
             {/* Coloured brand band */}
             <div
@@ -279,18 +354,15 @@ export function PaymentConfirmationDialog({
                 selectedMethod.bg,
               )}
             >
-              <div
-                className={cn(
-                  "flex size-14 items-center justify-center rounded-full border-2 border-current bg-white/60 dark:bg-black/20",
-                  selectedMethod.color,
-                )}
-              >
-                {method === "card" ? (
-                  <CreditCard className="size-7" />
-                ) : (
-                  <Smartphone className="size-7" />
-                )}
-              </div>
+              <span className={cn("relative block", selectedMethod.imageClassName)}>
+                <Image
+                  src={selectedMethod.image}
+                  alt=""
+                  fill
+                  sizes="96px"
+                  className="object-contain"
+                />
+              </span>
               <p className={cn("text-lg font-bold", selectedMethod.color)}>
                 {method === "bkash" ? "bKash" : method === "nagad" ? "Nagad" : "Card"}
               </p>
@@ -328,7 +400,7 @@ export function PaymentConfirmationDialog({
                 <Button
                   variant="ghost"
                   onClick={() => {
-                    setStep("method-and-number");
+                    setStep("details");
                     setPin("");
                     setError("");
                   }}

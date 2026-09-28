@@ -1,7 +1,7 @@
 /**
  * Seed dataset for the mock API. Realistic and interconnected so every portal
  * looks populated in demos. Setting: **Cumilla District, Bangladesh** — dag/khatian
- * numbers, upazila/mouza hierarchy, BDT values, Faraiz/Hindu inheritance context.
+ * numbers, upazila/mouza hierarchy, BDT values, and Faraiz inheritance context.
  *
  * These arrays are mutable: the MSW handlers push/patch them so writes persist
  * for the lifetime of the browser session.

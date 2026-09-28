@@ -999,7 +999,7 @@ export function useRecordHearingSession(id: string) {
 // --- Inheritance -----------------------------------------------------------
 export function useCalculateInheritance() {
   return useMutation({
-    mutationFn: (input: InheritanceInput) =>
+    mutationFn: (input: Omit<InheritanceInput, "method"> & { method: "faraiz"; parcelIds: string[] }) =>
       api.post<InheritanceResult>("/inheritance/calculate", input),
   });
 }

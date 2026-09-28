@@ -77,7 +77,6 @@ export const NAV: Record<Role, PortalNav> = {
         href: "/land-officer-responsibilities",
         icon: LayoutGrid,
       },
-      { labelKey: "grievances", href: "/grievances", icon: MessageCircleWarning },
       { labelKey: "communityBuild", href: "/community", icon: Users },
     ],
   },
