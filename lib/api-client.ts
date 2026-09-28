@@ -1,4 +1,5 @@
 import { getAccessToken, useSessionStore } from "@/store/session";
+import { isApiMockingEnabled } from "@/lib/api-mode";
 
 /**
  * The single choke point for all data fetching. It uses the same-origin /api
@@ -14,10 +15,7 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
  * frontend dev command usable. `demo.sh` sets `disabled`, so its Postgres-backed
  * workflow never silently falls back to fixtures.
  */
-export const API_MOCKING =
-  process.env.NEXT_PUBLIC_API_MOCKING === "enabled" ||
-  (process.env.NODE_ENV === "development" &&
-    process.env.NEXT_PUBLIC_API_MOCKING !== "disabled");
+export const API_MOCKING = isApiMockingEnabled();
 
 export class ApiError extends Error {
   constructor(

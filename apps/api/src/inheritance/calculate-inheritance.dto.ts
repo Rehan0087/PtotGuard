@@ -1,8 +1,17 @@
-import { IsArray, IsIn, IsInt, IsOptional, Min, ValidateNested } from "class-validator";
+import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsString,
+  Min,
+  ValidateNested,
+} from "class-validator";
 import { Type } from "class-transformer";
 import type { HeirRelation, SuccessionMethod } from "@plotguard/rules";
 
-const METHODS = ["faraiz", "hindu"] as const;
+const METHODS = ["faraiz"] as const;
 const RELATIONS = ["husband", "wife", "son", "daughter", "father", "mother"] as const;
 
 class HeirDto {
@@ -18,11 +27,12 @@ export class CalculateInheritanceDto {
   @IsIn(METHODS)
   method!: SuccessionMethod;
 
-  /** Optional, so shares can be shown as amounts and not only fractions. */
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  estateValue?: number;
+  /** The API derives value from these owned database records. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  parcelIds!: string[];
 
   @IsArray()
   @ValidateNested({ each: true })

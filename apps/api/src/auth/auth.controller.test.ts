@@ -12,8 +12,8 @@ const passwordHash =
 
 const fieldAgent = {
   id: "usr-agent",
-  name: "Abdul Karim",
-  email: "agent@plotguard.bd",
+  name: "Jahangir Alam",
+  email: "j.alam@minland.gov.bd",
   phone: null,
   role: "field-agent",
   jurisdictionId: "j-rajamehar",
@@ -47,6 +47,28 @@ const settlementOfficer = {
   title: "Settlement Officer (Retd. Judge)",
 };
 
+const citizen = {
+  ...fieldAgent,
+  id: "usr-ayesha",
+  name: "Ayesha Siddika",
+  email: "ayesha.siddika@example.bd",
+  role: "citizen",
+  jurisdictionId: "j-rajamehar",
+  title: null,
+};
+
+const administrator = {
+  ...fieldAgent,
+  id: "usr-admin",
+  name: "Registry Administrator",
+  email: "admin@plotguard.gov.bd",
+  role: "admin",
+  jurisdictionId: "j-cumilla",
+  title: "Registry Administrator",
+};
+
+const portalAccounts = [citizen, landOfficer, fieldAgent, settlementOfficer, administrator];
+
 let prismaFixture: Record<string, unknown>;
 let lastUserUpdate: Record<string, unknown> | undefined;
 
@@ -68,11 +90,11 @@ describe("AuthController", () => {
           if (where.email === "used@plotguard.bd") {
             return { ...fieldAgent, id: "usr-other", email: where.email };
           }
-          if (where.email === landOfficer.email || where.id === landOfficer.id) return landOfficer;
-          if (where.email === settlementOfficer.email || where.id === settlementOfficer.id) {
-            return settlementOfficer;
-          }
-          return where.email === fieldAgent.email || where.id === fieldAgent.id ? fieldAgent : null;
+          return (
+            portalAccounts.find(
+              (account) => account.email === where.email || account.id === where.id,
+            ) ?? null
+          );
         },
         update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
           if (data.email === "race@plotguard.bd") {
@@ -133,6 +155,18 @@ describe("AuthController", () => {
     });
     expect(response.body.user.passwordHash).toBeUndefined();
     expect(response.body.tokens.accessToken).toEqual(expect.any(String));
+  });
+
+  it("authenticates the documented demo password in every portal", async () => {
+    for (const account of portalAccounts) {
+      const response = await request(app.getHttpServer())
+        .post("/auth/login")
+        .send({ email: account.email, password: "demo1234" })
+        .expect(200);
+
+      expect(response.body.user).toMatchObject({ id: account.id, role: account.role });
+      expect(response.body.user.passwordHash).toBeUndefined();
+    }
   });
 
   it("rejects an incorrect password", async () => {

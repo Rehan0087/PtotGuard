@@ -1453,12 +1453,28 @@ export const en = {
     inheritance: {
       title: "Inheritance calculator",
       description:
-        "Estimate succession shares under Faraiz (Islamic) or Hindu law, then start an inheritance mutation.",
+        "Select one or more of your registered plots and estimate their succession shares under Faraiz (Islamic) law.",
+      selectLandTitle: "Select land for this calculation",
+      selectLandDescription:
+        "Choose a particular plot, several plots, or all of your land. Values come from the registered land records.",
+      selectAll: "Select all",
+      clearSelection: "Clear",
+      selectedLand: (count: number) => `${n(count)} ${count === 1 ? "plot" : "plots"} selected`,
+      continueToHeirs: "Continue to heirs",
+      selectedEstate: "Selected estate",
+      changeLand: "Change land",
+      marketValue: "Recorded market value",
+      dag: "Dag",
+      khatian: "Khatian",
+      noLandTitle: "No registered land found",
+      noLandDescription:
+        "Land registered to your citizen account will appear here when it is available.",
       successionLaw: "Succession law",
       estateValue: "Estate value",
       currencySymbol: "৳",
       survivingHeirs: "Surviving heirs",
       calculate: "Calculate shares",
+      calculateFailed: "The inheritance calculation could not be completed. Please try again.",
       distribution: "Distribution",
       emptyResult: "Add heirs and calculate to see the distribution.",
       decrease: (label: string) => `Decrease ${label}`,
@@ -2605,10 +2621,10 @@ export const en = {
           id: "faraiz",
           title: "Inheritance calculator (Faraiz)",
           summary:
-            "Estimate how an estate is shared among heirs under Faraiz (Islamic) or Hindu succession law, before starting an inheritance mutation.",
+            "Estimate how selected registered land is shared among heirs under Faraiz (Islamic) law before starting an inheritance mutation.",
           steps: [
-            "Open the Inheritance calculator and choose the succession law.",
-            "Enter the estate value and add each surviving heir with their relationship to the deceased.",
+            "Open the Inheritance calculator and select one, several or all of your registered plots.",
+            "Add each surviving heir and their number. The available spouse follows the citizen profile.",
             "Read each heir's share as a fraction and as an amount.",
             "When the heirs agree, file an inheritance mutation from Mutations to record the new owners.",
           ],

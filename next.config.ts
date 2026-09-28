@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { isApiMockingEnabled } from "./lib/api-mode";
 
 const nextConfig: NextConfig = {
   // @plotguard/rules ships TypeScript source rather than a build artifact, so
@@ -6,7 +7,7 @@ const nextConfig: NextConfig = {
   // a stale dist. Next has to be told to run it through its own pipeline.
   transpilePackages: ["@plotguard/rules"],
   async rewrites() {
-    return process.env.NEXT_PUBLIC_API_MOCKING === "enabled"
+    return isApiMockingEnabled()
       ? []
       : [
           {

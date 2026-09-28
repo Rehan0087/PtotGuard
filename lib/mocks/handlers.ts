@@ -4,7 +4,7 @@
  * config change (see lib/api-client.ts), not a rewrite. Paths after the /api base
  * mirror the frozen spec. Writes mutate the in-memory arrays for the session.
  */
-import { http, HttpResponse, delay } from "msw";
+import { http, HttpResponse, delay, passthrough } from "msw";
 import type {
   Dispute,
   DisputeStatus,
@@ -72,7 +72,6 @@ import {
 } from "@plotguard/rules";
 import * as db from "./data";
 import { appendAudit, getAuditChain, verifyAuditChain } from "./audit-chain";
-import { DEMO_PASSWORD } from "../demo-accounts";
 import { hydrateMutationState } from "./mutation-store";
 import { hydrateProfileState, persistProfileState } from "./profile-store";
 import { applyMockProfileUpdate, MockProfileUpdateError } from "../field-profile";
@@ -620,27 +619,11 @@ const APPLICATION_PREFIX: Record<string, string> = {
 
 export const handlers = [
   // Auth -------------------------------------------------------------------
-  http.post(`${API}/auth/login`, async ({ request }) => {
-    await latency();
-    const body = (await request.json()) as { email?: string; password?: string };
-    const normalizedEmail = body.email?.trim().toLowerCase();
-    const user = db.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
-    // Mirrors auth.controller.ts: suspended refuses, an invitation is taken
-    // up by using it. The password itself stays the fixture one here — the
-    // mock has never checked a real hash.
-    if (!user || user.status === "suspended" || body.password !== DEMO_PASSWORD) {
-      return unauthorized("Invalid email or password");
-    }
-    if (user.status === "invited") user.status = "active";
-    return HttpResponse.json({
-      user,
-      tokens: {
-        accessToken: `mock.${user.id}.access`,
-        refreshToken: `mock.${user.id}.refresh`,
-        expiresIn: 3600,
-      },
-    });
-  }),
+  // Login always crosses the browser/server boundary. In local mode Next's
+  // route authenticates fixture users; in persistent mode that route forwards
+  // to Nest. Keeping this request out of the service worker catches broken
+  // frontend/backend wiring in ordinary development instead of hiding it.
+  http.post(`${API}/auth/login`, () => passthrough()),
 
   http.post(`${API}/auth/refresh`, async ({ request }) => {
     const body = (await request.json()) as { refreshToken?: string };
@@ -4476,8 +4459,37 @@ export const handlers = [
   // Inheritance ------------------------------------------------------------
   http.post(`${API}/inheritance/calculate`, async ({ request }) => {
     await latency();
-    const input = (await request.json()) as Parameters<typeof calcInheritance>[0];
-    return HttpResponse.json(calcInheritance(input));
+    const input = (await request.json()) as Parameters<typeof calcInheritance>[0] & {
+      parcelIds?: string[];
+    };
+    if (input.method !== "faraiz") {
+      return badRequest("Only Faraiz inheritance calculations are supported");
+    }
+    const me = currentUser(request);
+    const parcelIds = Array.isArray(input.parcelIds) ? [...new Set(input.parcelIds)] : [];
+    if (parcelIds.length === 0) return badRequest("Select at least one parcel");
+    const selected = db.parcels.filter(
+      (parcel) => parcelIds.includes(parcel.id) && parcel.ownerId === me.id,
+    );
+    if (selected.length !== parcelIds.length) {
+      return forbidden("Every selected parcel must belong to the signed-in citizen");
+    }
+    const gender = me.profileDetails?.gender?.toLowerCase();
+    if (gender === "female" && input.heirs.some((heir) => heir.relation === "wife")) {
+      return badRequest("A female citizen can select a husband, not a wife");
+    }
+    if (gender === "male" && input.heirs.some((heir) => heir.relation === "husband")) {
+      return badRequest("A male citizen can select a wife, not a husband");
+    }
+    const estateValue = selected.reduce(
+      (sum, parcel) => sum + (parcel.marketValue?.amount ?? 0),
+      0,
+    );
+    return HttpResponse.json(calcInheritance({
+      method: input.method,
+      heirs: input.heirs,
+      estateValue,
+    }));
   }),
 
   // Audit ------------------------------------------------------------------
