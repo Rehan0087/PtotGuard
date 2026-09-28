@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload, FileText, X, Loader2, MapPin } from "lucide-react";
+import { Upload, FileText, X, Loader2, MapPin, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -56,17 +56,17 @@ export function UploadDocumentDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [docType, setDocType] = useState<DocumentType>("title-deed");
-  const [parcelId, setParcelId] = useState<string>("none");
+  const [parcelId, setParcelId] = useState<string>("");
   const [dragging, setDragging] = useState(false);
 
   const upload = useUploadDocument();
-  const { data: parcelsData } = useParcels({ owner: "me", pageSize: 100 });
+  const { data: parcelsData, isLoading: parcelsLoading } = useParcels({ owner: "me", pageSize: 100 });
   const parcels = parcelsData?.items ?? [];
 
   function reset() {
     setFile(null);
     setDocType("title-deed");
-    setParcelId("none");
+    setParcelId("");
     setDragging(false);
   }
 
@@ -80,14 +80,14 @@ export function UploadDocumentDialog({
   }
 
   function onSubmit() {
-    if (!file) return;
+    if (!file || !parcelId) return;
     upload.mutate(
       {
         fileName: file.name,
         mimeType: file.type || "application/pdf",
         sizeBytes: file.size,
         type: docType,
-        ...(parcelId !== "none" ? { parcelId } : {}),
+        parcelId,
       },
       {
         onSuccess: (doc) => {
@@ -102,6 +102,8 @@ export function UploadDocumentDialog({
       },
     );
   }
+
+  const canSubmit = Boolean(file) && Boolean(parcelId) && !upload.isPending;
 
   return (
     <Dialog
@@ -175,6 +177,48 @@ export function UploadDocumentDialog({
             onChange={(e) => accept(e.target.files?.[0])}
           />
 
+          {/* Which plot is this for? — required */}
+          <div>
+            <span className="mb-1.5 block text-sm font-medium text-foreground">
+              {t.pages.upload.linkParcel}
+            </span>
+            {!parcelsLoading && parcels.length === 0 ? (
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
+                <AlertCircle className="size-4 shrink-0" />
+                {t.pages.upload.noPlots}
+              </div>
+            ) : (
+              <Select
+                value={parcelId}
+                onValueChange={(v) => setParcelId(v ?? "")}
+                disabled={parcelsLoading}
+              >
+                <SelectTrigger
+                  className={cn(
+                    "w-full",
+                    !parcelId && "text-muted-foreground",
+                  )}
+                >
+                  <SelectValue placeholder={t.pages.upload.selectParcel}>
+                    {(v: string) => {
+                      if (!v) return t.pages.upload.selectParcel;
+                      const p = parcels.find((x) => x.id === v);
+                      return p ? `${p.dagNo} · ${p.title}` : t.pages.upload.selectParcel;
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {parcels.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <MapPin className="size-3.5 opacity-60" />
+                      {p.dagNo} · {p.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
           {/* Document type */}
           <div>
             <span className="mb-1.5 block text-sm font-medium text-foreground">
@@ -201,44 +245,13 @@ export function UploadDocumentDialog({
               </SelectContent>
             </Select>
           </div>
-
-          {/* Optional parcel link */}
-          <div>
-            <span className="mb-1.5 block text-sm font-medium text-foreground">
-              {t.pages.upload.linkParcel}{" "}
-              <span className="text-muted-foreground">({t.common.optional})</span>
-            </span>
-            <Select value={parcelId} onValueChange={(v) => setParcelId(v as string)}>
-              <SelectTrigger className="w-full">
-                <SelectValue>
-                  {(v: string) =>
-                    v === "none"
-                      ? t.pages.upload.notLinked
-                      : (() => {
-                          const p = parcels.find((x) => x.id === v);
-                          return p ? `${p.dagNo} · ${p.title}` : t.pages.upload.notLinked;
-                        })()
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t.pages.upload.notLinked}</SelectItem>
-                {parcels.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    <MapPin className="size-3.5 opacity-60" />
-                    {p.dagNo} · {p.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={upload.isPending}>
             {t.common.cancel}
           </Button>
-          <Button onClick={onSubmit} disabled={!file || upload.isPending}>
+          <Button onClick={onSubmit} disabled={!canSubmit}>
             {upload.isPending ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
             {t.pages.upload.upload}
           </Button>
