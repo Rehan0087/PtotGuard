@@ -10,9 +10,8 @@
  * or password" — the app is unusable against the real backend even though
  * the sign-in screen prints the password on the page.
  *
- * This is the narrow repair for that. It fills in the hash only where one is
- * missing, so it never overwrites a password someone set deliberately, and
- * it is safe to run as often as you like.
+ * These are explicit demo identities, so this repair keeps their documented
+ * shared password deterministic and is safe to run as often as needed.
  */
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
@@ -24,20 +23,25 @@ const prisma = new PrismaClient({
 });
 
 async function main(): Promise<void> {
-  // Suspended and invited accounts are skipped on purpose: login refuses them
-  // by status, so a password would not make them usable, and writing one
-  // would quietly undo an admin's suspension the day the status changed back.
+  const demoEmails = [
+    "ayesha.siddika@example.bd",
+    "demo2@example.bd",
+    "demo3@example.bd",
+    "demo4@example.bd",
+    "demo5@example.bd",
+    "n.akter@minland.gov.bd",
+    "a.mannan@minland.gov.bd",
+    "j.alam@minland.gov.bd",
+    "r.karim@minland.gov.bd",
+    "s.khatun@landtribunal.gov.bd",
+    "a.begum@landtribunal.gov.bd",
+    "admin@plotguard.gov.bd",
+  ];
   const { count } = await prisma.user.updateMany({
-    where: { status: "active", passwordHash: null },
+    where: { status: "active", email: { in: demoEmails } },
     data: { passwordHash: DEMO_PASSWORD_HASH },
   });
-  const active = await prisma.user.count({ where: { status: "active" } });
-
-  console.log(
-    count === 0
-      ? `Nothing to do — all ${active} active accounts already have a password.`
-      : `Set the demo password on ${count} of ${active} active accounts.`,
-  );
+  console.log(`Set the documented demo password on ${count} active demo accounts.`);
 }
 
 main()

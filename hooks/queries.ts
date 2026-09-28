@@ -177,7 +177,15 @@ export interface FileDisputeInput {
   type: Dispute["type"];
   priority: Dispute["priority"];
   description: string;
-  respondentName?: string;
+  respondentId: string;
+}
+
+/** Active citizens available as the mandatory other party on a dispute. */
+export function useCitizenDirectory() {
+  return useQuery({
+    queryKey: ["citizen-directory"],
+    queryFn: () => api.get<{ id: string; name: string }[]>("/users/citizens"),
+  });
 }
 
 function invalidateRecordViews(qc: QueryClient) {
@@ -217,6 +225,10 @@ export function useAssignDisputeAgent(id: string) {
       api.post<Dispute>(`/disputes/${id}/assign-agent`, { agentId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dispute", id] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

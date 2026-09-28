@@ -14,6 +14,7 @@ import {
 import type { Request } from "express";
 import {
   hearingTransition,
+  HEARING_LOCATION,
   isHearingOpen,
   rulingGate,
   type DisputeParty,
@@ -121,6 +122,7 @@ export class HearingsController {
           status: "scheduled",
           parties: parties as never,
           hearingDate,
+          location: HEARING_LOCATION,
           sessions: [],
         },
       });
@@ -141,6 +143,7 @@ export class HearingsController {
           assignedMediatorId: mediatorId,
           status: "hearing-scheduled",
           hearingDate,
+          hearingLocation: HEARING_LOCATION,
           updatedAt: now,
         },
       });
@@ -171,7 +174,7 @@ export class HearingsController {
             at: now,
             severity: "info",
             title: "Hearing scheduled",
-            body: `Case ${dispute.caseNumber} has been listed for a hearing by the Settlement Office. You will be notified of the hearing date.`,
+            body: `Case ${dispute.caseNumber} has been listed for a hearing at ${HEARING_LOCATION}.`,
             content: { code: "hearing-scheduled", caseNumber: dispute.caseNumber },
             read: false,
             href: `/disputes/${dispute.id}`,
@@ -508,7 +511,7 @@ export class HearingsController {
       if (dispute) {
         await tx.dispute.update({
           where: { id: dispute.id },
-          data: { hearingDate, updatedAt: now },
+          data: { hearingDate, hearingLocation: HEARING_LOCATION, updatedAt: now },
         });
         await tx.disputeEvent.create({
           data: {

@@ -34,8 +34,10 @@ import {
   disputeTransition,
   executionGate,
   hearingTransition,
+  HEARING_LOCATION,
   isHearingOpen,
   passwordResetGate,
+  PURPOSE_FOR_DISPUTE,
   roleChangeGate,
   extractionReview,
   filingReview,
@@ -2105,21 +2107,31 @@ export const handlers = [
   http.patch(`${API}/lease-settlement/:id/pay-lease`, async ({ request, params }) => {
     await latency();
     const { id } = params;
-    const body = (await request.json()) as { transactionId: string };
+    const body = (await request.json()) as { paymentMethod?: string };
     const denied = requireRole(request, "citizen");
     if (denied) return denied;
     const application = db.serviceApplications.find((a) => a.id === id);
     if (!application || application.applicantId !== currentUser(request).id) {
       return notFound("Application not found");
     }
+    if (application.serviceType !== "lease-settlement") return badRequest("Invalid application type");
+    if (application.status !== "approved") return conflict("Lease must be approved before payment");
+    if (!body.paymentMethod || !["bkash", "nagad", "card"].includes(body.paymentMethod)) {
+      return badRequest("A valid payment method is required");
+    }
+    if (application.details.leaseFeePaidAt) return conflict("Lease fee already paid");
 
     const now = new Date();
     application.details.leaseFeePaidAt = now.toISOString();
+    application.details.leaseFeePaymentMethod = body.paymentMethod;
     
     // Set expiry to 1 year from now
     now.setFullYear(now.getFullYear() + 1);
     application.details.leaseExpiresAt = now.toISOString();
     application.updatedAt = new Date().toISOString();
+
+    const plot = db.khasLandPlots.find((candidate) => candidate.id === application.khasPlotId);
+    if (plot) plot.status = "leased";
 
     return HttpResponse.json(application);
   }),
@@ -2353,7 +2365,7 @@ export const handlers = [
     const { hearingAt } = (await request.json()) as { hearingAt: string };
     const now = new Date().toISOString();
     application.status = "hearing-scheduled";
-    application.details = { ...application.details, hearingAt };
+    application.details = { ...application.details, hearingAt, hearingLocation: HEARING_LOCATION };
     application.updatedAt = now;
 
     const me = currentUser(request);
@@ -2363,7 +2375,12 @@ export const handlers = [
       action: "status-change",
       actorId: me.id,
       actorName: me.name,
-      payload: { applicationNo: application.applicationNo, status: application.status, hearingAt },
+      payload: {
+        applicationNo: application.applicationNo,
+        status: application.status,
+        hearingAt,
+        hearingLocation: HEARING_LOCATION,
+      },
     });
     db.serviceApplicationEvents.push({
       id: `sae-${Date.now()}`,
@@ -2379,7 +2396,7 @@ export const handlers = [
       at: now,
       severity: "info",
       title: "Revenue case hearing scheduled",
-      body: `A hearing was scheduled for ${application.applicationNo}.`,
+      body: `A hearing was scheduled for ${application.applicationNo} at ${HEARING_LOCATION}.`,
       read: false,
       href: "/revenue-cases",
     });
@@ -3127,11 +3144,28 @@ export const handlers = [
       (u) => u.id === agentId && u.role === "field-agent" && u.status === "active",
     );
     if (!agent) return notFound("Field agent not found");
+    if (db.fieldReports.some((report) => report.disputeId === dispute.id && report.status !== "cancelled")) {
+      return conflict("This dispute already has an active field visit.");
+    }
 
     const me = currentUser(request);
     const now = new Date().toISOString();
     dispute.assignedAgentId = agent.id;
     dispute.updatedAt = now;
+    const report = {
+      id: `fr-${Date.now()}`,
+      parcelId: dispute.parcelId,
+      parcelDagNo: dispute.parcelDagNo,
+      disputeId: dispute.id,
+      purpose: PURPOSE_FOR_DISPUTE[dispute.type],
+      status: "assigned" as const,
+      assignedAgentId: agent.id,
+      assignedAt: now,
+      scheduledFor: now,
+      gpsCaptures: [],
+      photos: [],
+    };
+    db.fieldReports.unshift(report);
 
     db.disputeEvents.push({
       id: `de-${Date.now()}`,
@@ -3152,7 +3186,7 @@ export const handlers = [
       title: "Field visit assigned",
       body: `You have been assigned to verify dispute ${dispute.caseNumber}.`,
       read: false,
-      href: `/disputes/${dispute.id}`,
+      href: `/field/${report.id}`,
     });
 
     return HttpResponse.json(dispute);
@@ -3318,16 +3352,25 @@ export const handlers = [
       type: string;
       priority: string;
       description: string;
-      respondentName: string;
+      respondentId: string;
     }>;
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
     if (!parcel || parcel.ownerId !== me.id) return notFound("Parcel not found");
+    const respondent = db.users.find(
+      (user) =>
+        user.id === body.respondentId &&
+        user.id !== me.id &&
+        user.role === "citizen" &&
+        user.status === "active",
+    );
+    if (!respondent) return notFound("Other party not found");
 
     const seq = 1000 + db.disputes.length;
     const now = new Date().toISOString();
-    const parties = [{ name: me.name, role: "claimant" as const, userId: me.id }];
-    if (body.respondentName?.trim())
-      parties.push({ name: body.respondentName.trim(), role: "respondent" as never, userId: undefined as never });
+    const parties = [
+      { name: me.name, role: "claimant" as const, userId: me.id },
+      { name: respondent.name, role: "respondent" as const, userId: respondent.id },
+    ];
 
     const officer = routeDisputeToOfficer(
       parcel.jurisdictionId,
@@ -3404,7 +3447,7 @@ export const handlers = [
       plots = plots.filter(p => p.landUse === landUse);
     }
 
-    return HttpResponse.json<Paginated<any>>({
+    return HttpResponse.json({
       items: plots,
       total: plots.length,
       page: 1,
@@ -3693,7 +3736,7 @@ export const handlers = [
         const dispute = report.disputeId
       ? db.disputes.find((candidate) => candidate.id === report.disputeId)
       : undefined;
-        if (dispute && dispute.status === "under-land-office-review") {
+        if (dispute && ["under-land-office-review", "under-review", "field-visit-scheduled"].includes(dispute.status)) {
       dispute.status = "field-verified";
       dispute.updatedAt = now;
       db.disputeEvents.push({
@@ -3707,6 +3750,19 @@ export const handlers = [
         actorId: me.id,
         actorName: me.name,
       });
+      if (dispute.assignedOfficerId && dispute.assignedOfficerId !== me.id) {
+        db.notifications.unshift({
+          id: `n-${Date.now()}-${dispute.assignedOfficerId}`,
+          userId: dispute.assignedOfficerId,
+          at: now,
+          severity: "info",
+          title: "Field verification complete",
+          body: `Case ${dispute.caseNumber} is field verification complete and ready to hand over to the Settlement Office.`,
+          content: { code: "dispute-status", caseNumber: dispute.caseNumber, status: "field-verified" },
+          read: false,
+          href: `/disputes/${dispute.id}`,
+        });
+      }
         }
 
         if (report.mutationId) {
@@ -4185,6 +4241,7 @@ export const handlers = [
     const dispute = db.disputes.find((d) => d.id === hearing.disputeId);
     if (dispute) {
       dispute.hearingDate = hearing.hearingDate;
+        dispute.hearingLocation = HEARING_LOCATION;
       dispute.updatedAt = now;
       db.disputeEvents.push({
         id: `de-${Date.now()}`,
@@ -4366,6 +4423,7 @@ export const handlers = [
       status: "scheduled" as const,
       parties: dispute.parties.map((p) => p.name),
       hearingDate: body.hearingDate,
+      location: HEARING_LOCATION,
       sessions: [],
     };
     db.hearings.unshift(hearing);
@@ -4385,6 +4443,7 @@ export const handlers = [
     dispute.assignedMediatorId = me.id;
     dispute.status = "hearing-scheduled";
     dispute.hearingDate = hearing.hearingDate;
+    dispute.hearingLocation = HEARING_LOCATION;
     dispute.updatedAt = now;
     db.disputeEvents.push({
       id: `de-${Date.now()}`,
@@ -4610,7 +4669,122 @@ export const handlers = [
     return HttpResponse.json({ ok: true });
   }),
 
+  // Community ---------------------------------------------------------------
+  // Keep this in lockstep with CommunityController so the default standalone
+  // frontend and the persistent API exercise the same request/response flow.
+  http.get(`${API}/community/posts`, async ({ request }) => {
+    await latency();
+    if (!authenticatedUser(request)) return unauthorized();
+    return HttpResponse.json(
+      [...db.communityPosts]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((post) => {
+          const comments = db.communityComments.filter((comment) => comment.postId === post.id);
+          return { ...post, comments, _count: { comments: comments.length, votes: post.votes.length } };
+        }),
+    );
+  }),
 
+  http.get(`${API}/community/posts/:id`, async ({ params, request }) => {
+    await latency();
+    if (!authenticatedUser(request)) return unauthorized();
+    const post = db.communityPosts.find((candidate) => candidate.id === params.id);
+    if (!post) return notFound("Post not found");
+    const comments = db.communityComments.filter((comment) => comment.postId === post.id);
+    return HttpResponse.json({
+      ...post,
+      comments,
+      _count: { comments: comments.length, votes: post.votes.length },
+    });
+  }),
+
+  http.post(`${API}/community/posts`, async ({ request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const body = (await request.json()) as Partial<{ title: string; content: string }>;
+    if (!body.title?.trim() || !body.content?.trim()) return badRequest("Title and content are required");
+    const now = new Date().toISOString();
+    const post = {
+      id: `cp-${crypto.randomUUID()}`,
+      title: body.title.trim(),
+      content: body.content.trim(),
+      authorId: me.id,
+      author: { id: me.id, name: me.name, avatarUrl: me.avatarUrl ?? null },
+      createdAt: now,
+      updatedAt: now,
+      _count: { comments: 0, votes: 0 },
+      votes: [],
+    } satisfies (typeof db.communityPosts)[number];
+    db.communityPosts.unshift(post);
+    return HttpResponse.json(post, { status: 201 });
+  }),
+
+  http.post(`${API}/community/posts/:id/comments`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const post = db.communityPosts.find((candidate) => candidate.id === params.id);
+    if (!post) return notFound("Post not found");
+    const body = (await request.json()) as Partial<{ content: string; parentId: string }>;
+    if (!body.content?.trim()) return badRequest("Comment content is required");
+    const parent = body.parentId
+      ? db.communityComments.find((comment) => comment.id === body.parentId && comment.postId === post.id)
+      : undefined;
+    if (body.parentId && !parent) return notFound("Parent comment not found");
+    const now = new Date().toISOString();
+    const comment = {
+      id: `cc-${crypto.randomUUID()}`,
+      postId: post.id,
+      content: body.content.trim(),
+      authorId: me.id,
+      author: { id: me.id, name: me.name, avatarUrl: me.avatarUrl ?? null },
+      createdAt: now,
+      updatedAt: now,
+      parentId: parent?.id ?? null,
+      votes: [],
+    } satisfies (typeof db.communityComments)[number];
+    db.communityComments.push(comment);
+    return HttpResponse.json(comment, { status: 201 });
+  }),
+
+  http.post(`${API}/community/posts/:id/vote`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const post = db.communityPosts.find((candidate) => candidate.id === params.id);
+    if (!post) return notFound("Post not found");
+    const body = (await request.json()) as { value?: number };
+    if (![-1, 0, 1].includes(body.value ?? 2)) return badRequest("Vote value must be -1, 0, or 1");
+    const index = post.votes.findIndex((vote) => vote.userId === me.id);
+    if (body.value === 0) {
+      if (index >= 0) post.votes.splice(index, 1);
+      return HttpResponse.json({ value: 0 });
+    }
+    const vote = { id: index >= 0 ? post.votes[index].id : `cv-${crypto.randomUUID()}`, value: body.value as -1 | 1, userId: me.id, postId: post.id, commentId: null, createdAt: new Date().toISOString() };
+    if (index >= 0) post.votes[index] = vote;
+    else post.votes.push(vote);
+    return HttpResponse.json(vote);
+  }),
+
+  http.post(`${API}/community/comments/:id/vote`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const comment = db.communityComments.find((candidate) => candidate.id === params.id);
+    if (!comment) return notFound("Comment not found");
+    const body = (await request.json()) as { value?: number };
+    if (![-1, 0, 1].includes(body.value ?? 2)) return badRequest("Vote value must be -1, 0, or 1");
+    const index = comment.votes.findIndex((vote) => vote.userId === me.id);
+    if (body.value === 0) {
+      if (index >= 0) comment.votes.splice(index, 1);
+      return HttpResponse.json({ value: 0 });
+    }
+    const vote = { id: index >= 0 ? comment.votes[index].id : `cv-${crypto.randomUUID()}`, value: body.value as -1 | 1, userId: me.id, postId: null, commentId: comment.id, createdAt: new Date().toISOString() };
+    if (index >= 0) comment.votes[index] = vote;
+    else comment.votes.push(vote);
+    return HttpResponse.json(vote);
+  }),
 
   // Complaints & grievances ------------------------------------------------
   // Mirrors GrievancesController. Every citizen complaint routes directly to
@@ -4793,6 +4967,19 @@ export const handlers = [
 
   // Admin ------------------------------------------------------------------
   /** Mirrors UsersController.search() — the mutation wizard's recipient picker. */
+  http.get(`${API}/users/citizens`, async ({ request }) => {
+    await latency();
+    const denied = requireRole(request, "citizen");
+    if (denied) return denied;
+    const me = currentUser(request);
+    return HttpResponse.json(
+      db.users
+        .filter((user) => user.role === "citizen" && user.status === "active" && user.id !== me.id)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(({ id, name }) => ({ id, name })),
+    );
+  }),
+
   http.get(`${API}/users/search`, async ({ request }) => {
     await latency();
     const url = new URL(request.url);

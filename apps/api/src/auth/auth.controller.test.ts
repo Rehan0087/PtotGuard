@@ -36,6 +36,17 @@ const landOfficer = {
   title: "Sub-Registrar",
 };
 
+const settlementOfficer = {
+  ...fieldAgent,
+  id: "usr-mediator",
+  name: "Shahida Khatun",
+  email: "s.khatun@landtribunal.gov.bd",
+  role: "mediator",
+  jurisdictionId: "j-cumilla",
+  profileDetails: null,
+  title: "Settlement Officer (Retd. Judge)",
+};
+
 let prismaFixture: Record<string, unknown>;
 let lastUserUpdate: Record<string, unknown> | undefined;
 
@@ -58,6 +69,9 @@ describe("AuthController", () => {
             return { ...fieldAgent, id: "usr-other", email: where.email };
           }
           if (where.email === landOfficer.email || where.id === landOfficer.id) return landOfficer;
+          if (where.email === settlementOfficer.email || where.id === settlementOfficer.id) {
+            return settlementOfficer;
+          }
           return where.email === fieldAgent.email || where.id === fieldAgent.id ? fieldAgent : null;
         },
         update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
@@ -104,6 +118,21 @@ describe("AuthController", () => {
     expect(response.body.user.passwordHash).toBeUndefined();
     expect(response.body.tokens).toMatchObject({ expiresIn: 3600 });
     expect(response.body.tokens.accessToken.split(".")).toHaveLength(3);
+  });
+
+  it("authenticates the settlement officer and issues a mediator session", async () => {
+    const response = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ email: settlementOfficer.email, password: "demo1234" })
+      .expect(200);
+
+    expect(response.body.user).toMatchObject({
+      id: "usr-mediator",
+      role: "mediator",
+      title: "Settlement Officer (Retd. Judge)",
+    });
+    expect(response.body.user.passwordHash).toBeUndefined();
+    expect(response.body.tokens.accessToken).toEqual(expect.any(String));
   });
 
   it("rejects an incorrect password", async () => {

@@ -16,6 +16,7 @@ import {
   activeRestrictions,
   disputeTransition,
   executionGate,
+  PURPOSE_FOR_DISPUTE,
   registryStatusAfter,
   routeDisputeToOfficer,
   type Dispute,
@@ -31,7 +32,7 @@ import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import { NotFoundError, ValidationError } from "../common/domain-exceptions";
+import { ConflictError, NotFoundError, ValidationError } from "../common/domain-exceptions";
 import { pageParams, paginate } from "../common/pagination";
 import { currentUserId } from "../auth/dev-current-user";
 import { findParcelView } from "../parcels/parcel-view";
@@ -133,12 +134,21 @@ export class DisputesController {
     const parcel = await this.prisma.parcel.findUnique({ where: { id: body.parcelId } });
     if (!parcel || parcel.ownerId !== actorId) throw new NotFoundError("Parcel not found");
 
-    const [filer, officers, jurisdictions] = await Promise.all([
+    const [filer, respondent, officers, jurisdictions] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: actorId } }),
+      this.prisma.user.findUnique({ where: { id: body.respondentId } }),
       this.prisma.user.findMany({ where: { role: "land-office" } }),
       this.prisma.jurisdiction.findMany(),
     ]);
     if (!filer) throw new NotFoundError("User not found");
+    if (
+      !respondent ||
+      respondent.id === filer.id ||
+      respondent.role !== "citizen" ||
+      respondent.status !== "active"
+    ) {
+      throw new NotFoundError("Other party not found");
+    }
 
     const officer = routeDisputeToOfficer(
       parcel.jurisdictionId,
@@ -155,9 +165,7 @@ export class DisputesController {
 
       const parties: DisputeParty[] = [
         { name: filer.name, role: "claimant", userId: filer.id },
-        ...(body.respondentName?.trim()
-          ? [{ name: body.respondentName.trim(), role: "respondent" as const }]
-          : []),
+        { name: respondent.name, role: "respondent", userId: respondent.id },
       ];
 
       const created = await tx.dispute.create({
@@ -363,6 +371,10 @@ export class DisputesController {
     if (!agent || agent.role !== "field-agent" || agent.status !== "active") {
       throw new NotFoundError("Field agent not found");
     }
+    const existingReport = await this.prisma.fieldReport.findFirst({
+      where: { disputeId: id, status: { not: "cancelled" } },
+    });
+    if (existingReport) throw new ConflictError("This dispute already has an active field visit.");
 
     const actorId = currentUserId(req);
 
@@ -374,12 +386,40 @@ export class DisputesController {
         data: { assignedAgentId: agent.id, updatedAt: now },
       });
 
+      const fieldReport = await tx.fieldReport.create({
+        data: {
+          id: `fr-${randomUUID()}`,
+          parcelId: dispute.parcelId,
+          parcelDagNo: dispute.parcelDagNo,
+          disputeId: dispute.id,
+          purpose: PURPOSE_FOR_DISPUTE[dispute.type as Dispute["type"]],
+          status: "assigned",
+          assignedAgentId: agent.id,
+          assignedAt: now,
+          scheduledFor: now,
+          gpsCaptures: [],
+          photos: [],
+        },
+      });
+
       await this.audit.append(tx, {
         entityType: "dispute",
         entityId: id,
         action: "assign",
         actorId,
         payload: { caseNumber: dispute.caseNumber, agentId: agent.id, agentName: agent.name },
+      });
+
+      await this.audit.append(tx, {
+        entityType: "field-report",
+        entityId: fieldReport.id,
+        action: "assign",
+        actorId,
+        payload: {
+          disputeId: dispute.id,
+          caseNumber: dispute.caseNumber,
+          assignedAgentId: agent.id,
+        },
       });
 
       await tx.disputeEvent.create({
@@ -404,7 +444,7 @@ export class DisputesController {
           title: "Field visit assigned",
           body: `You have been assigned to verify dispute ${dispute.caseNumber}.`,
           read: false,
-          href: `/disputes/${id}`,
+          href: `/field/${fieldReport.id}`,
         },
       });
 

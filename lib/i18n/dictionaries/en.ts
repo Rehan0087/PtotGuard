@@ -237,7 +237,7 @@ export const en = {
     dispute: {
       submitted: "Submitted",
       "under-land-office-review": "Land Office review",
-      "field-verified": "Field verified",
+      "field-verified": "Field verification complete",
       "forwarded-to-settlement": "Forwarded to Settlement Office",
       "hearing-scheduled": "Hearing scheduled",
       decided: "Decided",
@@ -1679,7 +1679,7 @@ export const en = {
       descriptionPlaceholder:
         "Describe the issue — where on the plot, when it started, and what you're asking the office to do.",
       otherParty: "Other party",
-      otherPartyPlaceholder: "Name of the person or body you have the dispute with",
+      otherPartyPlaceholder: "Select the citizen you have the dispute with",
       reviewAndSubmit: "Review and submit",
       rowParcel: "Parcel",
       rowType: "Type",
@@ -1708,6 +1708,7 @@ export const en = {
       },
       errors: {
         parcelRequired: "Select the parcel this dispute is about.",
+        otherPartyRequired: "Select the other party to this dispute.",
         descriptionShort: "Please describe the issue in at least 20 characters.",
         descriptionLong: "Keep the description under 1000 characters.",
       },

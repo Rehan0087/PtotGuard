@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Param, Body, UseGuards, Req, Delete } from "@nestjs/common";
+import { Controller, Get, Post, Param, Body, UseGuards, Req } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AccessTokenGuard } from "../auth/access-token.guard";
 import { currentUserId } from "../auth/dev-current-user";
-import { Request } from "express";
+import type { Request } from "express";
 import { randomUUID } from "crypto";
 import { NotFoundError } from "../common/domain-exceptions";
 import { CreatePostDto, CreateCommentDto, VoteDto } from "./community.dto";
@@ -77,6 +77,15 @@ export class CommunityController {
     @Req() req: Request
   ) {
     const authorId = currentUserId(req);
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId }, select: { id: true } });
+    if (!post) throw new NotFoundError("Post not found");
+    if (body.parentId) {
+      const parent = await this.prisma.communityComment.findFirst({
+        where: { id: body.parentId, postId },
+        select: { id: true },
+      });
+      if (!parent) throw new NotFoundError("Parent comment not found");
+    }
     return this.prisma.communityComment.create({
       data: {
         id: `cc-${randomUUID()}`,
@@ -95,11 +104,8 @@ export class CommunityController {
   @Post("posts/:id/vote")
   async votePost(@Param("id") postId: string, @Body() body: VoteDto, @Req() req: Request) {
     const userId = currentUserId(req);
-    
-    // UPSERT doesn't easily work without unique constraint on userId+postId alone. 
-    // We have userId+postId+commentId unique. For post vote, commentId is null.
-    // However, Prisma doesn't support nulls in unique constraints well for upsert in all DBs.
-    // Let's do a findFirst and update/create.
+    const post = await this.prisma.communityPost.findUnique({ where: { id: postId }, select: { id: true } });
+    if (!post) throw new NotFoundError("Post not found");
     const existing = await this.prisma.communityVote.findFirst({
       where: { userId, postId, commentId: null }
     });
@@ -124,12 +130,14 @@ export class CommunityController {
         }
       });
     }
+    return { value: 0 };
   }
 
   @Post("comments/:id/vote")
   async voteComment(@Param("id") commentId: string, @Body() body: VoteDto, @Req() req: Request) {
     const userId = currentUserId(req);
-    
+    const comment = await this.prisma.communityComment.findUnique({ where: { id: commentId }, select: { id: true } });
+    if (!comment) throw new NotFoundError("Comment not found");
     const existing = await this.prisma.communityVote.findFirst({
       where: { userId, commentId, postId: null }
     });
@@ -154,5 +162,6 @@ export class CommunityController {
         }
       });
     }
+    return { value: 0 };
   }
 }
