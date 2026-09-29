@@ -21,6 +21,9 @@ import type {
   Role,
   ServiceApplication,
   User,
+  CommunityPost,
+  CommunityPostKind,
+  CommunityVoteValue,
 } from "@/lib/types";
 import { ROLES } from "@/lib/types";
 import {
@@ -110,6 +113,20 @@ function currentUser(request: Request): User {
   if (authenticated) return authenticated;
   const id = db.CURRENT_USER_BY_ROLE[getRole(request)];
   return db.users.find((u) => u.id === id)!;
+}
+
+function communityPostResponse(postId: string, viewerId: string): CommunityPost | undefined {
+  const post = db.communityPosts.find((candidate) => candidate.id === postId);
+  if (!post) return undefined;
+  const comments = db.communityComments.filter((comment) => comment.postId === postId);
+  const votes = db.communityVotes.filter((vote) => vote.postId === postId);
+  return {
+    ...post,
+    score: votes.reduce((sum, vote) => sum + vote.value, 0),
+    viewerVote: votes.find((vote) => vote.userId === viewerId)?.value ?? 0,
+    commentCount: comments.length,
+    comments,
+  };
 }
 
 function completeMockAcquisition(
@@ -4585,6 +4602,108 @@ export const handlers = [
     return HttpResponse.json(events);
   }),
 
+  // Community --------------------------------------------------------------
+  http.get(`${API}/community`, async ({ request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const posts = [...db.communityPosts].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "announcement" ? -1 : 1;
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+    return HttpResponse.json(
+      posts.map((post) => communityPostResponse(post.id, me.id)).filter(Boolean),
+    );
+  }),
+
+  http.post(`${API}/community`, async ({ request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const body = (await request.json()) as { title?: string; body?: string; kind?: CommunityPostKind };
+    const title = body.title?.trim() ?? "";
+    const message = body.body?.trim() ?? "";
+    const kind = body.kind ?? "discussion";
+    if (title.length < 4 || title.length > 140 || message.length < 8 || message.length > 5000) {
+      return badRequest("Community post is invalid");
+    }
+    if (kind === "announcement" && me.role !== "land-office") {
+      return HttpResponse.json(
+        { error: "forbidden", message: "Only the land office can publish announcements" },
+        { status: 403 },
+      );
+    }
+    const at = new Date().toISOString();
+    const post = {
+      id: `community-${crypto.randomUUID()}`,
+      authorId: me.id,
+      authorName: me.name,
+      authorRole: me.role,
+      title,
+      body: message,
+      kind,
+      createdAt: at,
+      updatedAt: at,
+    };
+    db.communityPosts.unshift(post);
+    if (kind === "announcement") {
+      for (const recipient of db.users.filter((user) => user.id !== me.id && user.status === "active")) {
+        db.notifications.unshift({
+          id: `n-${crypto.randomUUID()}`,
+          userId: recipient.id,
+          at,
+          severity: "info",
+          title: "New land-office announcement",
+          body: title,
+          content: { code: "community-announcement", postId: post.id, title },
+          read: false,
+          href: `/community#${post.id}`,
+        });
+      }
+    }
+    return HttpResponse.json(communityPostResponse(post.id, me.id), { status: 201 });
+  }),
+
+  http.post(`${API}/community/:id/comments`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const postId = String(params.id);
+    if (!db.communityPosts.some((post) => post.id === postId)) return notFound("Community post not found");
+    const body = (await request.json()) as { body?: string };
+    const message = body.body?.trim() ?? "";
+    if (!message || message.length > 2000) return badRequest("Comment is invalid");
+    db.communityComments.push({
+      id: `community-comment-${crypto.randomUUID()}`,
+      postId,
+      authorId: me.id,
+      authorName: me.name,
+      authorRole: me.role,
+      body: message,
+      createdAt: new Date().toISOString(),
+    });
+    return HttpResponse.json(communityPostResponse(postId, me.id), { status: 201 });
+  }),
+
+  http.post(`${API}/community/:id/vote`, async ({ params, request }) => {
+    await latency();
+    const me = authenticatedUser(request);
+    if (!me) return unauthorized();
+    const postId = String(params.id);
+    if (!db.communityPosts.some((post) => post.id === postId)) return notFound("Community post not found");
+    const body = (await request.json()) as { value?: CommunityVoteValue };
+    if (body.value !== 1 && body.value !== -1) return badRequest("Vote must be 1 or -1");
+    const index = db.communityVotes.findIndex((vote) => vote.postId === postId && vote.userId === me.id);
+    if (index >= 0 && db.communityVotes[index].value === body.value) {
+      db.communityVotes.splice(index, 1);
+    } else if (index >= 0) {
+      db.communityVotes[index].value = body.value;
+    } else {
+      db.communityVotes.push({ postId, userId: me.id, value: body.value });
+    }
+    return HttpResponse.json(communityPostResponse(postId, me.id));
+  }),
+
   // Notifications ----------------------------------------------------------
   http.get(`${API}/notifications`, async ({ request }) => {
     await latency();
@@ -4679,123 +4798,6 @@ export const handlers = [
     db.assistantMessages.length = 0;
     db.assistantMessages.push(...remaining);
     return HttpResponse.json({ ok: true });
-  }),
-
-  // Community ---------------------------------------------------------------
-  // Keep this in lockstep with CommunityController so the default standalone
-  // frontend and the persistent API exercise the same request/response flow.
-  http.get(`${API}/community/posts`, async ({ request }) => {
-    await latency();
-    if (!authenticatedUser(request)) return unauthorized();
-    return HttpResponse.json(
-      [...db.communityPosts]
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map((post) => {
-          const comments = db.communityComments.filter((comment) => comment.postId === post.id);
-          return { ...post, comments, _count: { comments: comments.length, votes: post.votes.length } };
-        }),
-    );
-  }),
-
-  http.get(`${API}/community/posts/:id`, async ({ params, request }) => {
-    await latency();
-    if (!authenticatedUser(request)) return unauthorized();
-    const post = db.communityPosts.find((candidate) => candidate.id === params.id);
-    if (!post) return notFound("Post not found");
-    const comments = db.communityComments.filter((comment) => comment.postId === post.id);
-    return HttpResponse.json({
-      ...post,
-      comments,
-      _count: { comments: comments.length, votes: post.votes.length },
-    });
-  }),
-
-  http.post(`${API}/community/posts`, async ({ request }) => {
-    await latency();
-    const me = authenticatedUser(request);
-    if (!me) return unauthorized();
-    const body = (await request.json()) as Partial<{ title: string; content: string }>;
-    if (!body.title?.trim() || !body.content?.trim()) return badRequest("Title and content are required");
-    const now = new Date().toISOString();
-    const post = {
-      id: `cp-${crypto.randomUUID()}`,
-      title: body.title.trim(),
-      content: body.content.trim(),
-      authorId: me.id,
-      author: { id: me.id, name: me.name, avatarUrl: me.avatarUrl ?? null },
-      createdAt: now,
-      updatedAt: now,
-      _count: { comments: 0, votes: 0 },
-      votes: [],
-    } satisfies (typeof db.communityPosts)[number];
-    db.communityPosts.unshift(post);
-    return HttpResponse.json(post, { status: 201 });
-  }),
-
-  http.post(`${API}/community/posts/:id/comments`, async ({ params, request }) => {
-    await latency();
-    const me = authenticatedUser(request);
-    if (!me) return unauthorized();
-    const post = db.communityPosts.find((candidate) => candidate.id === params.id);
-    if (!post) return notFound("Post not found");
-    const body = (await request.json()) as Partial<{ content: string; parentId: string }>;
-    if (!body.content?.trim()) return badRequest("Comment content is required");
-    const parent = body.parentId
-      ? db.communityComments.find((comment) => comment.id === body.parentId && comment.postId === post.id)
-      : undefined;
-    if (body.parentId && !parent) return notFound("Parent comment not found");
-    const now = new Date().toISOString();
-    const comment = {
-      id: `cc-${crypto.randomUUID()}`,
-      postId: post.id,
-      content: body.content.trim(),
-      authorId: me.id,
-      author: { id: me.id, name: me.name, avatarUrl: me.avatarUrl ?? null },
-      createdAt: now,
-      updatedAt: now,
-      parentId: parent?.id ?? null,
-      votes: [],
-    } satisfies (typeof db.communityComments)[number];
-    db.communityComments.push(comment);
-    return HttpResponse.json(comment, { status: 201 });
-  }),
-
-  http.post(`${API}/community/posts/:id/vote`, async ({ params, request }) => {
-    await latency();
-    const me = authenticatedUser(request);
-    if (!me) return unauthorized();
-    const post = db.communityPosts.find((candidate) => candidate.id === params.id);
-    if (!post) return notFound("Post not found");
-    const body = (await request.json()) as { value?: number };
-    if (![-1, 0, 1].includes(body.value ?? 2)) return badRequest("Vote value must be -1, 0, or 1");
-    const index = post.votes.findIndex((vote) => vote.userId === me.id);
-    if (body.value === 0) {
-      if (index >= 0) post.votes.splice(index, 1);
-      return HttpResponse.json({ value: 0 });
-    }
-    const vote = { id: index >= 0 ? post.votes[index].id : `cv-${crypto.randomUUID()}`, value: body.value as -1 | 1, userId: me.id, postId: post.id, commentId: null, createdAt: new Date().toISOString() };
-    if (index >= 0) post.votes[index] = vote;
-    else post.votes.push(vote);
-    return HttpResponse.json(vote);
-  }),
-
-  http.post(`${API}/community/comments/:id/vote`, async ({ params, request }) => {
-    await latency();
-    const me = authenticatedUser(request);
-    if (!me) return unauthorized();
-    const comment = db.communityComments.find((candidate) => candidate.id === params.id);
-    if (!comment) return notFound("Comment not found");
-    const body = (await request.json()) as { value?: number };
-    if (![-1, 0, 1].includes(body.value ?? 2)) return badRequest("Vote value must be -1, 0, or 1");
-    const index = comment.votes.findIndex((vote) => vote.userId === me.id);
-    if (body.value === 0) {
-      if (index >= 0) comment.votes.splice(index, 1);
-      return HttpResponse.json({ value: 0 });
-    }
-    const vote = { id: index >= 0 ? comment.votes[index].id : `cv-${crypto.randomUUID()}`, value: body.value as -1 | 1, userId: me.id, postId: null, commentId: comment.id, createdAt: new Date().toISOString() };
-    if (index >= 0) comment.votes[index] = vote;
-    else comment.votes.push(vote);
-    return HttpResponse.json(vote);
   }),
 
   // Complaints & grievances ------------------------------------------------
