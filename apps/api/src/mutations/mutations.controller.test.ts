@@ -6,6 +6,7 @@ import { CompleteVerificationDto } from "./complete-verification.dto";
 import { CreateMutationDto } from "./create-mutation.dto";
 import { MutationsController } from "./mutations.controller";
 import { MutationDecisionDto } from "./mutation-decision.dto";
+import { RecordDcrPaymentDto } from "./record-dcr-payment.dto";
 
 const now = new Date("2026-09-12T10:00:00.000Z");
 const officer = { id: "usr-officer", name: "Officer", role: "land-office", status: "active", jurisdictionId: "j-office" };
@@ -56,7 +57,11 @@ function fixture(status = "submitted") {
       update: vi.fn().mockImplementation(async ({ data }) => ({ ...mutation, ...data })),
       count: vi.fn().mockResolvedValue(0), create: vi.fn().mockImplementation(async ({ data }) => data),
     },
-    parcel: { findUnique: vi.fn().mockResolvedValue(parcel), update: vi.fn().mockResolvedValue(parcel) },
+    parcel: {
+      findUnique: vi.fn().mockResolvedValue(parcel),
+      update: vi.fn().mockResolvedValue(parcel),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     user: { findUnique: users },
     jurisdiction: {
       findMany: vi.fn().mockResolvedValue(jurisdictions),
@@ -113,7 +118,7 @@ afterEach(() => vi.useRealTimers());
 describe("create mutation DTO", () => {
   const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
   const validate = (value: object) => pipe.transform(value, { type: "body", metatype: CreateMutationDto });
-  const valid = { parcelId: "p-1", type: "sale", toOwnerId: "usr-new", paymentMethod: "bkash" };
+  const valid = { parcelId: "p-1", type: "sale", toOwnerId: "usr-new", paymentMethod: "bkash", documentIds: ["doc-1"] };
 
   it("accepts supporting document id arrays", async () => {
     await expect(validate({ ...valid, documentIds: ["doc-1", "doc-2"] })).resolves.toMatchObject({
@@ -122,10 +127,10 @@ describe("create mutation DTO", () => {
   });
 
   it("treats null optional filing fields as absent", async () => {
-    await expect(validate({ ...valid, deedNumber: null, deedDate: null, documentIds: null })).resolves.toMatchObject(valid);
+    await expect(validate({ ...valid, deedNumber: null, deedDate: null })).resolves.toMatchObject(valid);
   });
 
-  it.each(["doc-1", ["doc-1", 2], [null]])("rejects malformed document ids with 400: %j", async (documentIds) => {
+  it.each([undefined, null, [], "doc-1", ["doc-1", 2], [null]])("rejects missing or malformed document ids with 400: %j", async (documentIds) => {
     const error = await validate({ ...valid, documentIds }).catch((caught) => caught);
 
     expect(error).toBeInstanceOf(BadRequestException);
@@ -149,6 +154,19 @@ describe("mutation decision DTO", () => {
   });
   it.each([{ status: "approved" }, { actorId: "usr-other" }, { decision: "approved" }])("rejects caller-controlled workflow fields: %j", async (extra) => {
     await expect(validate({ ...approveBody, ...extra })).rejects.toThrow();
+  });
+});
+
+describe("DCR payment DTO", () => {
+  const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+  const validate = (value: object) => pipe.transform(value, { type: "body", metatype: RecordDcrPaymentDto });
+
+  it.each(["bkash", "nagad", "card"])("accepts %s", async (paymentMethod) => {
+    await expect(validate({ paymentMethod })).resolves.toEqual({ paymentMethod });
+  });
+
+  it.each([undefined, "cash", ""])("rejects invalid payment method %s", async (paymentMethod) => {
+    await expect(validate({ paymentMethod })).rejects.toThrow();
   });
 });
 
@@ -286,17 +304,45 @@ describe("mutation workflow writes", () => {
     noWrites(f);
   });
 
-  it("approves atomically with parcel ownership, linked title history and audit", async () => {
+  it("approves into the fixed DCR payment stage without transferring title early", async () => {
     const f = fixture("field-verification-complete");
     f.mutation.objections = [{ id: "o-resolved", status: "resolved" }];
     await f.controller.decide("m-1", { ...approveBody, approvalNote: "  Cleared  " }, request());
     expect(f.tx.mutation.update).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "m-1", status: "field-verification-complete", updatedAt: f.mutation.updatedAt }),
-      data: expect.objectContaining({ status: "awaiting-dcr-payment", approvedAt: now, approvedById: "usr-officer", approvalNote: "Cleared", orderSheet: approveBody.orderSheet, digitalSignature: approveBody.digitalSignature }) });
-    expect(f.tx.parcel.update).toHaveBeenCalledWith({ where: { id: "p-1", ownerId: "usr-old" }, data: { ownerId: "usr-new", lastMutationAt: now } });
-    expect(f.tx.ownershipRecord.updateMany).toHaveBeenCalledWith({ where: { parcelId: "p-1", toDate: null }, data: { toDate: now } });
-    expect(f.tx.ownershipRecord.create).toHaveBeenCalledWith({ data: expect.objectContaining({ parcelId: "p-1", ownerId: "usr-new", ownerName: "New owner", acquisitionType: "purchase", fromDate: now, mutationId: "m-1", documentId: "doc-1" }) });
+      data: expect.objectContaining({ status: "awaiting-dcr-payment", dcrAmount: 1170, approvedAt: now, approvedById: "usr-officer", approvalNote: "Cleared", orderSheet: approveBody.orderSheet, digitalSignature: approveBody.digitalSignature }) });
+    expect(f.tx.parcel.update).not.toHaveBeenCalled();
+    expect(f.tx.ownershipRecord.updateMany).not.toHaveBeenCalled();
+    expect(f.tx.ownershipRecord.create).not.toHaveBeenCalled();
     expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({ action: "approve", actorId: "usr-officer",
       payload: expect.objectContaining({ previousStatus: "field-verification-complete", newStatus: "awaiting-dcr-payment", note: "Cleared", actorRole: "land-office" }) }));
+  });
+
+  it("records DCR payment and transfers title only when the mutation completes", async () => {
+    const f = fixture("awaiting-dcr-payment");
+    const citizenRequest = {
+      user: { id: "usr-applicant", role: "citizen" },
+      header: () => undefined,
+    } as never;
+
+    await expect(
+      f.controller.recordDcrPayment("m-1", { paymentMethod: "bkash" }, citizenRequest),
+    ).resolves.toMatchObject({
+      status: "complete",
+      dcrAmount: 1170,
+      dcrPaymentMethod: "bkash",
+      dcrPaidAt: now,
+    });
+    expect(f.tx.parcel.updateMany).toHaveBeenCalledWith({
+      where: { id: "p-1", ownerId: "usr-old" },
+      data: { ownerId: "usr-new", lastMutationAt: now },
+    });
+    expect(f.tx.ownershipRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ mutationId: "m-1", ownerId: "usr-new" }),
+    });
+    expect(f.audit.append).toHaveBeenCalledWith(f.tx, expect.objectContaining({
+      action: "dcr-paid",
+      payload: expect.objectContaining({ amount: 1170, paymentMethod: "bkash" }),
+    }));
   });
 
   it("uses read-committed isolation so the audit tail read gets a post-lock statement snapshot", async () => {
@@ -445,7 +491,8 @@ describe("mutation read and filing compatibility", () => {
   it("captures the registry owner on citizen filing", async () => {
     const f = fixture();
     f.prisma.parcel.findUnique.mockResolvedValue({ id: "p-1", dagNo: "42", ownerId: "usr-ayesha", owner: { name: "Ayesha" }, jurisdictionId: "j-local" });
-    await f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash" }, request("citizen"));
+    f.prisma.landDocument.findMany.mockResolvedValue([{ ...document, ownerId: "usr-ayesha" }]);
+    await f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash", documentIds: ["doc-1"] }, request("citizen"));
     expect(f.tx.mutation.create).toHaveBeenCalledWith({ data: expect.objectContaining({ status: "submitted", fromOwnerId: "usr-ayesha", fromOwnerName: "Ayesha", requestedById: "usr-ayesha" }) });
   });
   it("queues only a citizen's parcel document when it is submitted with a mutation", async () => {
@@ -475,16 +522,15 @@ describe("mutation read and filing compatibility", () => {
         id: { in: ["doc-1"] },
         ownerId: "usr-ayesha",
         parcelId: "p-1",
-        ocrStatus: "pending",
       },
-      data: { ocrStatus: "processing" },
+      data: { ocrStatus: "processing", verificationStatus: "unverified" },
     });
     expect(f.documentOcr.schedule).toHaveBeenCalledWith("doc-1", "p-1");
   });
   it("refuses a filing on a parcel the caller does not own, as not found", async () => {
     const f = fixture();
     await expect(
-      f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash" }, request("citizen")),
+      f.controller.create({ parcelId: "p-1", toOwnerId: "usr-new", type: "sale", paymentMethod: "bkash", documentIds: ["doc-1"] }, request("citizen")),
     ).rejects.toMatchObject({ response: { error: "not_found" } });
     expect(f.tx.mutation.create).not.toHaveBeenCalled();
   });

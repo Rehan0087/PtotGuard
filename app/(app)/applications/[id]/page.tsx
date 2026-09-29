@@ -143,7 +143,7 @@ export default function ApplicationTrackingPage() {
             <Card className="gap-3 px-4">
               <h3 className="font-heading text-sm font-semibold text-foreground">{a.payTitle}</h3>
               <p className="text-xs text-muted-foreground">{a.payBody}</p>
-              
+
               {paymentOpen ? (
                 <PaymentConfirmationDialog
                   open={paymentOpen}

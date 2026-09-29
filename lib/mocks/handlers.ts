@@ -28,6 +28,7 @@ import type {
 import { ROLES } from "@/lib/types";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
+  MUTATION_DCR_AMOUNT_BDT,
   activeRestrictions,
   ancestryOf,
   assessLandTax,
@@ -303,7 +304,7 @@ type CreateMutationBody = {
   toOwnerId?: string;
   deedNumber?: string;
   deedDate?: string;
-  documentIds?: string[];
+  documentIds: string[];
   paymentMethod: "bkash" | "nagad" | "card";
   metadata?: Record<string, unknown>;
 };
@@ -328,7 +329,10 @@ function validateCreateMutationBody(value: unknown) {
     return { ok: false as const, response: badRequest(`type must be one of the following values: ${MUTATION_TYPES.join(", ")}`) };
   }
   // toOwnerId is optional for correction type (no ownership change)
-  if (body.toOwnerId !== undefined && body.toOwnerId !== null && typeof body.toOwnerId !== "string") {
+  if (body.type !== "correction" && typeof body.toOwnerId !== "string") {
+    return { ok: false as const, response: badRequest("toOwnerId must be a string") };
+  }
+  if (body.type === "correction" && body.toOwnerId != null && typeof body.toOwnerId !== "string") {
     return { ok: false as const, response: badRequest("toOwnerId must be a string") };
   }
   if (!PAYMENT_METHODS.includes(body.paymentMethod as typeof PAYMENT_METHODS[number])) {
@@ -340,7 +344,7 @@ function validateCreateMutationBody(value: unknown) {
   if (body.deedDate !== undefined && body.deedDate !== null && typeof body.deedDate !== "string") {
     return { ok: false as const, response: badRequest("deedDate must be a string") };
   }
-  if (body.documentIds !== undefined && body.documentIds !== null && (!Array.isArray(body.documentIds) || body.documentIds.some((id) => typeof id !== "string"))) {
+  if (!Array.isArray(body.documentIds) || body.documentIds.length === 0 || body.documentIds.some((id) => typeof id !== "string")) {
     return { ok: false as const, response: badRequest("each value in documentIds must be a string") };
   }
   return { ok: true as const, value: {
@@ -349,7 +353,7 @@ function validateCreateMutationBody(value: unknown) {
     toOwnerId: typeof body.toOwnerId === "string" ? body.toOwnerId : undefined,
     deedNumber: typeof body.deedNumber === "string" ? body.deedNumber : undefined,
     deedDate: typeof body.deedDate === "string" ? body.deedDate : undefined,
-    documentIds: Array.isArray(body.documentIds) ? body.documentIds as string[] : undefined,
+    documentIds: body.documentIds as string[],
     paymentMethod: body.paymentMethod,
     metadata: recordBody(body.metadata) ?? undefined,
   } as CreateMutationBody };
@@ -1156,6 +1160,38 @@ export const handlers = [
       payload: { decision, fileName: doc.fileName, status: doc.verificationStatus },
     });
 
+    if (decision === "verify") {
+      const linkedMutations = db.mutations.filter((mutation) =>
+        mutation.status === "submitted" && mutation.documentIds.includes(doc.id));
+      for (const mutation of linkedMutations) {
+        const allAccepted = mutation.documentIds.every((documentId) =>
+          db.documents.find((candidate) => candidate.id === documentId)?.verificationStatus === "verified");
+        if (!allAccepted) continue;
+
+        const previousStatus = mutation.status;
+        const startedAt = new Date().toISOString();
+        Object.assign(mutation, {
+          status: "under-primary-verification" as const,
+          assignedOfficerId: mutation.assignedOfficerId ?? me.id,
+          verificationStartedAt: startedAt,
+          verificationStartedById: me.id,
+          updatedAt: startedAt,
+        });
+        await appendAudit({
+          entityType: "mutation",
+          entityId: mutation.id,
+          action: "status-change",
+          actorId: me.id,
+          actorName: me.name,
+          payload: {
+            previousStatus,
+            newStatus: mutation.status,
+            source: "ocr-queue-acceptance",
+          },
+        });
+      }
+    }
+
     // document-verified has existed on NotificationContent with no writer
     // anywhere — the citizen finds out their document passed from the app.
     if (decision === "verify" && doc.ownerId && doc.ownerId !== me.id) {
@@ -1244,6 +1280,7 @@ export const handlers = [
     const fraud = url.searchParams.get("fraud");
     const ocr = url.searchParams.get("ocr");
     const mutation = url.searchParams.get("mutation");
+    const mutationId = url.searchParams.get("mutationId");
     const parcelId = url.searchParams.get("parcelId");
     let items = db.documents.slice();
     if (parcelId && parcelId !== "none") {
@@ -1256,6 +1293,10 @@ export const handlers = [
     if (mutation === "true") {
       const mutationDocumentIds = new Set(db.mutations.flatMap((item) => item.documentIds));
       items = items.filter((d) => mutationDocumentIds.has(d.id));
+    }
+    if (mutationId) {
+      const documentIds = new Set(db.mutations.find((item) => item.id === mutationId)?.documentIds ?? []);
+      items = items.filter((document) => documentIds.has(document.id));
     }
     if (ocr) items = items.filter((d) => d.ocrStatus === ocr);
     items.sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
@@ -1299,7 +1340,7 @@ export const handlers = [
     }
 
     const me = currentUser(request);
-    const requestedDocumentIds = [...new Set(body.documentIds ?? [])];
+    const requestedDocumentIds = [...new Set(body.documentIds)];
     const selectedDocuments = db.documents.filter((document) =>
       requestedDocumentIds.includes(document.id),
     );
@@ -1319,6 +1360,17 @@ export const handlers = [
         documentIds: {
           code: "mutation-documents-foreign",
           documentIds: foreign.map((document) => document.id),
+        },
+      });
+    }
+    const invalidDeeds = selectedDocuments.filter((document) =>
+      document.mimeType !== "application/pdf" ||
+      (document.type !== "sale-deed" && document.type !== "title-deed"));
+    if (invalidDeeds.length) {
+      return unprocessable({
+        documentIds: {
+          code: "deed-pdf-required",
+          documentIds: invalidDeeds.map((document) => document.id),
         },
       });
     }
@@ -1355,8 +1407,9 @@ export const handlers = [
       const document = db.documents.find((item) =>
         item.id === documentId && item.ownerId === me.id && item.parcelId === parcel.id,
       );
-      if (document?.ocrStatus === "pending") {
+      if (document) {
         document.ocrStatus = "processing";
+        document.verificationStatus = "unverified";
         scheduleOcrWorker(document.id, document.parcelId);
       }
     }
@@ -1540,25 +1593,7 @@ export const handlers = [
       mutation.orderSheet = body.orderSheet;
       mutation.digitalSignature = body.digitalSignature;
       mutation.mutationKhatianNumber = `MK-${now.getUTCFullYear()}-${mutation.mutationNumber.replace(/\D/g, "").slice(-8).padStart(8, "0")}`;
-      const toOwnerId = mutation.toOwnerId!;
-      parcel.ownerId = toOwnerId;
-      parcel.ownerName = mutation.toOwnerName;
-      parcel.lastMutationAt = at;
-      for (const record of db.ownershipRecords) {
-        if (record.parcelId === mutation.parcelId && record.toDate === null) record.toDate = at;
-      }
-      const ownershipRecord = {
-        id: `own-${Date.now()}`,
-        parcelId: mutation.parcelId,
-        ownerId: toOwnerId,
-        ownerName: mutation.toOwnerName,
-        acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type],
-        fromDate: at,
-        toDate: null,
-        documentId: mutation.documentIds[0],
-        mutationId: mutation.id,
-      } satisfies OwnershipRecord & { mutationId: string };
-      db.ownershipRecords.unshift(ownershipRecord);
+      mutation.dcrAmount = MUTATION_DCR_AMOUNT_BDT;
     } else {
       mutation.status = "rejected";
       mutation.rejectedAt = at;
@@ -1583,6 +1618,19 @@ export const handlers = [
       },
     });
 
+    db.notifications.unshift({
+      id: `n-${Date.now()}-${mutation.requestedById}`,
+      userId: mutation.requestedById,
+      at,
+      severity: approving ? "success" : "critical",
+      title: approving ? "DCR payment required" : "Mutation rejected",
+      body: approving
+        ? `Mutation ${mutation.mutationNumber} has been approved. Pay the DCR fee of BDT ${MUTATION_DCR_AMOUNT_BDT.toLocaleString("en-US")} to complete it.`
+        : `Mutation ${mutation.mutationNumber} for dag ${mutation.parcelDagNo} has been rejected.`,
+      read: false,
+      href: `/mutations?mutation=${mutation.id}`,
+    });
+
     return HttpResponse.json(mutation);
   }),
 
@@ -1592,16 +1640,46 @@ export const handlers = [
     if (!actor) return unauthorized();
     const mutation = db.mutations.find((item) => item.id === params.id);
     if (!mutation) return notFound("Mutation not found");
-    if (actor.role === "citizen" && mutation.requestedById !== actor.id) return forbidden();
+    if (actor.role !== "citizen" || mutation.requestedById !== actor.id) return forbidden();
     if (mutation.status !== "awaiting-dcr-payment") {
       return unprocessable({ status: { code: "wrong-status", expected: ["awaiting-dcr-payment"] } });
     }
+    const body = (await request.json()) as { paymentMethod?: string };
+    if (!body.paymentMethod || !["bkash", "nagad", "card"].includes(body.paymentMethod)) {
+      return unprocessable({ paymentMethod: { code: "invalid-payment-method" } });
+    }
     const now = new Date().toISOString();
+    const parcel = mutationParcel(mutation);
+    if (!parcel || !mutation.fromOwnerId || !mutation.toOwnerId || parcel.ownerId !== mutation.fromOwnerId) {
+      return conflict("The parcel owner has changed since this mutation was approved.");
+    }
+    parcel.ownerId = mutation.toOwnerId;
+    parcel.ownerName = mutation.toOwnerName;
+    parcel.lastMutationAt = now;
+    for (const record of db.ownershipRecords) {
+      if (record.parcelId === mutation.parcelId && record.toDate === null) record.toDate = now;
+    }
+    db.ownershipRecords.unshift({
+      id: `own-${Date.now()}`,
+      parcelId: mutation.parcelId,
+      ownerId: mutation.toOwnerId,
+      ownerName: mutation.toOwnerName,
+      acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type],
+      fromDate: now,
+      toDate: null,
+      documentId: mutation.documentIds[0],
+      mutationId: mutation.id,
+    } satisfies OwnershipRecord & { mutationId: string });
+    const transactionId = `DCR-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
     mutation.status = "complete";
+    mutation.dcrAmount = MUTATION_DCR_AMOUNT_BDT;
+    mutation.dcrPaymentMethod = body.paymentMethod as "bkash" | "nagad" | "card";
+    mutation.dcrTransactionId = transactionId;
     mutation.dcrPaidAt = now;
     mutation.decidedAt = now;
     mutation.updatedAt = now;
-    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dcr-paid", actorId: actor.id, actorName: actor.name, payload: { previousStatus: "awaiting-dcr-payment", newStatus: "complete" }, createdAt: now });
+    await appendAudit({ entityType: "mutation", entityId: mutation.id, action: "dcr-paid", actorId: actor.id, actorName: actor.name, payload: { previousStatus: "awaiting-dcr-payment", newStatus: "complete", amount: MUTATION_DCR_AMOUNT_BDT, paymentMethod: body.paymentMethod, transactionId }, createdAt: now });
+    db.notifications.unshift({ id: `n-${Date.now()}-complete`, userId: mutation.requestedById, at: now, severity: "success", title: "Mutation complete", body: `DCR payment received for ${mutation.mutationNumber}. The mutation is now complete.`, read: false, href: `/mutations?mutation=${mutation.id}` });
     return HttpResponse.json(mutation);
   }),
 
@@ -3722,11 +3800,49 @@ export const handlers = [
         const mutation = report.mutationId
           ? db.mutations.find((candidate) => candidate.id === report.mutationId)
           : undefined;
-        if (mutation && report.disputeFound !== true) {
+        if (mutation) {
           if (mutation.status !== "field-investigation") {
             throw new MockSyncConflict("gps-point-conflict", {
               message: "The linked mutation is not awaiting field investigation",
             });
+          }
+          if (report.disputeFound === true && !mutation.disputeId) {
+            const description = report.disputeDescription?.trim() || report.notes?.trim();
+            if (!description) throw new MockSurveyValidationError({ code: "need-notes" });
+            const dispute = {
+              id: `ds-${Date.now()}`,
+              caseNumber: `DSP-${new Date(now).getUTCFullYear()}-${String(500 + db.disputes.length).padStart(5, "0")}`,
+              parcelId: mutation.parcelId,
+              parcelDagNo: mutation.parcelDagNo,
+              type: "ownership" as const,
+              status: "under-land-office-review" as const,
+              priority: "high" as const,
+              filedById: me.id,
+              filedByName: me.name,
+              filedAt: now,
+              updatedAt: now,
+              description,
+              parties: [
+                { name: mutation.fromOwnerName, role: "claimant" as const },
+                { name: mutation.toOwnerName, role: "respondent" as const },
+              ],
+              assignedOfficerId: mutation.assignedOfficerId,
+              evidenceDocumentIds: mutation.documentIds,
+            };
+            db.disputes.unshift(dispute);
+            db.disputeEvents.push({
+              id: `de-${Date.now()}`,
+              disputeId: dispute.id,
+              at: now,
+              type: "filed",
+              title: "Dispute reported during mutation field verification",
+              content: { code: "filed" },
+              description,
+              actorId: me.id,
+              actorName: me.name,
+            });
+            mutation.disputeId = dispute.id;
+            report.disputeId = dispute.id;
           }
           mutation.status = "field-verification-complete";
           mutation.updatedAt = now;
@@ -3740,10 +3856,27 @@ export const handlers = [
               previousStatus: "field-investigation",
               newStatus: "field-verification-complete",
               fieldReportId: report.id,
+              ...(mutation.disputeId ? { disputeId: mutation.disputeId } : {}),
               note: report.notes ?? "",
             },
             createdAt: now,
           });
+          if (mutation.disputeId) {
+            await appendAudit({
+              entityType: "mutation",
+              entityId: mutation.id,
+              action: "dispute-filed",
+              actorId: me.id,
+              actorName: me.name,
+              payload: {
+                disputeId: mutation.disputeId,
+                previousStatus: "field-verification-complete",
+                newStatus: "field-verification-complete",
+                note: report.disputeDescription ?? report.notes ?? "",
+              },
+              createdAt: now,
+            });
+          }
         }
 
         const dispute = report.disputeId
@@ -3790,7 +3923,9 @@ export const handlers = [
                 ? `The field agent reported a dispute for mutation ${mutation.mutationNumber}.`
                 : `Mutation ${mutation.mutationNumber} is field verification complete and ready for a final decision.`,
               read: false,
-              href: `/mutations?mutation=${mutation.id}`,
+              href: mutation.disputeId
+                ? `/disputes/${mutation.disputeId}`
+                : `/mutations?mutation=${mutation.id}`,
             });
           }
         }
@@ -3899,6 +4034,22 @@ export const handlers = [
 
     if (body.notes !== undefined) report.notes = body.notes;
     if (body.status) report.status = body.status;
+    if (body.notes !== undefined && report.mutationId) {
+      const mutation = db.mutations.find((item) => item.id === report.mutationId);
+      if (mutation?.assignedOfficerId && mutation.assignedOfficerId !== me.id) {
+        db.notifications.unshift({
+          id: `n-${Date.now()}-field-update`,
+          userId: mutation.assignedOfficerId,
+          at: new Date().toISOString(),
+          severity: "info",
+          title: "Field investigation updated",
+          body: `Field agent notes were updated for mutation ${mutation.mutationNumber}.`,
+          content: { code: "field-investigation-updated", mutationId: mutation.id },
+          read: false,
+          href: `/mutations?mutation=${mutation.id}`,
+        });
+      }
+    }
 
     return HttpResponse.json(report);
   }),

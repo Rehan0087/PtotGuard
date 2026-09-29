@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   Ban,
@@ -465,9 +466,12 @@ function ExtractionCard({ doc, parcel }: { doc: LandDocument; parcel?: Parcel })
 
 // --- Screen ----------------------------------------------------------------
 
-export default function OcrQueuePage() {
+function OcrQueueContent() {
   const t = useT();
-  const { data, isLoading } = useDocuments({ mutation: "true", pageSize: 100 });
+  const mutationId = useSearchParams().get("mutation");
+  const { data, isLoading } = useDocuments(
+    mutationId ? { mutationId, pageSize: 100 } : { mutation: "true", pageSize: 100 },
+  );
   const { data: parcelsData } = useParcels({ pageSize: 100 });
   const [stage, setStage] = useState<StageKey | null>(null);
 
@@ -560,5 +564,13 @@ export default function OcrQueuePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OcrQueuePage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-52 rounded-xl" />}>
+      <OcrQueueContent />
+    </Suspense>
   );
 }

@@ -38,6 +38,7 @@ function blockerText(t: Dictionary, blocker: FilingBlocker): string {
     case "not-actionable": return wording.notActionable;
     case "need-gps": return wording.needGps(blocker.have, blocker.need);
     case "need-photos": return wording.needPhotos(blocker.have, blocker.need);
+    case "need-sketch": return wording.needSketch;
     case "need-notes": return wording.needNotes;
   }
 }
@@ -129,7 +130,11 @@ export default function CapturePage() {
       });
       toast.success(t.pages.capture.filed);
       if (walk.online) void refetch();
-    } catch { toast.error(t.common.somethingWentWrong); }
+    } catch (failure) {
+      toast.error(t.common.somethingWentWrong, {
+        description: failure instanceof Error ? failure.message : t.common.tryAgain,
+      });
+    }
   };
 
   return <div className="space-y-6">
@@ -152,7 +157,7 @@ export default function CapturePage() {
     </div> : null}
 
     {walk.locationError ? <Alert variant="destructive"><AlertTitle>{t.pages.capture.gpsProblem}</AlertTitle><AlertDescription>{locationMessage(new GeolocationFailure(walk.locationError, ""))}</AlertDescription></Alert> : null}
-    {walk.syncStatus === "FAILED" || walk.syncStatus === "CONFLICT" ? <Alert variant="destructive"><AlertTitle>{walk.syncStatus === "CONFLICT" ? t.pages.capture.syncConflict : t.pages.capture.syncFailed}</AlertTitle>{walk.syncStatus === "FAILED" ? <AlertDescription><Button size="sm" variant="outline" onClick={() => void walk.retrySync()}>{t.common.retry}</Button></AlertDescription> : null}</Alert> : null}
+    {walk.syncStatus === "FAILED" || walk.syncStatus === "CONFLICT" || (closed && walk.syncStatus === "PENDING") ? <Alert variant="destructive"><AlertTitle>{walk.syncStatus === "CONFLICT" ? t.pages.capture.syncConflict : t.pages.capture.syncFailed}</AlertTitle>{walk.syncStatus !== "CONFLICT" ? <AlertDescription><Button size="sm" variant="outline" onClick={() => void walk.retrySync()}>{t.common.retry}</Button></AlertDescription> : null}</Alert> : null}
 
     <div className="grid gap-6 lg:grid-cols-2">
       <Card className="relative gap-4 px-4">
@@ -183,7 +188,7 @@ export default function CapturePage() {
       <div><h2 className="text-sm font-medium text-foreground">{t.pages.capture.notes}</h2><p className="text-xs text-muted-foreground">{t.pages.capture.notesHint}</p></div>
       {closed ? <p className="rounded-md bg-secondary/50 px-3 py-2 text-sm text-secondary-foreground">{report.notes ?? t.common.notAvailable}</p> : <Textarea value={draftNotes} onChange={(event) => setNotes(event.target.value)} placeholder={t.pages.capture.notesPlaceholder} rows={5} />}
       {!closed && report.mutationId ? <div className="space-y-2 rounded-lg border border-border p-3"><label className="flex items-center gap-2 text-sm font-medium"><Checkbox checked={disputeFound} onCheckedChange={(value) => setDisputeFound(value === true)} />{t.pages.capture.disputeFound}</label>{disputeFound ? <Textarea value={disputeDescription} onChange={(event) => setDisputeDescription(event.target.value)} placeholder={t.pages.capture.disputeDescription} /> : null}</div> : null}
-      {!closed ? <>{review.blockers.length > 0 ? <Alert><AlertDescription><span className="font-medium">{t.pages.capture.needsBefore}</span><ul className="mt-1 list-disc space-y-0.5 pl-4">{review.blockers.map((blocker) => <li key={blocker.code}>{blockerText(t, blocker)}</li>)}</ul></AlertDescription></Alert> : null}<Button className="w-fit" disabled={!active || !review.canFile} onClick={() => void file()}><Send className="size-3.5" />{t.pages.capture.fileReport}</Button></> : report.submittedAt ? <p className="text-xs text-muted-foreground">{t.pages.visits.submitted(f.dateTime(report.submittedAt))}</p> : null}
+      {!closed ? <>{review.blockers.length > 0 ? <Alert><AlertDescription><span className="font-medium">{t.pages.capture.needsBefore}</span><ul className="mt-1 list-disc space-y-0.5 pl-4">{review.blockers.map((blocker) => <li key={blocker.code}>{blockerText(t, blocker)}</li>)}</ul></AlertDescription></Alert> : null}<Button className="w-fit" disabled={!active || !review.canFile || !walk.online} onClick={() => void file()}><Send className="size-3.5" />{t.pages.capture.fileReport}</Button></> : report.submittedAt ? <p className="text-xs text-muted-foreground">{t.pages.visits.submitted(f.dateTime(report.submittedAt))}</p> : null}
     </Card>
   </div>;
 }

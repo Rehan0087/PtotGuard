@@ -49,13 +49,19 @@ export class DocumentsController {
   @Get()
   async list(@Query() query: Record<string, string>, @Req() req: Request) {
     const owner = query.owner === "me" ? currentUserId(req) : query.owner;
-    const mutationDocumentIds = query.mutation === "true"
-      ? [...new Set((await this.prisma.mutation.findMany({ select: { documentIds: true } }))
-          .flatMap((mutation) => mutation.documentIds))]
-      : undefined;
+    const mutationDocumentIds = query.mutationId
+      ? (await this.prisma.mutation.findUnique({
+          where: { id: query.mutationId },
+          select: { documentIds: true },
+        }))?.documentIds ?? []
+      : query.mutation === "true"
+        ? [...new Set((await this.prisma.mutation.findMany({ select: { documentIds: true } }))
+            .flatMap((mutation) => mutation.documentIds))]
+        : undefined;
     const where = {
       ...(mutationDocumentIds ? { id: { in: mutationDocumentIds } } : {}),
       ...(owner ? { ownerId: owner } : {}),
+      // fraud=true means "awaiting fraud review": still flagged, not yet decided.
       ...(query.fraud === "true" ? { verificationStatus: "flagged" } : {}),
       ...(query.ocr ? { ocrStatus: query.ocr } : {}),
       ...(query.parcelId ? { parcelId: query.parcelId === "none" ? null : query.parcelId } : {}),
@@ -158,6 +164,47 @@ export class DocumentsController {
         actorId,
         payload: { decision: body.decision, fileName: updated.fileName, status: verificationStatus },
       });
+
+      // OCR extracts data; the officer's acceptance is the decision that
+      // admits the deed into the mutation file. Once every linked deed has
+      // been accepted, the submitted mutation enters primary verification.
+      if (body.decision === "verify") {
+        const linkedMutations = await tx.mutation.findMany({
+          where: { status: "submitted", documentIds: { has: id } },
+        });
+        for (const mutation of linkedMutations) {
+          const documents = await tx.landDocument.findMany({
+            where: { id: { in: mutation.documentIds } },
+            select: { id: true, verificationStatus: true },
+          });
+          const allAccepted =
+            documents.length === mutation.documentIds.length &&
+            documents.every((document) => document.verificationStatus === "verified");
+          if (!allAccepted) continue;
+
+          const now = new Date();
+          const started = await tx.mutation.update({
+            where: { id: mutation.id, status: "submitted", updatedAt: mutation.updatedAt },
+            data: {
+              status: "under-primary-verification",
+              assignedOfficerId: mutation.assignedOfficerId ?? actorId,
+              verificationStartedAt: now,
+              verificationStartedById: actorId,
+            },
+          });
+          await this.audit.append(tx, {
+            entityType: "mutation",
+            entityId: mutation.id,
+            action: "status-change",
+            actorId,
+            payload: {
+              previousStatus: mutation.status,
+              newStatus: started.status,
+              source: "ocr-queue-acceptance",
+            },
+          });
+        }
+      }
 
       // document-verified has existed on NotificationContent since the
       // notifications system was built, with no writer anywhere — the same

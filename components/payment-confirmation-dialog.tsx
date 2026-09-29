@@ -72,7 +72,7 @@ type Step = "method-and-number" | "pin";
 type Props = {
   open: boolean;
   amount: string;
-  defaultMethod: PaymentMethod;
+  defaultMethod?: PaymentMethod;
   busy?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (method: PaymentMethod) => void;
@@ -88,7 +88,7 @@ type Props = {
 export function PaymentConfirmationDialog({
   open,
   amount,
-  defaultMethod,
+  defaultMethod = "bkash",
   busy = false,
   onOpenChange,
   onConfirm,

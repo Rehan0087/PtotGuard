@@ -3,4 +3,3 @@ import { CommunityController } from "./community.controller";
 
 @Module({ controllers: [CommunityController] })
 export class CommunityModule {}
-

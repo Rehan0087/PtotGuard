@@ -92,8 +92,9 @@ export function extractionReview(
     return { ...base, stage: "in-flight", hold: { code: "in-flight" } };
   }
 
-  // If OCR failed but fields are manually provided, we can still evaluate them.
-  // We'll let the missingFields check handle whether there's enough data to accept.
+  if (doc.ocrStatus === "failed") {
+    return { ...base, stage: "failed", hold: { code: "failed" } };
+  }
 
   // Officer-typed values win over whatever the reader produced for that field.
   const fields: Record<string, string> = { ...doc.extractedFields };

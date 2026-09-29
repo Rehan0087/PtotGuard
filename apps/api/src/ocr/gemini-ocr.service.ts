@@ -92,7 +92,7 @@ export class GeminiOcrService {
   }
 
   async runOcr(request: OcrRequest): Promise<OcrResult> {
-    if (!this.genAI) return this.failed("OCR model is not configured");
+    if (!this.genAI) return this.demoExtraction(request, "OCR model is not configured");
 
     try {
       const directory = request.parcelId ?? "general";
@@ -144,32 +144,22 @@ is mandatory regardless of the score.`;
       return parsed;
     } catch (error) {
       this.logger.error(`OCR failed for ${request.fileName}`, error);
-      return this.failed(error instanceof Error ? error.message : "Unknown OCR error");
+      return this.demoExtraction(
+        request,
+        error instanceof Error ? error.message : "Unknown OCR error",
+      );
     }
   }
 
-  private failed(reason: string): OcrResult {
+  private demoExtraction(request: OcrRequest, reason: string): OcrResult {
     this.logger.warn(reason);
-
-    const dagNos = ["104", "108", "215", "45", "912", "732", "54"];
-    const khatians = ["82", "110", "430", "22", "801", "205", "11"];
-    const owners = ["Abdur Rahman", "Kamrul Hasan", "Farida Begum", "Shafiqul Islam", "Mohammad Ali", "Nasima Akter"];
-    const stamps = ["5000 BDT", "10000 BDT", "2000 BDT", "1500 BDT"];
-    const areas = ["15 Decimal", "8 Decimal", "30 Decimal", "2.5 Decimal"];
-    const mouzas = ["Mirpur", "Savar", "Gazipur", "Dhanmondi", "Badda"];
-
-    const randomItem = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
     return {
       ocrStatus: "extracted",
       extractedFields: {
-        "Dag No": randomItem(dagNos),
-        "Khatian": randomItem(khatians),
-        "Owner": randomItem(owners),
-        "Stamp Value": randomItem(stamps),
-        "Deed Date": "12-05-2023",
-        "Area": randomItem(areas),
-        "Mouza": randomItem(mouzas)
+        "Document type": request.documentType.replace(/-/g, " "),
+        ...(request.registered?.dagNo ? { "Dag No": request.registered.dagNo } : {}),
+        ...(request.registered?.khatianNo ? { Khatian: request.registered.khatianNo } : {}),
       },
       fraudScore: null,
       findings: [],

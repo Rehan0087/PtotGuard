@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsObject, IsOptional, IsString } from "class-validator";
+import { ArrayNotEmpty, IsArray, IsIn, IsObject, IsString, IsOptional } from "class-validator";
 
 const TYPES = ["sale", "inheritance", "gift", "partition", "correction"] as const;
 const PAYMENT_METHODS = ["bkash", "nagad", "card"] as const;
@@ -27,10 +27,10 @@ export class CreateMutationDto {
   @IsString()
   deedDate?: string;
 
-  @IsOptional()
   @IsArray()
+  @ArrayNotEmpty()
   @IsString({ each: true })
-  documentIds?: string[];
+  documentIds!: string[];
 
   // Required, not optional: the wizard's flow is apply → pay → submit, so a
   // submission always carries how the fee was paid. A citizen who hasn't

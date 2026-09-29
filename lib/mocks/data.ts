@@ -632,6 +632,37 @@ export const documents: LandDocument[] = [
 
 ];
 
+// Keep the mock API aligned with the persistent seed: every parcel has a
+// selectable PDF deed, even if its original fixtures only contained a survey,
+// receipt, order, or inheritance affidavit.
+const parcelsWithDeeds = new Set(
+  documents
+    .filter((document) => document.type === "sale-deed" || document.type === "title-deed")
+    .map((document) => document.parcelId),
+);
+for (const parcel of parcels) {
+  if (parcelsWithDeeds.has(parcel.id)) continue;
+  documents.push({
+    id: `d-demo-deed-${parcel.id}`,
+    parcelId: parcel.id,
+    ownerId: parcel.ownerId,
+    type: "title-deed",
+    fileName: `demo-deed-${parcel.id}.pdf`,
+    mimeType: "application/pdf",
+    sizeBytes: 48_000,
+    pageCount: 2,
+    uploadedAt: "2026-09-01T08:00:00Z",
+    uploadedById: parcel.ownerId,
+    ocrStatus: "pending",
+    verificationStatus: "unverified",
+    extractedFields: {
+      "Dag No": parcel.dagNo,
+      Khatian: parcel.khatianNo,
+    },
+    thumbnailUrl: `/documents/${parcel.id}/demo-deed-${parcel.id}.pdf`,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Disputes + timeline events
 // ---------------------------------------------------------------------------

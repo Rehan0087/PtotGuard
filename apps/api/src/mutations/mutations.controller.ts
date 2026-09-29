@@ -17,6 +17,7 @@ import type { Request } from "express";
 import type { Prisma } from "@prisma/client";
 import {
   ACQUISITION_TYPE_BY_MUTATION_TYPE,
+  MUTATION_DCR_AMOUNT_BDT,
   mutationActionGate,
   mutationDocumentGate,
   mutationObjectionSummary,
@@ -27,6 +28,7 @@ import {
   type MutationType,
   type MutationStatus,
   type ParcelRestriction,
+  type PaymentMethod,
 } from "@plotguard/rules";
 import { AccessTokenGuard } from "../auth/access-token.guard";
 import { Roles } from "../auth/roles.decorator";
@@ -41,6 +43,7 @@ import { DocumentOcrService } from "../documents/document-ocr.service";
 import { MutationDecisionDto } from "./mutation-decision.dto";
 import { CreateMutationDto } from "./create-mutation.dto";
 import { CompleteVerificationDto } from "./complete-verification.dto";
+import { RecordDcrPaymentDto } from "./record-dcr-payment.dto";
 import {
   assertLandOfficeActor,
   assertMutationActionAccess,
@@ -209,7 +212,10 @@ export class MutationsController {
       );
     }
 
-    const requestedDocumentIds = [...new Set(body.documentIds ?? [])];
+    const requestedDocumentIds = [...new Set(body.documentIds)];
+    if (requestedDocumentIds.length === 0) {
+      throw new ValidationError({ code: "deed-document-required" }, "documentIds");
+    }
     if (requestedDocumentIds.length) {
       const documents = await this.prisma.landDocument.findMany({
         where: { id: { in: requestedDocumentIds } },
@@ -227,6 +233,15 @@ export class MutationsController {
       if (foreign.length) {
         throw new ValidationError(
           { code: "mutation-documents-foreign", documentIds: foreign.map(({ id }) => id) },
+          "documentIds",
+        );
+      }
+      const invalidDeeds = documents.filter((document) =>
+        document.mimeType !== "application/pdf" ||
+        (document.type !== "sale-deed" && document.type !== "title-deed"));
+      if (invalidDeeds.length) {
+        throw new ValidationError(
+          { code: "deed-pdf-required", documentIds: invalidDeeds.map(({ id }) => id) },
           "documentIds",
         );
       }
@@ -284,9 +299,8 @@ export class MutationsController {
             id: { in: created.documentIds },
             ownerId: actorId,
             parcelId: parcel.id,
-            ocrStatus: "pending",
           },
-          data: { ocrStatus: "processing" },
+          data: { ocrStatus: "processing", verificationStatus: "unverified" },
         });
       }
 
@@ -505,37 +519,11 @@ export class MutationsController {
                 status: "awaiting-dcr-payment", approvedAt: now, approvedById: actor.id,
                 approvalNote: note, orderSheet, digitalSignature,
                 mutationKhatianNumber: `MK-${now.getUTCFullYear()}-${updatedKhatianSequence(mutation.mutationNumber)}`,
+                dcrAmount: MUTATION_DCR_AMOUNT_BDT,
               }
             : { status: "rejected", rejectedAt: now, rejectedById: actor.id, rejectionReason: reason }),
         },
       });
-
-      if (approving) {
-        const toOwnerId = mutation.toOwnerId!;
-        await tx.parcel.update({
-          where: { id: mutation.parcelId, ownerId: mutation.fromOwnerId! },
-          data: { ownerId: toOwnerId, lastMutationAt: now },
-        });
-
-        // Chain of title: close whoever's record was open, open the new one.
-        await tx.ownershipRecord.updateMany({
-          where: { parcelId: mutation.parcelId, toDate: null },
-          data: { toDate: now },
-        });
-        await tx.ownershipRecord.create({
-          data: {
-            id: `own-${randomUUID()}`,
-            parcelId: mutation.parcelId,
-            ownerId: toOwnerId,
-            ownerName: updated.toOwnerName,
-            acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type as MutationType],
-            fromDate: now,
-            documentId: mutation.documentIds[0],
-            mutationId: id,
-          },
-        });
-      }
-
 
       await this.audit.append(tx, {
         entityType: "mutation",
@@ -558,8 +546,10 @@ export class MutationsController {
           userId: updated.requestedById,
           at: new Date(),
           severity: body.decision === "approve" ? "success" : "critical",
-          title: body.decision === "approve" ? "Mutation approved" : "Mutation rejected",
-          body: `Mutation ${updated.mutationNumber} for dag ${updated.parcelDagNo} has been ${body.decision}d.`,
+          title: body.decision === "approve" ? "DCR payment required" : "Mutation rejected",
+          body: body.decision === "approve"
+            ? `Mutation ${updated.mutationNumber} has been approved. Pay the DCR fee of BDT ${MUTATION_DCR_AMOUNT_BDT.toLocaleString("en-US")} to complete it.`
+            : `Mutation ${updated.mutationNumber} for dag ${updated.parcelDagNo} has been rejected.`,
           read: false,
           href: `/mutations?mutation=${updated.id}`,
         },
@@ -571,11 +561,15 @@ export class MutationsController {
 
   @UseGuards(AccessTokenGuard)
   @Patch(":id/dcr-payment")
-  async recordDcrPayment(@Param("id") id: string, @Req() req: Request) {
+  async recordDcrPayment(
+    @Param("id") id: string,
+    @Body() body: RecordDcrPaymentDto,
+    @Req() req: Request,
+  ) {
     const actor = await loadMutationReadActor(this.prisma, req);
     const mutation = await this.prisma.mutation.findUnique({ where: { id } });
     if (!mutation) throw new NotFoundError("Mutation not found");
-    if (actor.role === "citizen" && mutation.requestedById !== actor.id) {
+    if (actor.role !== "citizen" || mutation.requestedById !== actor.id) {
       throw new ForbiddenException("You can only pay DCR for your own mutation.");
     }
     if (mutation.status !== "awaiting-dcr-payment") {
@@ -583,13 +577,65 @@ export class MutationsController {
     }
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
+      if (!mutation.toOwnerId || !mutation.fromOwnerId) {
+        throw new ValidationError({ code: "invalid-recipient" }, "toOwnerId");
+      }
+      const changedParcel = await tx.parcel.updateMany({
+        where: { id: mutation.parcelId, ownerId: mutation.fromOwnerId },
+        data: { ownerId: mutation.toOwnerId, lastMutationAt: now },
+      });
+      if (changedParcel.count !== 1) {
+        throw new ConflictError("The parcel owner has changed since this mutation was approved.");
+      }
+      await tx.ownershipRecord.updateMany({
+        where: { parcelId: mutation.parcelId, toDate: null },
+        data: { toDate: now },
+      });
+      await tx.ownershipRecord.create({
+        data: {
+          id: `own-${randomUUID()}`,
+          parcelId: mutation.parcelId,
+          ownerId: mutation.toOwnerId,
+          ownerName: mutation.toOwnerName,
+          acquisitionType: ACQUISITION_TYPE_BY_MUTATION_TYPE[mutation.type as MutationType],
+          fromDate: now,
+          documentId: mutation.documentIds[0],
+          mutationId: id,
+        },
+      });
+      const transactionId = `DCR-${randomUUID().slice(0, 8).toUpperCase()}`;
       const updated = await tx.mutation.update({
         where: { id, status: "awaiting-dcr-payment" },
-        data: { status: "complete", dcrPaidAt: now, decidedAt: now },
+        data: {
+          status: "complete",
+          dcrAmount: MUTATION_DCR_AMOUNT_BDT,
+          dcrPaymentMethod: body.paymentMethod as PaymentMethod,
+          dcrTransactionId: transactionId,
+          dcrPaidAt: now,
+          decidedAt: now,
+        },
       });
       await this.audit.append(tx, {
         entityType: "mutation", entityId: id, action: "dcr-paid", actorId: actor.id,
-        payload: { previousStatus: "awaiting-dcr-payment", newStatus: "complete" },
+        payload: {
+          previousStatus: "awaiting-dcr-payment",
+          newStatus: "complete",
+          amount: MUTATION_DCR_AMOUNT_BDT,
+          paymentMethod: body.paymentMethod,
+          transactionId,
+        },
+      });
+      await tx.appNotification.create({
+        data: {
+          id: `n-${randomUUID()}`,
+          userId: mutation.requestedById,
+          at: now,
+          severity: "success",
+          title: "Mutation complete",
+          body: `DCR payment received for ${mutation.mutationNumber}. The mutation is now complete.`,
+          read: false,
+          href: `/mutations?mutation=${mutation.id}`,
+        },
       });
       return updated;
     });

@@ -277,7 +277,7 @@ async function main(): Promise<void> {
 
 
   // --- Documents ----------------------------------------------------------
-  const rawDocuments = [
+  const rawDocuments: Prisma.LandDocumentCreateManyInput[] = [
       { id: "d-1", parcelId: "p-142", ownerId: "usr-ayesha", type: "title-deed", fileName: "khatian-142-512.pdf", mimeType: "application/pdf", sizeBytes: 482103, pageCount: 4, uploadedAt: new Date("2026-07-18T11:20:00Z"), uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.02, extractedFields: { "Dag No": "CS-142/3", Khatian: "512", Owner: "Ayesha Siddika" } },
       { id: "d-2", parcelId: "p-142", ownerId: "usr-ayesha", type: "sale-deed", fileName: "dolil-2015.pdf", mimeType: "application/pdf", sizeBytes: 903221, pageCount: 8, uploadedAt: new Date("2026-07-12T09:05:00Z"), uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.05 },
       { id: "d-3", parcelId: "p-088", ownerId: "usr-ayesha", type: "inheritance-affidavit", fileName: "warish-affidavit-088.pdf", mimeType: "application/pdf", sizeBytes: 221900, pageCount: 3, uploadedAt: new Date("2026-07-21T14:40:00Z"), uploadedById: "usr-ayesha", ocrStatus: "processing", verificationStatus: "unverified" },
@@ -354,12 +354,41 @@ async function main(): Promise<void> {
       { id: "d-p542", parcelId: "p-542", ownerId: "usr-legacy-2", type: "title-deed", fileName: "khatian-542-paddy-estate.pdf", mimeType: "application/pdf", sizeBytes: 470000, pageCount: 5, uploadedAt: new Date("2026-09-08T09:30:00Z"), uploadedById: "usr-ayesha", ocrStatus: "extracted", verificationStatus: "verified", fraudScore: 0.01, extractedFields: { "Dag No": "CS-542", Khatian: "219", Owner: "Late Fazlul Haque", Area: "110 decimal" } },
 
     ];
+
+  // Every seeded parcel must offer at least one parcel-specific deed in the
+  // citizen mutation picker. Older demo rows sometimes had only a survey,
+  // order, receipt, or affidavit, so add a lightweight deed record for those
+  // parcels from the same authoritative parcel data.
+  const parcelsWithDeeds = new Set(
+    rawDocuments
+      .filter((document) => document.type === "sale-deed" || document.type === "title-deed")
+      .map((document) => document.parcelId)
+      .filter((parcelId): parcelId is string => Boolean(parcelId)),
+  );
+  for (const parcel of parcels) {
+    if (parcelsWithDeeds.has(parcel.id)) continue;
+    rawDocuments.push({
+      id: `d-demo-deed-${parcel.id}`,
+      parcelId: parcel.id,
+      ownerId: parcel.ownerId,
+      type: "title-deed",
+      fileName: `demo-deed-${parcel.id}.pdf`,
+      mimeType: "application/pdf",
+      sizeBytes: 48_000,
+      pageCount: 2,
+      uploadedAt: new Date("2026-09-01T08:00:00Z"),
+      uploadedById: parcel.ownerId,
+      ocrStatus: "pending",
+      verificationStatus: "unverified",
+      extractedFields: { "Dag No": parcel.dagNo, Khatian: parcel.khatianNo },
+    });
+  }
     
   await prisma.landDocument.createMany({
     data: rawDocuments.map(doc => ({
       ...doc,
       thumbnailUrl: `/documents/${doc.parcelId || 'general'}/${doc.fileName}`
-    })) as Prisma.LandDocumentCreateManyInput[],
+    })),
   });
 
   // --- Disputes + timeline -------------------------------------------------
@@ -418,6 +447,14 @@ async function main(): Promise<void> {
       // Habib: Partition with partition note
       { id: "m-d5-1", mutationNumber: "MUT-2026-01243", parcelId: "p-d5-1", parcelDagNo: "BS-401", type: "partition", status: "submitted", fromOwnerName: "Habib Molla", fromOwnerId: "usr-habib", toOwnerId: "usr-rashed", toOwnerName: "Rashed Khan", requestedById: "usr-habib", requestedAt: new Date("2026-09-14T10:00:00Z"), documentIds: ["d-d5-1"], objections: [], fee: { amount: 5400, currency: "BDT" }, metadata: { partitionNote: "Dividing 95 decimals equally between Habib Molla and Rashed Khan. Each to receive 47.5 decimals per the family agreement signed 2026-09-13." }, createdAt: new Date("2026-09-14T10:00:00Z"), updatedAt: new Date("2026-09-14T10:00:00Z") },
     ] as Prisma.MutationCreateManyInput[],
+  });
+
+  // Historical completed rows predate the separate DCR columns. Keep their
+  // statutory amount visible while new workflow payments also record method
+  // and transaction reference.
+  await prisma.mutation.updateMany({
+    where: { status: { in: ["awaiting-dcr-payment", "complete"] } },
+    data: { dcrAmount: 1170 },
   });
 
 

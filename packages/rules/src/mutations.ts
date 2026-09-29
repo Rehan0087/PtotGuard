@@ -141,11 +141,11 @@ export interface MutationVerificationRecipient {
 }
 
 const REQUIRED_DOCUMENT_TYPES: Record<MutationType, DocumentType[]> = {
-  sale: ["sale-deed"],
-  inheritance: ["inheritance-affidavit"],
-  gift: ["title-deed"],
-  partition: ["title-deed", "survey-report"],
-  correction: ["title-deed", "mutation-order", "court-order"],
+  sale: ["sale-deed", "title-deed"],
+  inheritance: ["sale-deed", "title-deed"],
+  gift: ["sale-deed", "title-deed"],
+  partition: ["sale-deed", "title-deed"],
+  correction: ["sale-deed", "title-deed"],
 };
 
 export interface MutationActionGate {

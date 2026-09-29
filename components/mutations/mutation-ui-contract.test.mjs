@@ -23,14 +23,12 @@ try {
 
 test("mutation query hooks expose the complete officer workflow", () => {
   for (const hook of [
-    "useStartMutationVerification",
     "useCompleteMutationVerification",
     "useMutationDecision",
   ]) {
     assert.match(queriesSource, new RegExp(`export function ${hook}\\b`));
   }
 
-  assert.match(queriesSource, /start-verification/);
   assert.match(queriesSource, /complete-verification/);
   assert.match(queriesSource, /mutations\/\$\{id\}\/decision/);
 });
@@ -49,13 +47,7 @@ test("mutations page integrates the complete URL-backed officer workflow", () =>
   );
   assert.ok(queryHookImport?.groups?.imports, "expected a named import from @/hooks/queries");
 
-  for (const hook of [
-    "useStartMutationVerification",
-    "useCompleteMutationVerification",
-    "useMutationDecision",
-  ]) {
-    assert.match(queryHookImport.groups.imports, new RegExp(`\\b${hook}\\b`));
-  }
+  assert.match(queryHookImport.groups.imports, /\buseMutations\b/);
 
   assert.match(pageSource, /const SCOPE_FILTERS = \["all", "assigned"\] as const;/);
   assert.match(
@@ -67,6 +59,8 @@ test("mutations page integrates the complete URL-backed officer workflow", () =>
   assert.match(pageSource, /<Suspense\s+fallback=/);
   assert.match(pageSource, /<MutationDetailDialog\b/);
   assert.match(pageSource, /<MutationDecisionDialog\b/);
+  assert.match(pageSource, /href=\{`\/ocr-queue\?mutation=\$\{mutation\.id\}`\}/);
+  assert.doesNotMatch(queryHookImport.groups.imports, /\buseStartMutationVerification\b/);
   assert.match(pageSource, /href=\{`\/parcels\/\$\{mutation\.parcelId\}`\}/);
 });
 
