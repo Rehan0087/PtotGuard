@@ -160,6 +160,7 @@ function HoldingCard({ holding }: { holding: LandTaxHolding }) {
               <PaymentConfirmationDialog
                 open
                 amount={bdt(assessment.total)}
+                defaultMethod="bkash"
                 busy={pay.isPending}
                 onOpenChange={(open) => {
                   if (!open && !pay.isPending) setPaying(false);

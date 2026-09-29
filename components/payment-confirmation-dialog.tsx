@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Lock,
 } from "lucide-react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +30,7 @@ const METHODS: {
   gradientFrom: string;
   gradientTo: string;
   border: string;
+  logo: string;
 }[] = [
   {
     value: "bkash",
@@ -39,6 +41,7 @@ const METHODS: {
     gradientFrom: "from-pink-500",
     gradientTo: "to-rose-600",
     border: "border-pink-200 dark:border-pink-800",
+    logo: "/payment-methods/bkash.png",
   },
   {
     value: "nagad",
@@ -49,6 +52,7 @@ const METHODS: {
     gradientFrom: "from-orange-500",
     gradientTo: "to-red-500",
     border: "border-orange-200 dark:border-orange-800",
+    logo: "/payment-methods/nagad.png",
   },
   {
     value: "card",
@@ -59,6 +63,7 @@ const METHODS: {
     gradientFrom: "from-blue-500",
     gradientTo: "to-indigo-600",
     border: "border-blue-200 dark:border-blue-800",
+    logo: "/payment-methods/card.png",
   },
 ];
 
@@ -213,13 +218,20 @@ export function PaymentConfirmationDialog({
                           setError("");
                         }}
                         className={cn(
-                          "flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 px-3 py-3 text-sm font-semibold transition-all duration-200",
+                          "flex flex-col items-center justify-center gap-2 rounded-xl border-2 px-3 py-3 text-sm font-semibold transition-all duration-200",
                           isSelected
                             ? `${option.bg} ${option.color} ${option.border} shadow-sm scale-[1.02]`
                             : "border-border text-muted-foreground hover:border-muted-foreground/50 hover:bg-muted/30",
                         )}
                       >
-                        <Icon className="size-5" />
+                        <div className="relative h-6 w-16">
+                          <Image
+                            src={option.logo}
+                            alt={option.displayName}
+                            fill
+                            className={cn("object-contain", isSelected ? "" : "grayscale opacity-70")}
+                          />
+                        </div>
                         {option.displayName}
                       </button>
                     );
@@ -323,12 +335,15 @@ export function PaymentConfirmationDialog({
               <div className="absolute -top-8 -right-8 size-32 rounded-full bg-white/10" />
               <div className="absolute -bottom-6 -left-6 size-24 rounded-full bg-white/10" />
 
-              <div className="relative flex size-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm border border-white/30 shadow-lg">
-                {method === "card" ? (
-                  <CreditCard className="size-8 text-white" />
-                ) : (
-                  <Smartphone className="size-8 text-white" />
-                )}
+              <div className="relative flex size-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm border border-white/30 shadow-lg p-2">
+                <div className="relative size-full">
+                  <Image
+                    src={selectedMethod.logo}
+                    alt={selectedMethod.displayName}
+                    fill
+                    className="object-contain drop-shadow-md"
+                  />
+                </div>
               </div>
               <div>
                 <p className="text-lg font-bold text-white">

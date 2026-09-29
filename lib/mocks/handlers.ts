@@ -1344,7 +1344,6 @@ export const handlers = [
       deedDate: body.deedDate,
       fee: { amount: db.policies.mutationFeeBdt, currency: "BDT" as const },
       paymentMethod: body.paymentMethod,
-      metadata: body.metadata,
       // Simulated — no gateway is called.
       transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
       createdAt: now,
