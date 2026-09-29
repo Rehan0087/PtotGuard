@@ -151,4 +151,3 @@ describe("community", () => {
     expect(prisma.communityVote.upsert).not.toHaveBeenCalled();
   });
 });
-

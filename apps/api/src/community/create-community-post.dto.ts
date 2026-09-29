@@ -15,4 +15,3 @@ export class CreateCommunityPostDto {
   @IsIn(["discussion", "announcement"])
   kind?: "discussion" | "announcement";
 }
-
