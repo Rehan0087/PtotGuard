@@ -7,6 +7,7 @@ export type CommunityVoteValue = -1 | 1;
 export interface CommunityComment {
   id: ID;
   postId: ID;
+  parentId: ID | null;
   authorId: ID;
   authorName: string;
   authorRole: Role;

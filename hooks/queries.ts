@@ -112,8 +112,8 @@ export function useCreateCommunityPost() {
 export function useCommentOnCommunityPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ postId, body }: { postId: string; body: string }) =>
-      api.post<CommunityPost>(`/community/${postId}/comments`, { body }),
+    mutationFn: ({ postId, body, parentId }: { postId: string; body: string; parentId?: string }) =>
+      api.post<CommunityPost>(`/community/${postId}/comments`, { body, parentId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["community"] }),
   });
 }
