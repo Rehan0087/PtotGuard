@@ -220,7 +220,7 @@ export default function NewMutationPage() {
           });
           router.push("/mutations");
         },
-        onError: (err) => { console.error("MUTATION SUBMIT ERROR", err, err?.response?.data);
+        onError: (err) => {
           setPaymentOpen(false);
           toast.error(t.pages.newMutation.failedTitle, {
             description: t.pages.newMutation.failedBody,

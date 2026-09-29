@@ -302,6 +302,7 @@ function ApplyForm({ onDone, prefilledPlot }: { onDone: () => void, prefilledPlo
       open={paymentDialogOpen}
       onOpenChange={setPaymentDialogOpen}
       amount={fee ? f.money(fee) : ""}
+      defaultMethod="bkash"
       busy={apply.isPending}
       onConfirm={handlePaymentConfirm}
     />
@@ -421,6 +422,7 @@ function MyLeaseSettlementCard({ application }: { application: ServiceApplicatio
           open={paymentDialogOpen}
           onOpenChange={setPaymentDialogOpen}
           amount={f.money({ amount: details.leaseFeeAmount, currency: "BDT" })}
+          defaultMethod="bkash"
           busy={busy}
           onConfirm={handlePayLease}
         />
