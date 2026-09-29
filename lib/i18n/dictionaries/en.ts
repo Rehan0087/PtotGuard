@@ -1429,8 +1429,9 @@ export const en = {
       tooLargeBody: "Please upload a file under 20 MB.",
       documentType: "Document type",
       selectType: "Select a type",
-      linkParcel: "Link to a parcel",
-      notLinked: "Not linked",
+      linkParcel: "Which plot is this document for?",
+      selectParcel: "Select a plot",
+      noPlots: "You have no registered plots. Register a plot first.",
       upload: "Upload",
       receivedTitle: "Upload received",
       receivedBody: (fileName: string) =>

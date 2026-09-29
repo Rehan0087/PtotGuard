@@ -1385,8 +1385,9 @@ export const bn: Dictionary = {
       tooLargeBody: "২০ এমবি-র কম আকারের ফাইল আপলোড করুন।",
       documentType: "দলিলের ধরন",
       selectType: "ধরন বেছে নিন",
-      linkParcel: "একটি দাগের সঙ্গে যুক্ত করুন",
-      notLinked: "যুক্ত নয়",
+      linkParcel: "এই দলিলটি কোন দাগের জন্য?",
+      selectParcel: "একটি দাগ বেছে নিন",
+      noPlots: "আপনার কোনো নিবন্ধিত দাগ নেই। প্রথমে একটি দাগ নিবন্ধন করুন।",
       upload: "আপলোড",
       receivedTitle: "আপলোড গৃহীত হয়েছে",
       receivedBody: (fileName: string) =>
