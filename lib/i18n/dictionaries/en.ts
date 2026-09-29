@@ -2257,7 +2257,7 @@ export const en = {
         titleHighlight: "Land Management",
         subtitle: "We go beyond traditional digitisation. Experience our cutting-edge features designed for absolute transparency and instant support.",
         communityTitle: "Open Community Build",
-        communityDesc: "A first-of-its-kind civic initiative. This platform is open-source and continuously refined by developers, legal experts, and citizens across the nation to ensure fairness, transparency, and trust.",
+        communityDesc: "A first-of-its-kind civic initiative. This platform is open-source and continuously refined by legal experts and citizens across the nation to ensure fairness, transparency, and trust.",
         communityLink: "Explore the repository",
         aiTitle: "AI Chatbot Assistant",
         aiDesc: "Your personal 24/7 land advisor. Whether you are filing a dispute, paying taxes, or trying to understand complex legal documents, our AI instantly guides you step-by-step in plain language.",
