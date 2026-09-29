@@ -838,9 +838,56 @@ export class FieldReportsController {
 
       if (updatedReport.mutationId) {
         const mutation = await tx.mutation.findUnique({ where: { id: updatedReport.mutationId } });
-        if (mutation && updatedReport.disputeFound !== true) {
+        let linkedDisputeId = mutation?.disputeId;
+        if (mutation) {
           if (mutation.status !== "field-investigation") {
             throw new ConflictError("The linked mutation is not awaiting field investigation");
+          }
+          if (updatedReport.disputeFound === true && !linkedDisputeId) {
+            const [count, agent] = await Promise.all([
+              tx.dispute.count(),
+              tx.user.findUnique({ where: { id: actorId } }),
+            ]);
+            const description = updatedReport.disputeDescription?.trim() || updatedReport.notes?.trim();
+            if (!description) {
+              throw new ValidationError({ code: "dispute-description-required" }, "disputeDescription");
+            }
+            const dispute = await tx.dispute.create({
+              data: {
+                id: `ds-${randomUUID()}`,
+                caseNumber: `DSP-${now.getUTCFullYear()}-${String(500 + count).padStart(5, "0")}`,
+                parcelId: mutation.parcelId,
+                parcelDagNo: mutation.parcelDagNo,
+                type: "ownership",
+                status: "under-land-office-review",
+                priority: "high",
+                filedById: actorId,
+                filedByName: agent?.name ?? actorId,
+                filedAt: now,
+                description,
+                parties: [
+                  { name: mutation.fromOwnerName, role: "claimant" },
+                  { name: mutation.toOwnerName, role: "respondent" },
+                ],
+                assignedOfficerId: mutation.assignedOfficerId,
+                evidenceDocumentIds: mutation.documentIds,
+              },
+            });
+            linkedDisputeId = dispute.id;
+            await tx.fieldReport.update({ where: { id: updatedReport.id }, data: { disputeId: linkedDisputeId } });
+            await tx.disputeEvent.create({
+              data: {
+                id: `de-${randomUUID()}`,
+                disputeId: linkedDisputeId,
+                at: now,
+                type: "filed",
+                title: "Dispute reported during mutation field verification",
+                content: { code: "filed" },
+                description,
+                actorId,
+                actorName: agent?.name,
+              },
+            });
           }
           const advanced = await tx.mutation.updateMany({
             where: {
@@ -848,7 +895,10 @@ export class FieldReportsController {
               status: "field-investigation",
               updatedAt: mutation.updatedAt,
             },
-            data: { status: "field-verification-complete" },
+            data: {
+              status: "field-verification-complete",
+              ...(linkedDisputeId ? { disputeId: linkedDisputeId } : {}),
+            },
           });
           if (advanced.count !== 1) {
             throw new ConflictError("This mutation changed; reload and try again");
@@ -862,9 +912,24 @@ export class FieldReportsController {
               previousStatus: "field-investigation",
               newStatus: "field-verification-complete",
               fieldReportId: updatedReport.id,
+              ...(linkedDisputeId ? { disputeId: linkedDisputeId } : {}),
               note: updatedReport.notes ?? undefined,
             },
           });
+          if (linkedDisputeId) {
+            await this.audit.append(tx, {
+              entityType: "mutation",
+              entityId: mutation.id,
+              action: "dispute-filed",
+              actorId,
+              payload: {
+                disputeId: linkedDisputeId,
+                previousStatus: "field-verification-complete",
+                newStatus: "field-verification-complete",
+                note: updatedReport.disputeDescription ?? updatedReport.notes ?? undefined,
+              },
+            });
+          }
         }
         if (mutation?.assignedOfficerId && mutation.assignedOfficerId !== actorId) {
           await tx.appNotification.create({
@@ -878,7 +943,9 @@ export class FieldReportsController {
                 ? `The field agent reported a dispute for mutation ${mutation.mutationNumber}.`
                 : `Mutation ${mutation.mutationNumber} is field verification complete and ready for a final decision.`,
               read: false,
-              href: `/mutations?mutation=${mutation.id}`,
+              href: linkedDisputeId
+                ? `/disputes/${linkedDisputeId}`
+                : `/mutations?mutation=${mutation.id}`,
             },
           });
         }
@@ -998,10 +1065,32 @@ export class FieldReportsController {
     }
 
     if (!body.status) {
-      return this.prisma.fieldReport.update({
+      const updated = await this.prisma.fieldReport.update({
         where: { id },
         data: { ...(body.notes !== undefined ? { notes: body.notes } : {}) },
       });
+      if (body.notes !== undefined && report.mutationId) {
+        const mutation = await this.prisma.mutation.findUnique({
+          where: { id: report.mutationId },
+          select: { id: true, mutationNumber: true, assignedOfficerId: true },
+        });
+        if (mutation?.assignedOfficerId && mutation.assignedOfficerId !== actorId) {
+          await this.prisma.appNotification.create({
+            data: {
+              id: `n-${randomUUID()}`,
+              userId: mutation.assignedOfficerId,
+              at: new Date(),
+              severity: "info",
+              title: "Field investigation updated",
+              body: `Field agent notes were updated for mutation ${mutation.mutationNumber}.`,
+              content: { code: "field-investigation-updated", mutationId: mutation.id },
+              read: false,
+              href: `/mutations?mutation=${mutation.id}`,
+            },
+          });
+        }
+      }
+      return updated;
     }
     const changed = await this.prisma.fieldReport.updateMany({
       where: { id, assignedAgentId: actorId, status: report.status },

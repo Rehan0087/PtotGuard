@@ -21,6 +21,7 @@ export type NotificationContent =
   | { code: "document-unclear"; dagNo: string }
   | { code: "document-processed"; fileName: string }
   | { code: "survey-scheduled"; dagNo: string }
+  | { code: "field-investigation-updated"; mutationId: string }
   | { code: "mutation-verification"; mutationNumber: string; dagNo: string }
   | { code: "land-tax-reminder"; dagNo: string; assessmentYear: number; amount: number }
   | { code: "revenue-case-filed"; caseNumber: string; dagNo: string; amount: number }

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -174,7 +173,6 @@ export function PaymentConfirmationDialog({
           <div className="space-y-5 p-6">
             <DialogHeader>
               <DialogTitle>{t.common.payment.title}</DialogTitle>
-              <DialogDescription>{t.common.payment.description(amount)}</DialogDescription>
             </DialogHeader>
 
             {/* Method selector */}
@@ -233,7 +231,6 @@ export function PaymentConfirmationDialog({
           <div className="space-y-5 p-6">
             <DialogHeader>
               <DialogTitle>{t.common.payment.title}</DialogTitle>
-              <DialogDescription>{t.common.payment.description(amount)}</DialogDescription>
             </DialogHeader>
 
             <div className={cn("flex items-center gap-3 rounded-xl border p-3", selectedMethod.bg)}>

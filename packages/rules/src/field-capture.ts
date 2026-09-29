@@ -50,6 +50,7 @@ export type FilingBlocker =
   | { code: "not-actionable" }
   | { code: "need-gps"; have: number; need: number }
   | { code: "need-photos"; have: number; need: number }
+  | { code: "need-sketch" }
   | { code: "need-notes" };
 
 export interface FilingReview {
@@ -76,6 +77,7 @@ export function filingReview(
   const need = EVIDENCE_REQUIRED[report.purpose];
   const gpsHave = evidence.gpsCount ?? report.gpsCaptures.length;
   const photosHave = report.photos.length;
+  const photosNeed = report.mutationId ? Math.max(1, need.photos) : need.photos;
   const hasNotes = notes.trim().length > 0;
 
   const blockers: FilingBlocker[] = [];
@@ -88,8 +90,11 @@ export function filingReview(
   if (gpsHave < need.gps) {
     blockers.push({ code: "need-gps", have: gpsHave, need: need.gps });
   }
-  if (photosHave < need.photos) {
-    blockers.push({ code: "need-photos", have: photosHave, need: need.photos });
+  if (photosHave < photosNeed) {
+    blockers.push({ code: "need-photos", have: photosHave, need: photosNeed });
+  }
+  if (report.mutationId && (!report.sketchMapUrl || !report.sketchMapFileName)) {
+    blockers.push({ code: "need-sketch" });
   }
   // The finding is the deliverable: points and pictures without a reading of them
   // is data nobody downstream can act on.
@@ -101,7 +106,7 @@ export function filingReview(
     gpsHave,
     gpsNeed: need.gps,
     photosHave,
-    photosNeed: need.photos,
+    photosNeed,
     hasNotes,
     canFile: blockers.length === 0,
     blockers,

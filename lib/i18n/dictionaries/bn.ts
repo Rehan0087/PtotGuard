@@ -65,7 +65,6 @@ export const bn: Dictionary = {
     gpsBoundaryTrack: "জিপিএস সীমানা পথ",
     payment: {
       title: "পেমেন্ট নিশ্চিত করুন",
-      description: (amount: string) => `নিরাপদ ডেমো চেকআউটের মাধ্যমে ${amount} পরিশোধ করুন।`,
       method: "পেমেন্ট পদ্ধতি",
       mobileNumber: "মোবাইল অ্যাকাউন্ট নম্বর",
       mobilePlaceholder: "01XXXXXXXXX",
@@ -76,7 +75,6 @@ export const bn: Dictionary = {
       cvv: "সিভিভি",
       pin: "যাচাইকরণ পিন",
       pinPlaceholder: "••••",
-      demoPinHint: "ডেমো পিন: 1234। কার্ড ও পিনের তথ্য পাঠানো বা সংরক্ষণ করা হয় না।",
       invalidNumber: "সঠিক মোবাইল বা কার্ড নম্বর দিন।",
       invalidExpiry: "MM/YY আকারে মেয়াদ শেষের তারিখ দিন।",
       invalidCvv: "৩ বা ৪ সংখ্যার সিভিভি দিন।",
@@ -1006,6 +1004,7 @@ export const bn: Dictionary = {
           `${n(need)}টি জিপিএস পয়েন্ট নিন — আপনার আছে ${n(have)}টি।`,
         needPhotos: (have: number, need: number) =>
           `${n(need)}টি ছবি যোগ করুন — আপনার আছে ${n(have)}টি।`,
+        needSketch: "জমির স্কেচটি ছবি বা পিডিএফ হিসেবে আপলোড করুন।",
         needNotes: "আপনার পর্যবেক্ষণ লিখুন।",
       },
       markOnSite: "ঘটনাস্থলে পৌঁছেছি",
@@ -1693,12 +1692,12 @@ export const bn: Dictionary = {
       deedNumberLabel: "দলিল নম্বর",
       deedNumberPlaceholder: "যেমন ৪৮২১/২০২৬",
       deedDateLabel: "দলিলের তারিখ",
+      deedPdfLabel: "দলিলের পিডিএফ (আবশ্যক)",
+      noDeedForParcel: "এই দাগের জন্য কোনো দলিলের পিডিএফ নিবন্ধিত নেই। এগোনোর আগে একটি আপলোড করুন।",
       paymentTitle: "আবেদন ফি",
       feeLabel: "প্রদেয় পরিমাণ",
       paymentMethodLabel: "পরিশোধের মাধ্যম",
       paymentMethods: { bkash: "বিকাশ", nagad: "নগদ", card: "কার্ড" },
-      paymentNote:
-        "এটি প্রদর্শনের জন্য অনুকরণকৃত পরিশোধ — কোনো অর্থ স্থানান্তরিত হয় না এবং কোনো পরিশোধের তথ্য সংগ্রহ করা হয় না।",
       reviewAndSubmit: "পর্যালোচনা করে জমা দিন",
       rowParcel: "দাগ",
       rowType: "ধরন",
@@ -1730,6 +1729,7 @@ export const bn: Dictionary = {
         toOwnerRequired: "নতুন মালিকের নাম লিখুন।",
         correctionReasonRequired: "সংশোধনের বিবরণ লিখুন।",
         heirRelationshipRequired: "মৃত মালিকের সাথে আপনার সম্পর্ক উল্লেখ করুন।",
+        deedRequired: "এই দাগের জন্য নিবন্ধিত দলিলের পিডিএফ বেছে নিন।",
       },
       toOwnerHint: "নতুন মালিকের একটি VhumiShetu অ্যাকাউন্ট থাকতে হবে — তাঁর নিবন্ধিত ইমেইল বা ফোন নম্বর দিয়ে খুঁজুন।",
       toOwnerNoMatch: "এর সাথে মিলে এমন কোনো নিবন্ধিত অ্যাকাউন্ট নেই। প্রথমে তাঁকে একটি অ্যাকাউন্ট তৈরি করতে বলুন।",
@@ -1783,7 +1783,7 @@ export const bn: Dictionary = {
 
     ocrQueue: {
       description:
-        "লেখা উদ্ধারের প্রক্রিয়ায় থাকা স্ক্যান। প্রতিটি আবশ্যক তথ্য সংগ্রহ না হলে এবং কাগজের কোনো তথ্য রেকর্ডের সঙ্গে না মিললে উদ্ধারকৃত তথ্য রেজিস্টারে ওঠে না।",
+        "এআই কেবল দলিলের দৃশ্যমান তথ্য উদ্ধার করে, কোনো সিদ্ধান্ত নেয় না। অনুপস্থিত তথ্য পূরণ করে দলিলটি গ্রহণ করুন অথবা জালিয়াতি পর্যালোচনায় পাঠান।",
       stages: {
         ready: { label: "যাচাইয়ের জন্য প্রস্তুত", hint: "কর্মকর্তার অপেক্ষায়" },
         failed: { label: "পড়া যায়নি", hint: "আবার চেষ্টা দরকার" },
@@ -1830,7 +1830,7 @@ export const bn: Dictionary = {
         `স্ক্যানে ${field} আছে ${scanned}; রেকর্ডে এই দাগের জন্য আছে ${registered}।`,
       acceptedTitle: "উদ্ধারকৃত তথ্য গৃহীত",
       acceptedBody: (fileName: string, target: string) =>
-        `${fileName} ${target}-এর বিপরীতে লিপিবদ্ধ হয়েছে।`,
+        `${fileName} ${target}-এর বিপরীতে লিপিবদ্ধ হয়েছে; নামজারি এখন প্রাথমিক যাচাইয়ে।`,
       theRegister: "রেজিস্টার",
       acceptFailedTitle: "গ্রহণ করা যায়নি",
       escalatedTitle: "জালিয়াতি পর্যালোচনায় পাঠানো হয়েছে",
@@ -2071,8 +2071,6 @@ export const bn: Dictionary = {
       confirmPay: (amount: string) => `${amount} পরিশোধ করুন`,
       viewParcel: "দাগ দেখুন",
       paymentMethods: { bkash: "বিকাশ", nagad: "নগদ", card: "কার্ড" },
-      paymentNote:
-        "এটি প্রদর্শনের জন্য অনুকরণকৃত পরিশোধ — কোনো অর্থ স্থানান্তরিত হয় না এবং কোনো পরিশোধের তথ্য সংগ্রহ করা হয় না।",
       paidTitle: "কর পরিশোধিত",
       paidBody: (dagNo: string, transactionId: string) =>
         `${dagNo}-এর এ বছরের কর পরিশোধ হয়েছে। রেফারেন্স ${transactionId}।`,

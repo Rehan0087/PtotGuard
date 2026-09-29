@@ -17,8 +17,6 @@ import {
   Gift,
   Rows3,
   FileEdit,
-  Smartphone,
-  CreditCard,
   AlertCircle,
   Search,
   UserRound,
@@ -34,6 +32,7 @@ import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { ParcelBoundary } from "@/components/parcel-boundary";
 import { UploadDocumentDialog } from "@/components/upload-document-dialog";
+import { PaymentConfirmationDialog } from "@/components/payment-confirmation-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,12 +60,6 @@ const MUTATION_TYPES: { value: MutationType; icon: LucideIcon }[] = [
   { value: "correction", icon: FileEdit },
 ];
 
-const PAYMENT_METHODS: { value: PaymentMethod; icon: LucideIcon }[] = [
-  { value: "bkash", icon: Smartphone },
-  { value: "nagad", icon: Smartphone },
-  { value: "card", icon: CreditCard },
-];
-
 /** Types that require a new owner picker */
 const TYPES_WITH_RECIPIENT: MutationType[] = ["sale", "inheritance", "gift", "partition"];
 /** Types that show deed number + deed date */
@@ -81,7 +74,7 @@ function makeSchema(t: Dictionary) {
       toOwnerId: z.string().optional().default(""),
       deedNumber: z.string().max(60).optional().default(""),
       deedDate: z.string().optional().default(""),
-      documentIds: z.array(z.string()).optional().default([]),
+      documentIds: z.array(z.string()).min(1, t.pages.newMutation.errors.deedRequired),
       paymentMethod: z.enum(["bkash", "nagad", "card"]),
       correctionReason: z.string().optional().default(""),
       heirRelationship: z.string().optional().default(""),
@@ -119,7 +112,7 @@ const STEP_KEYS = ["parcel", "transfer", "payment", "review"] as const;
 
 /** Fields to validate per step — type-specific fields validated at step 1. */
 function stepFields(type: MutationType): (keyof FormInput)[][] {
-  const transferFields: (keyof FormInput)[] = ["type"];
+  const transferFields: (keyof FormInput)[] = ["type", "documentIds"];
   if (TYPES_WITH_RECIPIENT.includes(type)) transferFields.push("toOwnerId");
   if (type === "correction") transferFields.push("correctionReason");
   if (type === "inheritance") transferFields.push("heirRelationship");
@@ -140,6 +133,8 @@ export default function NewMutationPage() {
   const createMutation = useCreateMutation();
   const { data: session } = useSession();
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentAttempt, setPaymentAttempt] = useState(0);
 
   const {
     control,
@@ -177,8 +172,13 @@ export default function NewMutationPage() {
   const heirRelationship = useWatch({ control, name: "heirRelationship" });
   const partitionNote = useWatch({ control, name: "partitionNote" });
 
-  const docsQ = useDocuments({ parcelId: parcelId || "none", pageSize: 100 });
-  const documents = docsQ.data?.items ?? [];
+  const docsQ = useDocuments({ owner: "me", parcelId: parcelId || "none", pageSize: 100 });
+  const documents = (docsQ.data?.items ?? []).filter(
+    (document) =>
+      document.parcelId === parcelId &&
+      document.mimeType === "application/pdf" &&
+      (document.type === "sale-deed" || document.type === "title-deed"),
+  );
 
   // Display-only — the form only ever submits toOwnerId, but the picked
   // name is what the review step and a "change" chip need to show. Seeded
@@ -195,6 +195,11 @@ export default function NewMutationPage() {
   const fee = policy ? { amount: policy.mutationFeeBdt, currency: "BDT" as const } : null;
 
   async function next() {
+    if (step === 2) {
+      setPaymentAttempt((attempt) => attempt + 1);
+      setPaymentOpen(true);
+      return;
+    }
     const fields = stepFields(type)[step];
     const ok = await trigger(fields as (keyof FormValues)[]);
     if (ok) setStep((current) => Math.min(current + 1, STEP_KEYS.length - 1));
@@ -290,7 +295,10 @@ export default function NewMutationPage() {
                     <button
                       type="button"
                       key={p.id}
-                      onClick={() => setValue("parcelId", p.id, { shouldValidate: true })}
+                      onClick={() => {
+                        setValue("parcelId", p.id, { shouldValidate: true });
+                        setValue("documentIds", [], { shouldValidate: false });
+                      }}
                       className={cn(
                         "flex items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors",
                         active
@@ -504,11 +512,11 @@ export default function NewMutationPage() {
               </div>
             ) : null}
 
-            {/* ── DOCUMENTS ── */}
+            {/* ── DEED PDF ── */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between">
                 <label className="block text-sm font-medium text-foreground">
-                  Supporting Documents <span className="text-muted-foreground">({t.common.optional})</span>
+                  {t.pages.newMutation.deedPdfLabel}
                 </label>
                 <Button type="button" variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
                   <Upload className="mr-1.5 size-4" />
@@ -520,7 +528,7 @@ export default function NewMutationPage() {
                   <Skeleton className="h-14 w-full rounded-lg" />
                 ) : documents.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No documents found for this parcel. Upload a document to attach it.
+                    {t.pages.newMutation.noDeedForParcel}
                   </p>
                 ) : (
                   <div className="grid gap-2">
@@ -535,14 +543,12 @@ export default function NewMutationPage() {
                           )}
                         >
                           <input
-                            type="checkbox"
+                            type="radio"
+                            name="mutation-deed-pdf"
                             className="sr-only"
                             checked={isSelected}
-                            onChange={(e) => {
-                              const next = e.target.checked
-                                ? [...documentIds, doc.id]
-                                : documentIds.filter((id) => id !== doc.id);
-                              setValue("documentIds", next, { shouldValidate: true });
+                            onChange={() => {
+                              setValue("documentIds", [doc.id], { shouldValidate: true });
                             }}
                           />
                           <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-md text-primary", isSelected ? "bg-primary/10" : "bg-secondary")}>
@@ -566,6 +572,12 @@ export default function NewMutationPage() {
                   </div>
                 )}
               </div>
+              {errors.documentIds ? (
+                <p className="flex items-center gap-1.5 text-sm text-destructive">
+                  <AlertCircle className="size-4" />
+                  {errors.documentIds.message}
+                </p>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -582,40 +594,8 @@ export default function NewMutationPage() {
                 <span className="tabular text-sm font-semibold text-foreground">{f.money(fee)}</span>
               </div>
             ) : null}
-            <div>
-              <span className="mb-1.5 block text-sm font-medium text-foreground">
-                {t.pages.newMutation.paymentMethodLabel}
-              </span>
-              <Controller
-                name="paymentMethod"
-                control={control}
-                render={({ field }) => (
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {PAYMENT_METHODS.map((option) => {
-                      const Icon = option.icon;
-                      const active = field.value === option.value;
-                      return (
-                        <button
-                          type="button"
-                          key={option.value}
-                          onClick={() => field.onChange(option.value)}
-                          className={cn(
-                            "flex items-center gap-2 rounded-lg border bg-card p-3 text-left transition-colors",
-                            active ? "border-primary ring-1 ring-primary" : "border-border hover:bg-muted/50",
-                          )}
-                        >
-                          <Icon className={cn("size-4 shrink-0", active ? "text-marker" : "text-muted-foreground")} />
-                          <span className="text-sm font-medium text-foreground">
-                            {t.pages.newMutation.paymentMethods[option.value]}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">{t.pages.newMutation.paymentNote}</p>
+            <p className="text-sm text-muted-foreground">
+            </p>
           </section>
         ) : null}
 
@@ -711,6 +691,17 @@ export default function NewMutationPage() {
       </div>
 
       <UploadDocumentDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+      <PaymentConfirmationDialog
+        key={paymentAttempt}
+        open={paymentOpen}
+        amount={fee ? f.money(fee) : f.money({ amount: 0, currency: "BDT" })}
+        onOpenChange={setPaymentOpen}
+        onConfirm={(method: PaymentMethod) => {
+          setValue("paymentMethod", method, { shouldValidate: true });
+          setPaymentOpen(false);
+          setStep(3);
+        }}
+      />
     </div>
   );
 }

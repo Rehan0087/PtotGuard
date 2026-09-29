@@ -81,7 +81,6 @@ export const en = {
     gpsBoundaryTrack: "GPS boundary track",
     payment: {
       title: "Confirm payment",
-      description: (amount: string) => `Pay ${amount} through the secure demo checkout.`,
       method: "Payment method",
       mobileNumber: "Mobile account number",
       mobilePlaceholder: "01XXXXXXXXX",
@@ -92,7 +91,6 @@ export const en = {
       cvv: "CVV",
       pin: "Verification PIN",
       pinPlaceholder: "••••",
-      demoPinHint: "Demo PIN: 1234. Card and PIN details are never sent or stored.",
       invalidNumber: "Enter a valid mobile or card number.",
       invalidExpiry: "Enter the expiry date as MM/YY.",
       invalidCvv: "Enter the 3 or 4 digit CVV.",
@@ -256,7 +254,7 @@ export const en = {
       "field-verification-complete": "Field verification complete",
       approved: "Approved",
       rejected: "Rejected",
-      "awaiting-dcr-payment": "Awaiting DCR payment",
+      "awaiting-dcr-payment": "Awaiting for DCR payment",
       complete: "Complete",
     },
     ocr: {
@@ -1046,6 +1044,7 @@ export const en = {
           `Capture ${n(need)} GPS point${need === 1 ? "" : "s"} — you have ${n(have)}.`,
         needPhotos: (have: number, need: number) =>
           `Add ${n(need)} photo${need === 1 ? "" : "s"} — you have ${n(have)}.`,
+        needSketch: "Upload the land sketch as an image or PDF.",
         needNotes: "Write your findings.",
       },
       markOnSite: "Mark on site",
@@ -1743,12 +1742,12 @@ export const en = {
       deedNumberLabel: "Deed number",
       deedNumberPlaceholder: "e.g. 4821/2026",
       deedDateLabel: "Deed date",
+      deedPdfLabel: "Deed PDF (required)",
+      noDeedForParcel: "No deed PDF is registered for this parcel. Upload one before continuing.",
       paymentTitle: "Filing fee",
       feeLabel: "Amount due",
       paymentMethodLabel: "Pay with",
       paymentMethods: { bkash: "bKash", nagad: "Nagad", card: "Card" },
-      paymentNote:
-        "This is a simulated payment for demonstration — no money moves and no payment details are collected.",
       reviewAndSubmit: "Review and submit",
       rowParcel: "Parcel",
       rowType: "Type",
@@ -1781,6 +1780,7 @@ export const en = {
         toOwnerRequired: "Enter the name of the new owner.",
         correctionReasonRequired: "Describe the correction to be made.",
         heirRelationshipRequired: "Enter your relationship to the deceased owner.",
+        deedRequired: "Select the deed PDF registered for this parcel.",
       },
       toOwnerHint: "The new owner needs a VhumiShetu account — search by the email or phone they registered with.",
       toOwnerNoMatch: "No registered account matches that. Ask them to create one first.",
@@ -1834,7 +1834,7 @@ export const en = {
 
     ocrQueue: {
       description:
-        "Scans moving through text extraction. An extraction only enters the register once every required field is captured and nothing on the paper contradicts the record.",
+        "AI extracts visible deed information but never decides the case. Fill any missing fields, then accept the deed or send it to fraud review.",
       stages: {
         ready: { label: "Ready to check", hint: "Waiting on an officer" },
         failed: { label: "Unreadable", hint: "Needs a retry" },
@@ -1885,7 +1885,7 @@ export const en = {
         `Scan reads ${scanned} for ${field}; the register has ${registered} for this parcel.`,
       acceptedTitle: "Extraction accepted",
       acceptedBody: (fileName: string, target: string) =>
-        `${fileName} is recorded against ${target}.`,
+        `${fileName} is recorded against ${target}; the mutation is now under primary verification.`,
       theRegister: "the register",
       acceptFailedTitle: "Could not accept",
       escalatedTitle: "Sent to fraud review",
@@ -2143,8 +2143,6 @@ export const en = {
       confirmPay: (amount: string) => `Pay ${amount}`,
       viewParcel: "View parcel",
       paymentMethods: { bkash: "bKash", nagad: "Nagad", card: "Card" },
-      paymentNote:
-        "This is a simulated payment for demonstration — no money moves and no payment details are collected.",
       paidTitle: "Tax paid",
       paidBody: (dagNo: string, transactionId: string) =>
         `${dagNo} is settled for this year. Reference ${transactionId}.`,

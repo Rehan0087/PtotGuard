@@ -44,6 +44,9 @@ export interface MutationObjection {
 /** How the filing fee was paid. Simulated — see PaymentMethod's own note. */
 export type PaymentMethod = "bkash" | "nagad" | "card";
 
+/** Statutory DCR charge paid after the land officer approves a mutation. */
+export const MUTATION_DCR_AMOUNT_BDT = 1170;
+
 /** A request to change the recorded owner of a parcel. */
 export interface Mutation {
   id: ID;
@@ -100,6 +103,9 @@ export interface Mutation {
   orderSheet?: string;
   digitalSignature?: string;
   mutationKhatianNumber?: string;
+  dcrAmount?: number;
+  dcrPaymentMethod?: PaymentMethod;
+  dcrTransactionId?: string;
   dcrPaidAt?: ISODateString;
   decidedAt?: ISODateString;
   createdAt?: ISODateString;

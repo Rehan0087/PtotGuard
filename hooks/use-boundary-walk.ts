@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { analyzeGpsTrack, annotateGpsPoints } from "@plotguard/rules";
+import { annotateGpsPoints } from "@plotguard/rules";
 import type { FieldReportDetail } from "@/lib/types";
+import { api } from "@/lib/api-client";
 import type {
   FieldSyncOperation,
   FieldSyncStatus,
@@ -130,8 +131,11 @@ export function useBoundaryWalk(
   const retrySync = useCallback(async () => {
     if (!assignedAgentId || !processor) return;
     await processor.retryFailed(assignedAgentId);
-    await refresh();
-  }, [assignedAgentId, processor, refresh]);
+    // Run the same refresh/invalidation path as an ordinary successful sync.
+    // This is especially important when the retried operation is the filing
+    // that moves a mutation into the Land Office queue.
+    await syncNow();
+  }, [assignedAgentId, processor, syncNow]);
 
   const scheduleSync = useCallback(() => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
@@ -227,7 +231,10 @@ export function useBoundaryWalk(
     setLocationError(undefined);
     beginWatch();
     await refresh();
-    void syncNow();
+    // Wait for the server acknowledgement before allowing media uploads.
+    // Otherwise a photo/sketch can race START_SURVEY and be rejected because
+    // the remote survey row does not exist yet.
+    await syncNow();
   }, [assignedAgentId, beginWatch, fieldReportId, key, refresh, remote, repository, syncNow]);
 
   const complete = useCallback(
@@ -235,21 +242,104 @@ export function useBoundaryWalk(
       if (!repository || !key) throw new Error("Offline survey not found");
       stopWatch.current?.();
       setTracking(false);
+      if (syncTimer.current) clearTimeout(syncTimer.current);
       await writes.current;
-      const storedPoints = await repository.listPoints(key);
       const survey = await repository.getSurvey(key);
       if (!survey) throw new Error("Offline survey not found");
-      const completedAt = new Date().toISOString();
-      const summary = analyzeGpsTrack(
-        annotateGpsPoints(storedPoints, survey.serverSessionId ?? survey.localSessionId),
-        survey.startedAt,
-        completedAt,
-      );
-      await repository.queueCompletion(key, notes, completedAt, summary, finding);
-      await refresh();
+
+      // Filing from Assigned Visits is an online workflow: first drain the
+      // queued START/POINT operations, then call the completion endpoint and
+      // await its database transaction. Previously COMPLETE_SURVEY was only
+      // added to IndexedDB; the UI could fail while the API never received
+      // the report, leaving both the visit and mutation `in-progress`.
       await syncNow();
+
+      let operations = await repository.listOperations(key);
+      const prerequisiteFailure = operations.find(
+        (operation) =>
+          operation.operation_type !== "COMPLETE_SURVEY" &&
+          operation.sync_status !== "SYNCED",
+      );
+      if (prerequisiteFailure) {
+        throw new Error(
+          prerequisiteFailure.last_error ??
+            "GPS evidence is still synchronizing. Retry before filing the report.",
+        );
+      }
+
+      // Older builds queued completion locally. Drain one of those operations
+      // with its original idempotency key instead of also making a new direct
+      // request, which would otherwise report a false "already completed"
+      // conflict after the legacy request succeeds.
+      let legacyCompletion = operations
+        .filter((operation) => operation.operation_type === "COMPLETE_SURVEY")
+        .at(-1);
+      if (
+        legacyCompletion &&
+        legacyCompletion.sync_status !== "SYNCED" &&
+        assignedAgentId &&
+        processor
+      ) {
+        await processor.retry(legacyCompletion.local_id, assignedAgentId);
+        await refresh();
+        operations = await repository.listOperations(key);
+        legacyCompletion = operations
+          .filter((operation) => operation.operation_type === "COMPLETE_SURVEY")
+          .at(-1);
+      }
+
+      let result: Pick<FieldReportDetail, "report" | "survey">;
+      if (legacyCompletion) {
+        if (legacyCompletion.sync_status !== "SYNCED") {
+          throw new Error(
+            legacyCompletion.last_error ??
+              "The field report is still waiting to synchronize with the Land Office.",
+          );
+        }
+        const response = legacyCompletion.response as
+          | Pick<FieldReportDetail, "report" | "survey">
+          | undefined;
+        if (!response?.report || !response.survey) {
+          throw new Error("The completed field report could not be restored from synchronization");
+        }
+        result = response;
+      } else {
+        result = await api.post<Pick<FieldReportDetail, "report" | "survey">>(
+          `/field-reports/${encodeURIComponent(fieldReportId)}/survey/complete`,
+          {
+            notes,
+            disputeFound: finding?.disputeFound ?? false,
+            ...(finding?.disputeFound && finding.disputeDescription
+              ? { disputeDescription: finding.disputeDescription }
+              : {}),
+          },
+        );
+      }
+      if (!result.survey) throw new Error("The server did not return the completed field survey");
+
+      await repository.updateSurvey(key, {
+        state: "completed",
+        syncStatus: "SYNCED",
+        serverSessionId: result.survey.id,
+        serverVersion: result.survey.version,
+        completedAt: result.survey.completedAt ?? new Date().toISOString(),
+        notes,
+        summary: result.survey.summary,
+        reportSnapshot: result.report,
+        updatedAt: new Date().toISOString(),
+      });
+      await refresh();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["field-report", fieldReportId] }),
+        queryClient.invalidateQueries({ queryKey: ["field-reports-assigned"] }),
+        queryClient.invalidateQueries({ queryKey: ["field-reports"] }),
+        queryClient.invalidateQueries({ queryKey: ["mutations"] }),
+        queryClient.invalidateQueries({ queryKey: ["mutation"] }),
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+        queryClient.invalidateQueries({ queryKey: ["records"] }),
+      ]);
     },
-    [key, refresh, repository, syncNow],
+    [assignedAgentId, fieldReportId, key, processor, queryClient, refresh, repository, syncNow],
   );
 
   useEffect(() => {
@@ -336,13 +426,22 @@ export function useBoundaryWalk(
         setRestoring(false);
         const state = await permissionState();
         setPermission(state);
+        const hasUnsentWork = (await repository.listOperations(key)).some(
+          (operation) =>
+            operation.sync_status === "PENDING" || operation.sync_status === "UPLOADING",
+        );
+        // Recover filings stranded by an older client or an interrupted tab
+        // as soon as the case is reopened. Without this, the server can stay
+        // `in-progress` indefinitely until the browser happens to emit a new
+        // online event or the agent manually retries.
+        if (hasUnsentWork && isOnline()) void syncNow();
       }
     };
     void restore();
     return () => {
       cancelled = true;
     };
-  }, [assignedAgentId, fieldReportId, key, refresh, remote, repository]);
+  }, [assignedAgentId, fieldReportId, key, refresh, remote, repository, syncNow]);
 
   useEffect(() => {
     if (localSurvey?.state !== "active" || permission !== "granted" || tracking) return;
