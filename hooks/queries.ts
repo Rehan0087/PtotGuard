@@ -48,6 +48,9 @@ import type {
   KhasLandPlot,
   AcquisitionAppealDecision,
   AcquisitionAppealOutcome,
+  CommunityPost,
+  CommunityPostKind,
+  CommunityVoteValue,
 
 } from "@/lib/types";
 import type { RulingOutcome } from "@plotguard/rules";
@@ -82,6 +85,45 @@ export function useJurisdictions() {
     queryKey: ["jurisdictions"],
     queryFn: () => api.get<Jurisdiction[]>("/jurisdictions"),
     staleTime: Infinity,
+  });
+}
+
+// --- Community ------------------------------------------------------------
+export function useCommunityPosts() {
+  const role = useRole();
+  return useQuery({
+    queryKey: ["community", role],
+    queryFn: () => api.get<CommunityPost[]>("/community"),
+  });
+}
+
+export function useCreateCommunityPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { title: string; body: string; kind: CommunityPostKind }) =>
+      api.post<CommunityPost>("/community", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["community"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}
+
+export function useCommentOnCommunityPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, body, parentId }: { postId: string; body: string; parentId?: string }) =>
+      api.post<CommunityPost>(`/community/${postId}/comments`, { body, parentId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["community"] }),
+  });
+}
+
+export function useVoteOnCommunityPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, value }: { postId: string; value: CommunityVoteValue }) =>
+      api.post<CommunityPost>(`/community/${postId}/vote`, { value }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["community"] }),
   });
 }
 
@@ -177,7 +219,15 @@ export interface FileDisputeInput {
   type: Dispute["type"];
   priority: Dispute["priority"];
   description: string;
-  respondentName?: string;
+  respondentId: string;
+}
+
+/** Active citizens available as the mandatory other party on a dispute. */
+export function useCitizenDirectory() {
+  return useQuery({
+    queryKey: ["citizen-directory"],
+    queryFn: () => api.get<{ id: string; name: string }[]>("/users/citizens"),
+  });
 }
 
 function invalidateRecordViews(qc: QueryClient) {
@@ -217,6 +267,10 @@ export function useAssignDisputeAgent(id: string) {
       api.post<Dispute>(`/disputes/${id}/assign-agent`, { agentId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dispute", id] });
+      qc.invalidateQueries({ queryKey: ["disputes"] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
+      qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }
@@ -987,7 +1041,7 @@ export function useRecordHearingSession(id: string) {
 // --- Inheritance -----------------------------------------------------------
 export function useCalculateInheritance() {
   return useMutation({
-    mutationFn: (input: InheritanceInput) =>
+    mutationFn: (input: Omit<InheritanceInput, "method"> & { method: "faraiz"; parcelIds: string[] }) =>
       api.post<InheritanceResult>("/inheritance/calculate", input),
   });
 }

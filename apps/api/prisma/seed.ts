@@ -474,9 +474,9 @@ async function main(): Promise<void> {
   // --- Hearings -------------------------------------------------------------
   await prisma.hearing.createMany({
     data: [
-      { id: "h-1", caseNumber: "HRG-2026-0044", disputeId: "ds-388", parcelDagNo: "CS-176", mediatorId: "usr-mediator", status: "in-hearing", parties: ["Md. Karim Uddin", "Sohel Rana"], hearingDate: new Date("2026-07-26T05:30:00Z"), sessions: [{ id: "s-1", at: "2026-07-19T05:30:00Z", summary: "Both deeds presented. Handwriting examiner appointed; next session scheduled.", attendees: ["Md. Karim Uddin", "Sohel Rana", "Shahida Khatun"] }] },
-      { id: "h-2", caseNumber: "HRG-2026-0039", disputeId: "ds-340", parcelDagNo: "BS-205", mediatorId: "usr-mediator", status: "scheduled", parties: ["Shanti Rani Das", "Upazila Land Office"], hearingDate: new Date("2026-07-30T05:30:00Z"), sessions: [] },
-      { id: "h-3", caseNumber: "HRG-2026-0031", disputeId: "ds-370", parcelDagNo: "RS-311/2", mediatorId: "usr-mediator", status: "ruled", parties: ["Md. Karim Uddin"], sessions: [{ id: "s-2", at: "2026-06-15T05:30:00Z", summary: "Name correction upheld.", attendees: ["Md. Karim Uddin", "Shahida Khatun"] }], ruling: "Khatian to reflect the corrected owner name. Case closed.", ruledAt: new Date("2026-06-18T05:30:00Z") },
+      { id: "h-1", caseNumber: "HRG-2026-0044", disputeId: "ds-388", parcelDagNo: "CS-176", mediatorId: "usr-mediator", status: "in-hearing", parties: ["Md. Karim Uddin", "Sohel Rana"], hearingDate: new Date("2026-07-26T05:30:00Z"), location: "Upazilla settlement office", sessions: [{ id: "s-1", at: "2026-07-19T05:30:00Z", summary: "Both deeds presented. Handwriting examiner appointed; next session scheduled.", attendees: ["Md. Karim Uddin", "Sohel Rana", "Shahida Khatun"] }] },
+      { id: "h-2", caseNumber: "HRG-2026-0039", disputeId: "ds-340", parcelDagNo: "BS-205", mediatorId: "usr-mediator", status: "scheduled", parties: ["Shanti Rani Das", "Upazila Land Office"], hearingDate: new Date("2026-07-30T05:30:00Z"), location: "Upazilla settlement office", sessions: [] },
+      { id: "h-3", caseNumber: "HRG-2026-0031", disputeId: "ds-370", parcelDagNo: "RS-311/2", mediatorId: "usr-mediator", status: "ruled", parties: ["Md. Karim Uddin"], location: "Upazilla settlement office", sessions: [{ id: "s-2", at: "2026-06-15T05:30:00Z", summary: "Name correction upheld.", attendees: ["Md. Karim Uddin", "Shahida Khatun"] }], ruling: "Khatian to reflect the corrected owner name. Case closed.", ruledAt: new Date("2026-06-18T05:30:00Z") },
     ] as Prisma.HearingCreateManyInput[],
   });
 
@@ -583,6 +583,23 @@ async function main(): Promise<void> {
       { id: "n-102", userId: "usr-ayesha", at: new Date("2026-08-18T11:25:00Z"), severity: "critical", title: "Document OCR failed", body: "Your khatian for dag RS-888 failed processing.", content: { code: "document-failed", dagNo: "RS-888" }, read: false, href: "/documents" },
       { id: "n-103", userId: "usr-ayesha", at: new Date("2026-08-22T08:20:00Z"), severity: "warning", title: "Forwarded to Settlement Office", body: "Dispute for DSP-2026-00999 is set.", content: { code: "dispute-status", caseNumber: "DSP-2026-00999", status: "forwarded-to-settlement" }, read: false, href: "/disputes/ds-999" },
     ] as Prisma.AppNotificationCreateManyInput[],
+  });
+
+  // --- Community -------------------------------------------------------------
+  await prisma.communityPost.createMany({
+    data: [
+      { id: "cp-1", title: "What should I keep after submitting an e-Namjari application?", content: "I submitted a mutation request online. Which documents or reference numbers should I save while the land office reviews it?", authorId: "usr-ayesha", createdAt: new Date("2026-09-27T09:00:00Z"), updatedAt: new Date("2026-09-27T09:00:00Z") },
+      { id: "cp-2", title: "Tip: verify the mouza before searching by dag number", content: "The same dag number can exist in more than one mouza. Selecting the district, upazila, and mouza first gave me the correct record.", authorId: "usr-karim", createdAt: new Date("2026-09-26T14:15:00Z"), updatedAt: new Date("2026-09-26T14:15:00Z") },
+    ] satisfies Prisma.CommunityPostCreateManyInput[],
+  });
+  await prisma.communityComment.create({
+    data: { id: "cc-1", postId: "cp-1", content: "Keep the payment receipt and the application number. The mutation page will show each verification step after submission.", authorId: "usr-karim", createdAt: new Date("2026-09-27T10:30:00Z"), updatedAt: new Date("2026-09-27T10:30:00Z") },
+  });
+  await prisma.communityVote.createMany({
+    data: [
+      { id: "cv-post-1", value: 1, userId: "usr-karim", postId: "cp-1", createdAt: new Date("2026-09-27T10:00:00Z") },
+      { id: "cv-comment-1", value: 1, userId: "usr-ayesha", commentId: "cc-1", createdAt: new Date("2026-09-27T11:00:00Z") },
+    ] satisfies Prisma.CommunityVoteCreateManyInput[],
   });
 
   // --- Audit ledger — chained for real, not seeded pre-hashed. Sorted by

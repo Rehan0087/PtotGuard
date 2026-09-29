@@ -28,12 +28,30 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     title: "Sub-Registrar",
   },
   {
+    email: "a.mannan@minland.gov.bd",
+    name: "Abdul Mannan",
+    role: "land-office",
+    title: "Registration Clerk",
+  },
+  {
     email: "j.alam@minland.gov.bd",
     name: "Jahangir Alam",
     role: "field-agent",
     title: "Survey Amin",
   },
+  {
+    email: "r.karim@minland.gov.bd",
+    name: "Rezaul Karim",
+    role: "field-agent",
+    title: "Survey Assistant",
+  },
   { email: "s.khatun@landtribunal.gov.bd", name: "Shahida Khatun", role: "mediator" },
+  {
+    email: "a.begum@landtribunal.gov.bd",
+    name: "Anwara Begum",
+    role: "mediator",
+    title: "Settlement Officer",
+  },
   { email: "admin@plotguard.gov.bd", name: "Registry Administrator", role: "admin" },
 ];
 

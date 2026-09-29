@@ -127,6 +127,7 @@ describe("field report assignment authorization", () => {
       id: "ds-1",
       caseNumber: "DSP-2026-00001",
       filedById: "usr-citizen",
+      assignedOfficerId: "usr-officer",
       status: "field-visit-scheduled",
       updatedAt: new Date("2026-09-10T08:00:00Z"),
     };
@@ -769,17 +770,17 @@ describe("field report assignment authorization", () => {
     expect(response.body.report.submittedAt).toBeTruthy();
     expect(response.body.survey.status).toBe("completed");
     expect(response.body.survey.completedAt).toBeTruthy();
-    expect(dispute.status).toBe("under-review");
+    expect(dispute.status).toBe("field-verified");
     expect(disputeEvents.at(-1)).toMatchObject({
       type: "field-visit",
       title: "Field survey filed",
     });
     expect(notifications.at(-1)).toMatchObject({
-      userId: "usr-citizen",
+      userId: "usr-officer",
       content: {
         code: "dispute-status",
         caseNumber: "DSP-2026-00001",
-        status: "under-review",
+        status: "field-verified",
       },
     });
     expect(auditEntries.at(-1)).toMatchObject({

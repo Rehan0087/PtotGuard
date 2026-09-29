@@ -1,276 +1,285 @@
 "use client";
 
 import { useState } from "react";
-import { formatDistanceToNow } from "date-fns";
-import { MessageCircle, Heart, User, Plus, Share2, Send } from "lucide-react";
+import { ArrowBigDown, ArrowBigUp, BellRing, MessageCircle, MessagesSquare, Plus, Reply } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useCommunityPosts, useCreatePost, useVotePost, useVoteComment, useCreateComment, CommunityPost, CommunityComment } from "@/hooks/community-queries";
-import { useSessionStore } from "@/store/session";
-import Link from "next/link";
+import {
+  useCommentOnCommunityPost,
+  useCommunityPosts,
+  useCreateCommunityPost,
+  useVoteOnCommunityPost,
+} from "@/hooks/queries";
 import { initials } from "@/lib/format";
+import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
-import { toast } from "sonner";
+import type { CommunityComment, CommunityPost, CommunityPostKind, CommunityVoteValue } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { useSessionStore } from "@/store/session";
 
-function CommentItem({ comment, postId, userId, level = 0 }: { comment: CommunityComment, postId: string, userId?: string | null, level?: number }) {
-  const [isReplying, setIsReplying] = useState(false);
-  const [replyContent, setReplyContent] = useState("");
-  const createComment = useCreateComment();
-  const voteComment = useVoteComment();
+function Composer({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const role = useSessionStore((state) => state.role);
+  const mutation = useCreateCommunityPost();
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [kind, setKind] = useState<CommunityPostKind>("discussion");
 
-  const upvotes = comment.votes.filter(v => v.value === 1).length;
-  const downvotes = comment.votes.filter(v => v.value === -1).length;
-  const score = upvotes - downvotes;
-  const userVote = comment.votes.find(v => v.userId === userId)?.value || 0;
-
-  const handleVote = (value: number) => {
-    if (!userId) return;
-    const newValue = userVote === value ? 0 : value;
-    voteComment.mutate({ commentId: comment.id, postId, value: newValue });
-  };
-
-  const handleReply = () => {
-    if (!replyContent.trim()) return;
-    createComment.mutate({ postId, content: replyContent, parentId: comment.id }, {
-      onSuccess: () => {
-        setIsReplying(false);
-        setReplyContent("");
-        toast.success("Reply added");
-      }
-    });
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await mutation.mutateAsync({ title, body, kind });
+    onClose();
   };
 
   return (
-    <div className={`flex gap-3 sm:gap-4 ${level > 0 ? "ml-6 sm:ml-12 mt-4" : "mt-6"}`}>
-      <Avatar className="size-8 mt-1 border">
-        <AvatarImage src={comment.author.avatarUrl || undefined} />
-        <AvatarFallback className="text-xs">{initials(comment.author.name)}</AvatarFallback>
-      </Avatar>
-      
-      <div className="flex-1 space-y-2">
-        <div className="rounded-lg border bg-card p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="font-semibold text-sm">{comment.author.name}</span>
-            <span className="text-xs text-muted-foreground">·</span>
-            <span className="text-xs text-muted-foreground">
-              {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
-            </span>
-          </div>
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{comment.content}</p>
-        </div>
-        
-        <div className="flex items-center gap-2 px-1">
-          <div className="flex items-center rounded-full bg-muted/40 p-0.5 border border-transparent hover:bg-muted transition-colors">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className={`h-7 rounded-full gap-1.5 px-2.5 ${userVote === 1 ? "text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 dark:text-rose-400 dark:bg-rose-500/10 dark:hover:bg-rose-500/20" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => handleVote(1)}
-            >
-              <Heart className={`size-3.5 ${userVote === 1 ? "fill-current" : ""}`} />
-              <span className="text-xs font-semibold">{score}</span>
+    <Card className="border-primary/20 p-4 shadow-sm">
+      <form className="space-y-4" onSubmit={submit}>
+        {role === "land-office" ? (
+          <div className="flex gap-2" role="group" aria-label={t.pages.community.postType}>
+            <Button type="button" size="sm" variant={kind === "discussion" ? "default" : "outline"} onClick={() => setKind("discussion")}>
+              <MessagesSquare /> {t.pages.community.newPost}
+            </Button>
+            <Button type="button" size="sm" variant={kind === "announcement" ? "default" : "outline"} onClick={() => setKind("announcement")}>
+              <BellRing /> {t.pages.community.newAnnouncement}
             </Button>
           </div>
-          
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => setIsReplying(!isReplying)}
-          >
-            Reply
+        ) : null}
+        <label className="grid gap-1.5 text-sm font-medium">
+          {t.pages.community.titleLabel}
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t.pages.community.titlePlaceholder} minLength={4} maxLength={140} required />
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium">
+          {t.pages.community.bodyLabel}
+          <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder={t.pages.community.bodyPlaceholder} minLength={8} maxLength={5000} required className="min-h-28" />
+        </label>
+        {mutation.isError ? <p className="text-sm text-destructive">{t.pages.community.postError}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>{t.pages.community.cancel}</Button>
+          <Button type="submit" disabled={mutation.isPending || title.trim().length < 4 || body.trim().length < 8}>
+            {mutation.isPending ? t.pages.community.publishing : t.pages.community.publish}
           </Button>
         </div>
+      </form>
+    </Card>
+  );
+}
 
-        {isReplying && (
-          <div className="mt-2 flex gap-2 items-start">
-            <Textarea 
-              className="min-h-[60px] text-sm" 
-              placeholder={`Replying to ${comment.author.name}...`}
-              value={replyContent}
-              onChange={e => setReplyContent(e.target.value)}
-              autoFocus
-            />
-            <Button size="icon" onClick={handleReply} disabled={createComment.isPending || !replyContent.trim()}>
-              <Send className="size-4" />
-            </Button>
-          </div>
-        )}
-      </div>
+function VoteRail({ post }: { post: CommunityPost }) {
+  const t = useT();
+  const f = useFmt();
+  const vote = useVoteOnCommunityPost();
+  const cast = (value: CommunityVoteValue) => vote.mutate({ postId: post.id, value });
+  return (
+    <div className="flex min-w-10 flex-row items-center gap-1 rounded-lg bg-muted/60 p-1 sm:flex-col">
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.pages.community.upVote} disabled={vote.isPending} onClick={() => cast(1)} className={cn(post.viewerVote === 1 && "bg-primary/10 text-primary")}>
+        <ArrowBigUp className={cn(post.viewerVote === 1 && "fill-current")} />
+      </Button>
+      <span className="min-w-6 text-center text-xs font-semibold" aria-label={t.pages.community.votes(post.score)}>{f.number(post.score)}</span>
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.pages.community.downVote} disabled={vote.isPending} onClick={() => cast(-1)} className={cn(post.viewerVote === -1 && "bg-destructive/10 text-destructive")}>
+        <ArrowBigDown className={cn(post.viewerVote === -1 && "fill-current")} />
+      </Button>
+      {vote.isError ? <span className="sr-only">{t.pages.community.voteError}</span> : null}
     </div>
   );
 }
 
-export default function CommunityPage() {
-  const { data: posts, isLoading } = useCommunityPosts();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newPostTitle, setNewPostTitle] = useState("");
-  const [newPostContent, setNewPostContent] = useState("");
-  const createPost = useCreatePost();
-  const votePost = useVotePost();
-  const voteComment = useVoteComment();
-  const createComment = useCreateComment();
-  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
-  const userId = useSessionStore(s => s.userId);
+function CommentThread({
+  comment,
+  repliesByParent,
+  replyingToId,
+  replyBody,
+  isSubmitting,
+  onReply,
+  onReplyBodyChange,
+  onCancelReply,
+  onSubmitReply,
+  depth = 0,
+}: {
+  comment: CommunityComment;
+  repliesByParent: Map<string, CommunityComment[]>;
+  replyingToId: string | null;
+  replyBody: string;
+  isSubmitting: boolean;
+  onReply: (comment: CommunityComment) => void;
+  onReplyBodyChange: (body: string) => void;
+  onCancelReply: () => void;
+  onSubmitReply: (event: React.FormEvent, parentId: string) => void;
+  depth?: number;
+}) {
   const t = useT();
-
-  const handleCreatePost = () => {
-    if (!newPostTitle.trim() || !newPostContent.trim()) {
-      toast.error("Title and content are required");
-      return;
-    }
-    createPost.mutate({ title: newPostTitle, content: newPostContent }, {
-      onSuccess: () => {
-        setIsDialogOpen(false);
-        setNewPostTitle("");
-        setNewPostContent("");
-        toast.success("Post created successfully");
-      },
-      onError: () => toast.error("Failed to create post")
-    });
-  };
-
-  const handleVote = (post: CommunityPost, value: number) => {
-    if (!userId) return;
-    const existingVote = post.votes.find(v => v.userId === userId);
-    const newValue = existingVote?.value === value ? 0 : value;
-    votePost.mutate({ postId: post.id, value: newValue });
-  };
-
-  if (isLoading) {
-    return <div className="flex h-64 items-center justify-center">
-      <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-    </div>;
-  }
+  const f = useFmt();
+  const replies = repliesByParent.get(comment.id) ?? [];
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t.nav.communityBuild}</h1>
-          <p className="text-muted-foreground mt-1">Discuss land issues, share advice, and help the community.</p>
+    <div className={cn("space-y-2", depth > 0 && "ml-4 border-l border-border pl-3 sm:ml-6")}>
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="font-medium">{comment.authorName}</span>
+          <Badge variant="outline" className="h-4 px-1.5 text-[10px]">{t.roles[comment.authorRole]}</Badge>
+          <time className="text-muted-foreground" dateTime={comment.createdAt}>{f.fromNow(comment.createdAt)}</time>
         </div>
-        
-        <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
-          <Plus className="size-4" />
-          New Post
+        <p className="whitespace-pre-wrap text-sm leading-5 text-muted-foreground">{comment.body}</p>
+        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onReply(comment)}>
+          <Reply className="size-3.5" /> {t.pages.community.replyToComment}
         </Button>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="sm:max-w-[525px]">
-            <DialogHeader>
-              <DialogTitle>Create a new post</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Title</label>
-                <Input 
-                  placeholder="What's on your mind?" 
-                  value={newPostTitle}
-                  onChange={e => setNewPostTitle(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Content</label>
-                <Textarea 
-                  placeholder="Provide more details..." 
-                  className="min-h-[150px]"
-                  value={newPostContent}
-                  onChange={e => setNewPostContent(e.target.value)}
-                />
-              </div>
-              <Button 
-                className="w-full" 
-                onClick={handleCreatePost}
-                disabled={createPost.isPending}
-              >
-                {createPost.isPending ? "Posting..." : "Post"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
-
-      <div className="grid gap-4">
-        {posts?.map(post => {
-          const upvotes = post.votes.filter(v => v.value === 1).length;
-          const downvotes = post.votes.filter(v => v.value === -1).length;
-          const score = upvotes - downvotes;
-          const userVote = post.votes.find(v => v.userId === userId)?.value || 0;
-
-          return (
-            <Card key={post.id} className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/5 to-primary/15 dark:from-primary/10 dark:to-primary/20 transition-all hover:from-primary/10 hover:to-primary/20 dark:hover:from-primary/15 dark:hover:to-primary/25 hover:border-primary/30 hover:shadow-md">
-              <div className="flex flex-col p-4 sm:p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Avatar className="size-6 border shadow-sm">
-                    <AvatarImage src={post.author.avatarUrl || undefined} />
-                    <AvatarFallback className="text-[10px]">{initials(post.author.name)}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium">{post.author.name}</span>
-                  <span className="text-xs text-muted-foreground">·</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
-                  </span>
-                </div>
-
-                <Link href={`/community/${post.id}`} className="group block mb-3">
-                  <h2 className="mb-2 text-lg sm:text-xl font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors line-clamp-2">
-                    {post.title}
-                  </h2>
-                  <p className="text-muted-foreground line-clamp-3 text-sm sm:text-base leading-relaxed">
-                    {post.content}
-                  </p>
-                </Link>
-                
-                <div className="flex items-center gap-1 sm:gap-4 -ml-2">
-                  <div className="flex items-center rounded-full bg-muted/40 p-0.5 border border-transparent hover:bg-muted transition-colors">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className={`h-8 rounded-full gap-1.5 px-3 ${userVote === 1 ? "text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 dark:text-rose-400 dark:bg-rose-500/10 dark:hover:bg-rose-500/20" : "text-muted-foreground hover:text-foreground"}`}
-                      onClick={() => handleVote(post, 1)}
-                    >
-                      <Heart className={`size-4 ${userVote === 1 ? "fill-current" : ""}`} />
-                      <span className="text-xs font-semibold">{upvotes}</span>
-                    </Button>
-                  </div>
-                  
-                  <Link href={`/community/${post.id}`}>
-                    <Button variant="ghost" size="sm" className="h-8 rounded-full gap-1.5 px-3 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                      <MessageCircle className="size-4" />
-                      <span className="text-xs font-semibold">{post._count?.comments ?? post.comments?.length ?? 0}</span>
-                      <span className="sr-only sm:not-sr-only sm:ml-0.5 text-xs">Comments</span>
-                    </Button>
-                  </Link>
-
-                  <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full p-0 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors sm:ml-auto">
-                    <Share2 className="size-4" />
-                    <span className="sr-only">Share</span>
-                  </Button>
-                </div>
-              </div>
-            </Card>
-
-          );
-        })}
-        {posts?.length === 0 && (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-            <div className="rounded-full bg-primary/10 p-3">
-              <MessageCircle className="size-6 text-primary" />
-            </div>
-            <h3 className="mt-4 text-lg font-semibold">No posts yet</h3>
-            <p className="mt-2 text-sm text-muted-foreground max-w-sm">
-              Be the first to start a discussion! Share a question, tip, or experience with the community.
-            </p>
-            <Button className="mt-6" onClick={() => setIsDialogOpen(true)}>
-              Create First Post
-            </Button>
+      {replyingToId === comment.id ? (
+        <form className="space-y-2" onSubmit={(event) => onSubmitReply(event, comment.id)}>
+          <Textarea
+            autoFocus
+            value={replyBody}
+            onChange={(event) => onReplyBodyChange(event.target.value)}
+            placeholder={t.pages.community.replyPlaceholder(comment.authorName)}
+            maxLength={2000}
+            required
+            className="min-h-20"
+            aria-label={t.pages.community.replyPlaceholder(comment.authorName)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onCancelReply}>{t.pages.community.cancel}</Button>
+            <Button type="submit" size="sm" disabled={isSubmitting || !replyBody.trim()}>{t.pages.community.postReply}</Button>
           </div>
-        )}
+        </form>
+      ) : null}
+      {replies.map((reply) => (
+        <CommentThread
+          key={reply.id}
+          comment={reply}
+          repliesByParent={repliesByParent}
+          replyingToId={replyingToId}
+          replyBody={replyBody}
+          isSubmitting={isSubmitting}
+          onReply={onReply}
+          onReplyBodyChange={onReplyBodyChange}
+          onCancelReply={onCancelReply}
+          onSubmitReply={onSubmitReply}
+          depth={depth + 1}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PostCard({ post }: { post: CommunityPost }) {
+  const t = useT();
+  const f = useFmt();
+  const comment = useCommentOnCommunityPost();
+  const [body, setBody] = useState("");
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyBody, setReplyBody] = useState("");
+
+  const comments = post.comments ?? [];
+  const repliesByParent = new Map<string, CommunityComment[]>();
+  for (const item of comments) {
+    if (!item.parentId) continue;
+    const replies = repliesByParent.get(item.parentId) ?? [];
+    replies.push(item);
+    repliesByParent.set(item.parentId, replies);
+  }
+  const rootComments = comments.filter((item) => !item.parentId);
+
+  const submitComment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await comment.mutateAsync({ postId: post.id, body });
+    setBody("");
+  };
+
+  const submitReply = async (event: React.FormEvent, parentId: string) => {
+    event.preventDefault();
+    await comment.mutateAsync({ postId: post.id, body: replyBody, parentId });
+    setReplyBody("");
+    setReplyingToId(null);
+  };
+
+  return (
+    <Card id={post.id} className={cn("scroll-mt-20 overflow-hidden", post.kind === "announcement" && "border-primary/30 bg-primary/[0.025]")}>
+      {post.kind === "announcement" ? (
+        <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-2 text-xs font-semibold text-primary">
+          <BellRing className="size-3.5" /> {t.pages.community.announcement}
+        </div>
+      ) : null}
+      <div className="flex gap-3 p-4">
+        <VoteRail post={post} />
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <Avatar size="sm"><AvatarFallback>{initials(post.authorName)}</AvatarFallback></Avatar>
+            <div className="min-w-0 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{post.authorName}</span>
+              <span className="mx-1.5">·</span>
+              <span>{t.roles[post.authorRole]}</span>
+              <span className="mx-1.5">·</span>
+              <time dateTime={post.createdAt}>{f.fromNow(post.createdAt)}</time>
+            </div>
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-foreground">{post.title}</h2>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{post.body}</p>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MessageCircle className="size-3.5" /> {t.pages.community.comments(post.commentCount)}
+          </div>
+          {rootComments.length ? (
+            <div className="space-y-3 border-l-2 border-border pl-3">
+              {rootComments.map((item) => (
+                <CommentThread
+                  key={item.id}
+                  comment={item}
+                  repliesByParent={repliesByParent}
+                  replyingToId={replyingToId}
+                  replyBody={replyBody}
+                  isSubmitting={comment.isPending}
+                  onReply={(selected) => {
+                    setReplyingToId(selected.id);
+                    setReplyBody("");
+                  }}
+                  onReplyBodyChange={setReplyBody}
+                  onCancelReply={() => {
+                    setReplyingToId(null);
+                    setReplyBody("");
+                  }}
+                  onSubmitReply={submitReply}
+                />
+              ))}
+            </div>
+          ) : null}
+          <form className="flex items-end gap-2" onSubmit={submitComment}>
+            <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder={t.pages.community.commentPlaceholder} maxLength={2000} required className="min-h-9 flex-1" aria-label={t.pages.community.addComment} />
+            <Button type="submit" size="sm" disabled={comment.isPending || !body.trim()}>{t.pages.community.reply}</Button>
+          </form>
+          {comment.isError ? <p className="text-xs text-destructive">{t.pages.community.commentError}</p> : null}
+        </div>
       </div>
+    </Card>
+  );
+}
+
+export default function CommunityPage() {
+  const t = useT();
+  const { data: posts, isLoading, isError, refetch } = useCommunityPosts();
+  const [composing, setComposing] = useState(false);
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <PageHeader eyebrow={t.pages.community.eyebrow} title={t.pages.community.title} description={t.pages.community.description}>
+        <Button size="sm" onClick={() => setComposing((value) => !value)}><Plus /> {t.pages.community.newPost}</Button>
+      </PageHeader>
+      {composing ? <Composer onClose={() => setComposing(false)} /> : null}
+      {isLoading ? (
+        <div className="space-y-3">{[0, 1, 2].map((item) => <Skeleton key={item} className="h-48 rounded-xl" />)}</div>
+      ) : isError ? (
+        <Card className="p-6 text-center"><p className="text-sm text-destructive">{t.pages.community.loadError}</p><Button className="mt-3" variant="outline" onClick={() => refetch()}>{t.common.retry}</Button></Card>
+      ) : posts?.length ? (
+        <div className="space-y-3">{posts.map((post) => <PostCard key={post.id} post={post} />)}</div>
+      ) : (
+        <EmptyState icon={MessagesSquare} title={t.pages.community.emptyTitle} description={t.pages.community.emptyBody} />
+      )}
     </div>
   );
 }

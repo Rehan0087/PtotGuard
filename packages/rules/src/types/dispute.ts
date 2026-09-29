@@ -94,6 +94,7 @@ export interface Dispute {
   assignedMediatorId?: ID;
   evidenceDocumentIds: ID[];
   hearingDate?: ISODateString;
+  hearingLocation?: string;
   resolution?: string;
   /** Set once a land-office officer applies the ruling to the parcel record. */
   recordsExecutedAt?: ISODateString;

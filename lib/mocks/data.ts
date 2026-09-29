@@ -1,7 +1,7 @@
 /**
  * Seed dataset for the mock API. Realistic and interconnected so every portal
  * looks populated in demos. Setting: **Cumilla District, Bangladesh** — dag/khatian
- * numbers, upazila/mouza hierarchy, BDT values, Faraiz/Hindu inheritance context.
+ * numbers, upazila/mouza hierarchy, BDT values, and Faraiz inheritance context.
  *
  * These arrays are mutable: the MSW handlers push/patch them so writes persist
  * for the lifetime of the browser session.
@@ -29,6 +29,9 @@ import type {
   GeoPolygon,
   Grievance,
   GrievanceEvent,
+  CommunityPost,
+  CommunityComment,
+  CommunityVoteValue,
 } from "@/lib/types";
 import type { FieldSurveyGpsPoint } from "@/lib/types";
 import type { MockSyncReceipt } from "./field-survey-sync-contract";
@@ -480,7 +483,21 @@ export const parcelRestrictions: ParcelRestriction[] = [
   { id: "res-4", parcelId: "p-311", type: "mortgage", authority: "Janata Bank, Cumilla", referenceNo: "JB/MTG/2019/1188", note: "Discharged on repayment.", fromDate: "2019-11-02T00:00:00Z", toDate: "2025-01-30T00:00:00Z" },
 ];
 
-export const khasLandPlots: any[] = [
+export interface KhasLandPlotMock {
+  id: string;
+  mouza: string;
+  upazila: string;
+  district: string;
+  dagNo: string;
+  landUse: "agricultural" | "non-agricultural";
+  areaDecimals: number;
+  centroidLat: number;
+  centroidLng: number;
+  boundaryGeoJson: GeoPolygon;
+  status: "available" | "reserved" | "leased";
+}
+
+export const khasLandPlots: KhasLandPlotMock[] = [
   { id: "klp-1", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "110", landUse: "agricultural", areaDecimals: 50, centroidLat: 23.550, centroidLng: 90.990, boundaryGeoJson: square({ lat: 23.550, lng: 90.990 }), status: "available" },
   { id: "klp-2", mouza: "Rajamehar", upazila: "Debidwar", district: "Cumilla", dagNo: "115", landUse: "non-agricultural", areaDecimals: 12, centroidLat: 23.552, centroidLng: 90.992, boundaryGeoJson: square({ lat: 23.552, lng: 90.992 }), status: "available" },
   { id: "klp-3", mouza: "Payalgacha", upazila: "Barura", district: "Cumilla", dagNo: "220", landUse: "agricultural", areaDecimals: 120, centroidLat: 23.360, centroidLng: 91.030, boundaryGeoJson: square({ lat: 23.360, lng: 91.030 }), status: "available" },
@@ -793,9 +810,9 @@ export const fieldSurveySyncReceipts: MockSyncReceipt[] = [];
 // Hearings
 // ---------------------------------------------------------------------------
 export const hearings: Hearing[] = [
-  { id: "h-1", caseNumber: "HRG-2026-0044", disputeId: "ds-388", parcelDagNo: "CS-176", mediatorId: "usr-mediator", status: "in-hearing", parties: ["Md. Karim Uddin", "Sohel Rana"], hearingDate: "2026-07-26T05:30:00Z", sessions: [{ id: "s-1", at: "2026-07-19T05:30:00Z", summary: "Both deeds presented. Handwriting examiner appointed; next session scheduled.", attendees: ["Md. Karim Uddin", "Sohel Rana", "Shahida Khatun"] }] },
-  { id: "h-2", caseNumber: "HRG-2026-0039", disputeId: "ds-340", parcelDagNo: "BS-205", mediatorId: "usr-mediator", status: "scheduled", parties: ["Shanti Rani Das", "Upazila Land Office"], hearingDate: "2026-07-30T05:30:00Z", sessions: [] },
-  { id: "h-3", caseNumber: "HRG-2026-0031", disputeId: "ds-370", parcelDagNo: "RS-311/2", mediatorId: "usr-mediator", status: "ruled", parties: ["Md. Karim Uddin"], sessions: [{ id: "s-2", at: "2026-06-15T05:30:00Z", summary: "Name correction upheld.", attendees: ["Md. Karim Uddin", "Shahida Khatun"] }], ruling: "Khatian to reflect the corrected owner name. Case closed.", ruledAt: "2026-06-18T05:30:00Z" },
+  { id: "h-1", caseNumber: "HRG-2026-0044", disputeId: "ds-388", parcelDagNo: "CS-176", mediatorId: "usr-mediator", status: "in-hearing", parties: ["Md. Karim Uddin", "Sohel Rana"], hearingDate: "2026-07-26T05:30:00Z", location: "Upazilla settlement office", sessions: [{ id: "s-1", at: "2026-07-19T05:30:00Z", summary: "Both deeds presented. Handwriting examiner appointed; next session scheduled.", attendees: ["Md. Karim Uddin", "Sohel Rana", "Shahida Khatun"] }] },
+  { id: "h-2", caseNumber: "HRG-2026-0039", disputeId: "ds-340", parcelDagNo: "BS-205", mediatorId: "usr-mediator", status: "scheduled", parties: ["Shanti Rani Das", "Upazila Land Office"], hearingDate: "2026-07-30T05:30:00Z", location: "Upazilla settlement office", sessions: [] },
+  { id: "h-3", caseNumber: "HRG-2026-0031", disputeId: "ds-370", parcelDagNo: "RS-311/2", mediatorId: "usr-mediator", status: "ruled", parties: ["Md. Karim Uddin"], location: "Upazilla settlement office", sessions: [{ id: "s-2", at: "2026-06-15T05:30:00Z", summary: "Name correction upheld.", attendees: ["Md. Karim Uddin", "Shahida Khatun"] }], ruling: "Khatian to reflect the corrected owner name. Case closed.", ruledAt: "2026-06-18T05:30:00Z" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -828,6 +845,37 @@ export const policies = {
 };
 
 // ---------------------------------------------------------------------------
+// Community — shared by every authenticated role.
+// ---------------------------------------------------------------------------
+export const communityPosts: Omit<CommunityPost, "score" | "viewerVote" | "commentCount" | "comments">[] = [
+  {
+    id: "community-1", authorId: "usr-officer", authorName: "Nasrin Akter", authorRole: "land-office",
+    title: "Digital mutation help desk this Thursday",
+    body: "The Debidwar Land Office will run a walk-in help desk from 10:00 AM to 2:00 PM. Bring your application number and original identity document.",
+    kind: "announcement", createdAt: "2026-09-25T08:30:00Z", updatedAt: "2026-09-25T08:30:00Z",
+  },
+  {
+    id: "community-2", authorId: "usr-ayesha", authorName: "Ayesha Siddika", authorRole: "citizen",
+    title: "What should I bring to a boundary survey?",
+    body: "My first field survey is next week. Which documents are useful to have ready for the field agent?",
+    kind: "discussion", createdAt: "2026-09-24T11:15:00Z", updatedAt: "2026-09-24T11:15:00Z",
+  },
+];
+
+export const communityComments: CommunityComment[] = [
+  {
+    id: "community-comment-1", postId: "community-2", parentId: null, authorId: "usr-agent", authorName: "Rahim Uddin", authorRole: "field-agent",
+    body: "Keep the latest khatian, deed copy, and any earlier survey map ready. The assigned agent can confirm if anything else is needed.",
+    createdAt: "2026-09-24T12:05:00Z",
+  },
+];
+
+export const communityVotes: { postId: string; userId: string; value: CommunityVoteValue }[] = [
+  { postId: "community-1", userId: "usr-ayesha", value: 1 },
+  { postId: "community-1", userId: "usr-agent", value: 1 },
+  { postId: "community-2", userId: "usr-officer", value: 1 },
+];
+
 // Notifications (citizen inbox is richest for the demo)
 // ---------------------------------------------------------------------------
 export const notifications: AppNotification[] = [

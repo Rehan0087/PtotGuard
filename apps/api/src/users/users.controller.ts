@@ -36,6 +36,22 @@ export class UsersController {
     private readonly audit: AuditService,
   ) {}
 
+  /** Minimal active-citizen directory used by the mandatory dispute-party picker. */
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
+  @Get("citizens")
+  async citizens(@Req() req: Request) {
+    return this.prisma.user.findMany({
+      where: {
+        role: "citizen",
+        status: "active",
+        id: { not: currentUserId(req) },
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+  }
+
   /**
    * The mutation wizard's recipient picker — additive, and deliberately
    * narrower than `list()` below: a citizen filing a transfer needs to find

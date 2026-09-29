@@ -1,18 +1,16 @@
 /**
- * Gives every active demo account the documented password, on a database
- * that already has rows.
+ * Ensures every advertised demo account exists and has the documented
+ * password, including on a database that already has rows.
  *
  * The seed writes this hash, but the seed only ever runs on an empty
  * database: its createMany calls pass no skipDuplicates, so re-running it
  * against a populated one dies on the first unique constraint. Any machine
- * seeded before the hash was added therefore holds users with
- * passwordHash = NULL, and the API answers every sign-in with "Invalid email
- * or password" — the app is unusable against the real backend even though
- * the sign-in screen prints the password on the page.
+ * seeded before a login was added can therefore have a missing user or a
+ * passwordHash of NULL. In either case the API answers with "Invalid email or
+ * password" even though the sign-in screen advertises that account.
  *
- * This is the narrow repair for that. It fills in the hash only where one is
- * missing, so it never overwrites a password someone set deliberately, and
- * it is safe to run as often as you like.
+ * These are explicit demo identities, so the upserts keep their documented
+ * shared password deterministic and are safe to run as often as needed.
  */
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
@@ -24,20 +22,38 @@ const prisma = new PrismaClient({
 });
 
 async function main(): Promise<void> {
-  // Suspended and invited accounts are skipped on purpose: login refuses them
-  // by status, so a password would not make them usable, and writing one
-  // would quietly undo an admin's suspension the day the status changed back.
-  const { count } = await prisma.user.updateMany({
-    where: { status: "active", passwordHash: null },
-    data: { passwordHash: DEMO_PASSWORD_HASH },
-  });
-  const active = await prisma.user.count({ where: { status: "active" } });
+  const demoAccounts = [
+    { id: "usr-ayesha", name: "Ayesha Siddika", email: "ayesha.siddika@example.bd", role: "citizen", jurisdictionId: "j-rajamehar" },
+    { id: "usr-fatema", name: "Fatema Begum", email: "demo2@example.bd", role: "citizen", jurisdictionId: "j-rajamehar" },
+    { id: "usr-rashed", name: "Rashed Khan", email: "demo3@example.bd", role: "citizen", jurisdictionId: "j-debidwar" },
+    { id: "usr-noor", name: "Noor Jahan", email: "demo4@example.bd", role: "citizen", jurisdictionId: "j-payalgacha" },
+    { id: "usr-habib", name: "Habib Molla", email: "demo5@example.bd", role: "citizen", jurisdictionId: "j-barura" },
+    { id: "usr-officer", name: "Nasrin Akter", email: "n.akter@minland.gov.bd", role: "land-office", jurisdictionId: "j-debidwar", title: "Sub-Registrar" },
+    { id: "usr-officer2", name: "Abdul Mannan", email: "a.mannan@minland.gov.bd", role: "land-office", jurisdictionId: "j-barura", title: "Registration Clerk" },
+    { id: "usr-agent", name: "Jahangir Alam", email: "j.alam@minland.gov.bd", role: "field-agent", jurisdictionId: "j-debidwar", title: "Survey Amin" },
+    { id: "usr-agent2", name: "Rezaul Karim", email: "r.karim@minland.gov.bd", role: "field-agent", jurisdictionId: "j-barura", title: "Survey Assistant" },
+    { id: "usr-mediator", name: "Shahida Khatun", email: "s.khatun@landtribunal.gov.bd", role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer (Retd. Judge)" },
+    { id: "usr-mediator2", name: "Anwara Begum", email: "a.begum@landtribunal.gov.bd", role: "mediator", jurisdictionId: "j-cumilla", title: "Settlement Officer" },
+    { id: "usr-admin", name: "Registry Administrator", email: "admin@plotguard.gov.bd", role: "admin", jurisdictionId: "j-cumilla", title: "Registry Administrator" },
+  ] as const;
 
-  console.log(
-    count === 0
-      ? `Nothing to do — all ${active} active accounts already have a password.`
-      : `Set the demo password on ${count} of ${active} active accounts.`,
+  await prisma.$transaction(
+    demoAccounts.map((account) =>
+      prisma.user.upsert({
+        where: { email: account.email },
+        create: {
+          ...account,
+          status: "active",
+          passwordHash: DEMO_PASSWORD_HASH,
+        },
+        update: {
+          status: "active",
+          passwordHash: DEMO_PASSWORD_HASH,
+        },
+      }),
+    ),
   );
+  console.log(`Ensured ${demoAccounts.length} demo accounts use the documented password.`);
 }
 
 main()

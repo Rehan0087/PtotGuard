@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   disputeNextStatuses,
   executionGate,
+  HEARING_LOCATION,
   type DisputeStatus,
   type ParcelRestriction,
   type RestrictionType,
@@ -27,6 +28,7 @@ import {
   useRole,
   useUpdateDisputeStatus,
   useAssignDisputeAgent,
+  useUsers,
 } from "@/hooks/queries";
 import { useDisputeEventTitle } from "@/lib/i18n/content";
 import { useFmt } from "@/lib/i18n/format";
@@ -241,12 +243,13 @@ function ExecuteRulingCard({
 function AssignAgentCard({ disputeId }: { disputeId: string }) {
   const t = useT();
   const assign = useAssignDisputeAgent(disputeId);
-  // Using a fixed agent ID for demo purposes. In a real app, this would be a select dropdown
-  // populated by fetching active field agents.
-  const demoAgentId = "usr-agent";
+  const agentsQ = useUsers({ role: "field-agent", pageSize: 100 });
+  const agents = (agentsQ.data?.items ?? []).filter((agent) => agent.status === "active");
+  const [agentId, setAgentId] = useState("");
 
   function submit() {
-    assign.mutate(demoAgentId, {
+    if (!agentId) return;
+    assign.mutate(agentId, {
       onSuccess: () => toast.success(t.pages.dispute.agentAssigned),
       onError: () => toast.error(t.pages.dispute.agentAssignmentFailed),
     });
@@ -261,9 +264,21 @@ function AssignAgentCard({ disputeId }: { disputeId: string }) {
         {t.pages.dispute.assignAgentDescription}
       </p>
 
+      <select
+        value={agentId}
+        onChange={(event) => setAgentId(event.target.value)}
+        className={selectClass}
+        aria-label={t.pages.dispute.assignAgentTitle}
+      >
+        <option value="">{t.pages.dispute.assignAgentTitle}</option>
+        {agents.map((agent) => (
+          <option key={agent.id} value={agent.id}>{agent.name}</option>
+        ))}
+      </select>
+
       <Button
         className="w-full"
-        disabled={assign.isPending}
+        disabled={!agentId || assign.isPending}
         onClick={submit}
       >
         {t.pages.dispute.assignAgentAction}
@@ -385,6 +400,9 @@ export default function DisputeDetailPage() {
                   </dt>
                   <dd className="text-right font-medium text-marker">
                     {f.date(dispute.hearingDate)}
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      {dispute.hearingLocation ?? HEARING_LOCATION}
+                    </span>
                   </dd>
                 </div>
               ) : null}

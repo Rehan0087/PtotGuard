@@ -21,7 +21,7 @@ import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import type { Dispute, ServiceApplication } from "@/lib/types";
 
-type RevenueCaseDetails = { grounds?: string; hearingAt?: string; amountDue?: number; dagNo?: string; ownerName?: string };
+type RevenueCaseDetails = { grounds?: string; hearingAt?: string; hearingLocation?: string; amountDue?: number; dagNo?: string; ownerName?: string };
 
 function RevenueCaseWorkCard({ application }: { application: ServiceApplication }) {
   const t = useT();
@@ -41,7 +41,7 @@ function RevenueCaseWorkCard({ application }: { application: ServiceApplication 
     </div>
     {details.amountDue != null ? <div className="text-sm text-destructive">{t.pages.revenueCases.amountDue(f.money({ amount: details.amountDue, currency: "BDT" }))}</div> : null}
     {details.grounds ? <p className="rounded-md bg-muted/40 p-3 text-sm">{details.grounds}</p> : null}
-    {details.hearingAt ? <div className="text-sm text-marker">{t.pages.revenueCases.hearingAtLabel(f.dateTime(details.hearingAt))}</div> : null}
+    {details.hearingAt ? <div className="text-sm text-marker">{t.pages.revenueCases.hearingAtLabel(f.dateTime(details.hearingAt))} · {details.hearingLocation ?? "Upazilla settlement office"}</div> : null}
     {!closed ? <div className="space-y-3 border-t border-border pt-3">
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1"><Label htmlFor={`revenue-when-${application.id}`} className="text-xs">{t.pages.revenueCases.hearingDateLabel}</Label><Input id={`revenue-when-${application.id}`} type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="w-56" /></div>
@@ -209,6 +209,7 @@ export default function CasesPage() {
                     {t.pages.cases.hearingAt(f.dateTime(c.hearingDate))}
                   </span>
                 ) : null}
+                <span>{c.location}</span>
                 <span>{t.pages.cases.sessions(c.sessions.length)}</span>
               </div>
 

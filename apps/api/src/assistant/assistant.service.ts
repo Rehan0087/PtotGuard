@@ -178,10 +178,9 @@ const RULE_ENGINE_RULES: RuleEngineRule[] = [
       reply:
         "Here's how to use the **Inheritance Calculator**:\n\n" +
         "1️⃣ Go to **Inheritance** in the sidebar.\n" +
-        "2️⃣ Choose the succession method: **Faraiz (Muslim)** or **Hindu Succession**.\n" +
-        "3️⃣ Enter the deceased's total land area.\n" +
-        "4️⃣ Add each heir — their relationship (son, daughter, wife, etc.) and number.\n" +
-        "5️⃣ The calculator will instantly show each heir's share.\n\n" +
+        "2️⃣ Select one, several, or all of your registered plots.\n" +
+        "3️⃣ Add each surviving heir and their number.\n" +
+        "4️⃣ The Faraiz calculator will show each heir's share using the selected plots' recorded values.\n\n" +
         "📌 To officially transfer ownership, you'll then need to file a **Mutation** for each heir's share.",
       actions: [
         { href: "/inheritance", label: "Open inheritance calculator" },
@@ -192,10 +191,9 @@ const RULE_ENGINE_RULES: RuleEngineRule[] = [
       reply:
         "**উত্তরাধিকার ক্যালকুলেটর** ব্যবহারের ধাপগুলো:\n\n" +
         "1️⃣ পার্শ্ব মেনু থেকে **উত্তরাধিকার** নির্বাচন করুন।\n" +
-        "2️⃣ উত্তরাধিকার পদ্ধতি বেছে নিন: **ফরায়েজ (মুসলিম)** বা **হিন্দু উত্তরাধিকার**।\n" +
-        "3️⃣ মৃত ব্যক্তির মোট জমির পরিমাণ দিন।\n" +
-        "4️⃣ প্রতিটি ওয়ারিশ যোগ করুন — সম্পর্ক (পুত্র, কন্যা, স্ত্রী ইত্যাদি) ও সংখ্যাসহ।\n" +
-        "5️⃣ ক্যালকুলেটর সাথে সাথে প্রতিটি ওয়ারিশের অংশ দেখাবে।\n\n" +
+        "2️⃣ আপনার নিবন্ধিত একটি, একাধিক বা সব জমি নির্বাচন করুন।\n" +
+        "3️⃣ জীবিত ওয়ারিশ এবং তাঁদের সংখ্যা যোগ করুন।\n" +
+        "4️⃣ ফরায়েজ ক্যালকুলেটর নির্বাচিত জমির রেকর্ডকৃত মূল্য অনুযায়ী প্রত্যেকের অংশ দেখাবে।\n\n" +
         "📌 মালিকানা সরকারিভাবে হস্তান্তর করতে প্রতিটি ওয়ারিশের জন্য **নামজারি** দাখিল করতে হবে।",
       actions: [
         { href: "/inheritance", label: "উত্তরাধিকার ক্যালকুলেটর" },
@@ -397,7 +395,7 @@ const RULE_ENGINE_RULES: RuleEngineRule[] = [
         "📝 **Mutation (e-Namjari)** — transfer land ownership\n" +
         "⚖️ **Disputes** — file and track a boundary or ownership dispute\n" +
         "📣 **Grievances** — report corruption, delays, or staff misconduct\n" +
-        "👨‍👩‍👧 **Inheritance** — calculate heir shares (Faraiz/Hindu)\n" +
+        "👨‍👩‍👧 **Inheritance** — calculate heir shares under Faraiz\n" +
         "📋 **Land Admin** — get a certified copy or correct a record error\n" +
         "🏞️ **Lease & Settlement** — apply to lease government khas land\n" +
         "🔍 **Search Records** — find any land record by Dag or Khatian No.\n" +
@@ -502,7 +500,7 @@ const SERVICE_CATALOG = `
 - Acquisition & Requisition at /acquisition — track a notice on your land and claim compensation.
 - Dispute filing at /disputes/new — file a boundary, ownership, inheritance, encroachment, fraud, or easement dispute; track any case at /disputes.
 - Grievances at /grievances/new — complain about service quality itself, separate from a dispute over land.
-- Inheritance Calculator at /inheritance — estimate a Faraiz or Hindu succession split.
+- Inheritance Calculator at /inheritance — estimate a Faraiz succession split for selected registered land.
 - Record Search at /search, and each citizen's own holdings at /properties.
 - Document Vault at /documents.
 - Appointment Booking at /appointments.

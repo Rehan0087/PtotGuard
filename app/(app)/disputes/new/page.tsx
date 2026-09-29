@@ -27,7 +27,6 @@ import { IdChip } from "@/components/id-chip";
 import { StatusMetaBadge } from "@/components/status-badge";
 import { ParcelBoundary } from "@/components/parcel-boundary";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -35,7 +34,7 @@ import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import type { Dictionary } from "@/lib/i18n";
-import { useParcels, useFileDispute, useSession } from "@/hooks/queries";
+import { useCitizenDirectory, useParcels, useFileDispute, useSession } from "@/hooks/queries";
 import type { DisputeType } from "@/lib/types";
 
 /** Icon and order per dispute kind; the name and blurb come from the dictionary. */
@@ -60,14 +59,14 @@ function makeSchema(t: Dictionary) {
       .string()
       .min(20, t.pages.newDispute.errors.descriptionShort)
       .max(1000, t.pages.newDispute.errors.descriptionLong),
-    respondentName: z.string().max(120),
+    respondentId: z.string().min(1, t.pages.newDispute.errors.otherPartyRequired),
   });
 }
 
 type FormValues = z.infer<ReturnType<typeof makeSchema>>;
 
 const STEP_KEYS = ["parcel", "details", "review"] as const;
-const STEP_FIELDS: (keyof FormValues)[][] = [["parcelId"], ["type", "priority", "description"], []];
+const STEP_FIELDS: (keyof FormValues)[][] = [["parcelId"], ["type", "priority", "description", "respondentId"], []];
 
 export default function NewDisputePage() {
   const t = useT();
@@ -80,6 +79,7 @@ export default function NewDisputePage() {
   const parcels = parcelsQ.data?.items ?? [];
   const fileDispute = useFileDispute();
   const { data: session } = useSession();
+  const citizensQ = useCitizenDirectory();
 
   const {
     control,
@@ -95,7 +95,7 @@ export default function NewDisputePage() {
       type: "boundary",
       priority: "medium",
       description: "",
-      respondentName: "",
+      respondentId: "",
     },
   });
 
@@ -104,7 +104,9 @@ export default function NewDisputePage() {
   const type = useWatch({ control, name: "type" });
   const priority = useWatch({ control, name: "priority" });
   const description = useWatch({ control, name: "description" });
-  const respondentName = useWatch({ control, name: "respondentName" });
+  const respondentId = useWatch({ control, name: "respondentId" });
+  const citizens = citizensQ.data ?? [];
+  const respondent = citizens.find((citizen) => citizen.id === respondentId);
 
   const selectedParcel = parcels.find((p) => p.id === parcelId);
 
@@ -120,7 +122,7 @@ export default function NewDisputePage() {
         type: values.type as never,
         priority: values.priority as never,
         description: values.description,
-        respondentName: values.respondentName || undefined,
+        respondentId: values.respondentId,
       },
       {
         onSuccess: (dispute) => {
@@ -326,14 +328,24 @@ export default function NewDisputePage() {
 
             <div>
               <label htmlFor="respondent" className="mb-1.5 block text-sm font-medium text-foreground">
-                {t.pages.newDispute.otherParty}{" "}
-                <span className="text-muted-foreground">({t.common.optional})</span>
+                {t.pages.newDispute.otherParty}
               </label>
-              <Input
+              <select
                 id="respondent"
-                placeholder={t.pages.newDispute.otherPartyPlaceholder}
-                {...register("respondentName")}
-              />
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                {...register("respondentId")}
+              >
+                <option value="">{t.pages.newDispute.otherPartyPlaceholder}</option>
+                {citizens.map((citizen) => (
+                  <option key={citizen.id} value={citizen.id}>{citizen.name}</option>
+                ))}
+              </select>
+              {errors.respondentId ? (
+                <p className="mt-1.5 flex items-center gap-1.5 text-sm text-destructive">
+                  <AlertCircle className="size-4" />
+                  {errors.respondentId.message}
+                </p>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -360,7 +372,7 @@ export default function NewDisputePage() {
                 <StatusMetaBadge meta={s.priority[priority]} dot={false} />
               </Row>
               <Row label={t.pages.newDispute.rowOtherParty}>
-                {respondentName || t.pages.newDispute.notSpecified}
+                {respondent?.name || t.pages.newDispute.notSpecified}
               </Row>
               <Row label={t.pages.newDispute.rowDescription}>
                 <span className="text-foreground">{description}</span>
