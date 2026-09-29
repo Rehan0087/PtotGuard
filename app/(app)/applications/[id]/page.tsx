@@ -12,6 +12,7 @@ import { StatusMetaBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PaymentConfirmationDialog } from "@/components/payment-confirmation-dialog";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
@@ -51,7 +52,7 @@ export default function ApplicationTrackingPage() {
   const { data, isLoading } = useServiceApplication(id);
   const { data: session } = useSession();
   const pay = usePayServiceApplication(id ?? "");
-  const [method, setMethod] = useState<"bkash" | "nagad" | "card">("bkash");
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -142,35 +143,35 @@ export default function ApplicationTrackingPage() {
             <Card className="gap-3 px-4">
               <h3 className="font-heading text-sm font-semibold text-foreground">{a.payTitle}</h3>
               <p className="text-xs text-muted-foreground">{a.payBody}</p>
-              <div className="flex flex-wrap gap-2">
-                {(["bkash", "nagad", "card"] as const).map((option) => {
-                  const Icon = option === "card" ? CreditCard : Smartphone;
-                  return (
-                    <Button
-                      key={option}
-                      type="button"
-                      size="sm"
-                      variant={method === option ? "default" : "outline"}
-                      onClick={() => setMethod(option)}
-                    >
-                      <Icon className="size-3.5" />
-                      {methods[option] ?? option}
-                    </Button>
-                  );
-                })}
-              </div>
-              <Button
-                size="sm"
-                disabled={pay.isPending}
-                onClick={() =>
-                  pay.mutate(method, {
-                    onSuccess: () => toast.success(a.paid),
-                    onError: () => toast.error(a.payFailed),
-                  })
-                }
-              >
-                {a.payAction(f.money({ amount: application.feeAmount ?? 0, currency: "BDT" }))}
-              </Button>
+              
+              {paymentOpen ? (
+                <PaymentConfirmationDialog
+                  open={paymentOpen}
+                  amount={f.money({ amount: application.feeAmount ?? 0, currency: "BDT" })}
+                  defaultMethod="bkash"
+                  busy={pay.isPending}
+                  onOpenChange={(open) => {
+                    if (!open && !pay.isPending) setPaymentOpen(false);
+                  }}
+                  onConfirm={(confirmedMethod) => {
+                    pay.mutate(confirmedMethod, {
+                      onSuccess: () => {
+                        setPaymentOpen(false);
+                        toast.success(a.paid);
+                      },
+                      onError: () => toast.error(a.payFailed),
+                    });
+                  }}
+                />
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => setPaymentOpen(true)}
+                >
+                  <CreditCard className="size-3.5" />
+                  {a.payAction(f.money({ amount: application.feeAmount ?? 0, currency: "BDT" }))}
+                </Button>
+              )}
             </Card>
           ) : null}
 

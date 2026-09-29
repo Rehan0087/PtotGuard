@@ -10,7 +10,6 @@ import {
   Check,
   ArrowLeft,
   ArrowRight,
-  Send,
   MapPin,
   Banknote,
   GitBranch,
@@ -24,6 +23,7 @@ import {
   Info,
   FileText,
   Upload,
+  CreditCard,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -108,7 +108,7 @@ function makeSchema(t: Dictionary) {
 type FormInput = z.input<ReturnType<typeof makeSchema>>;
 type FormValues = z.output<ReturnType<typeof makeSchema>>;
 
-const STEP_KEYS = ["parcel", "transfer", "payment", "review"] as const;
+const STEP_KEYS = ["parcel", "transfer", "review"] as const;
 
 /** Fields to validate per step — type-specific fields validated at step 1. */
 function stepFields(type: MutationType): (keyof FormInput)[][] {
@@ -116,7 +116,7 @@ function stepFields(type: MutationType): (keyof FormInput)[][] {
   if (TYPES_WITH_RECIPIENT.includes(type)) transferFields.push("toOwnerId");
   if (type === "correction") transferFields.push("correctionReason");
   if (type === "inheritance") transferFields.push("heirRelationship");
-  return [["parcelId"], transferFields, ["paymentMethod"], []];
+  return [["parcelId"], transferFields, []];
 }
 
 export default function NewMutationPage() {
@@ -134,7 +134,6 @@ export default function NewMutationPage() {
   const { data: session } = useSession();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [paymentAttempt, setPaymentAttempt] = useState(0);
 
   const {
     control,
@@ -195,17 +194,12 @@ export default function NewMutationPage() {
   const fee = policy ? { amount: policy.mutationFeeBdt, currency: "BDT" as const } : null;
 
   async function next() {
-    if (step === 2) {
-      setPaymentAttempt((attempt) => attempt + 1);
-      setPaymentOpen(true);
-      return;
-    }
     const fields = stepFields(type)[step];
     const ok = await trigger(fields as (keyof FormValues)[]);
     if (ok) setStep((current) => Math.min(current + 1, STEP_KEYS.length - 1));
   }
 
-  function onSubmit(values: FormValues) {
+  function onSubmit(values: FormValues, confirmedMethod: PaymentMethod) {
     const metadata: Record<string, unknown> = {};
     if (values.correctionReason) metadata.correctionReason = values.correctionReason;
     if (values.heirRelationship) metadata.heirRelationship = values.heirRelationship;
@@ -220,20 +214,23 @@ export default function NewMutationPage() {
         deedNumber: values.deedNumber || undefined,
         deedDate: values.deedDate || undefined,
         documentIds: values.documentIds,
-        paymentMethod: values.paymentMethod as never,
+        paymentMethod: confirmedMethod as never,
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       } as never,
       {
         onSuccess: (mutation) => {
+          setPaymentOpen(false);
           toast.success(t.pages.newMutation.filedTitle, {
             description: t.pages.newMutation.filedBody(mutation.mutationNumber),
           });
           router.push("/mutations");
         },
-        onError: () =>
+        onError: (err) => {
+          setPaymentOpen(false);
           toast.error(t.pages.newMutation.failedTitle, {
             description: t.pages.newMutation.failedBody,
-          }),
+          });
+        },
       },
     );
   }
@@ -582,25 +579,10 @@ export default function NewMutationPage() {
           </section>
         ) : null}
 
-        {/* Step 2 — Payment */}
-        {step === 2 ? (
-          <section className="space-y-5">
-            <h2 className="font-heading text-base font-semibold text-foreground">
-              {t.pages.newMutation.paymentTitle}
-            </h2>
-            {fee ? (
-              <div className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
-                <span className="text-sm text-muted-foreground">{t.pages.newMutation.feeLabel}</span>
-                <span className="tabular text-sm font-semibold text-foreground">{f.money(fee)}</span>
-              </div>
-            ) : null}
-            <p className="text-sm text-muted-foreground">
-            </p>
-          </section>
-        ) : null}
+        {/* Step 2 — Review (payment handled by dialog) */}
 
-        {/* Step 3 — Review */}
-        {step === 3 ? (
+        {/* Step 2 — Review & Submit */}
+        {step === 2 ? (
           <section className="space-y-3">
             <h2 className="font-heading text-base font-semibold text-foreground">
               {t.pages.newMutation.reviewAndSubmit}
@@ -655,10 +637,11 @@ export default function NewMutationPage() {
                   : t.pages.newMutation.notSpecified}
               </Row>
 
-              <Row label={t.pages.newMutation.rowPayment}>
-                {t.pages.newMutation.paymentMethods[paymentMethod]}
-                {fee ? ` · ${f.money(fee)}` : ""}
-              </Row>
+              {fee ? (
+                <Row label={t.pages.newMutation.feeLabel}>
+                  <span className="font-semibold tabular text-foreground">{f.money(fee)}</span>
+                </Row>
+              ) : null}
             </dl>
             <p className="text-xs text-muted-foreground">
               {t.pages.newMutation.filedAs(session?.user.name ?? t.pages.newMutation.you)}
@@ -682,24 +665,30 @@ export default function NewMutationPage() {
               <ArrowRight className="size-4" />
             </Button>
           ) : (
-            <Button type="button" onClick={handleSubmit(onSubmit)} disabled={createMutation.isPending}>
-              <Send className="size-4" />
-              {createMutation.isPending ? t.pages.newMutation.filing : t.pages.newMutation.file}
+            <Button
+              type="button"
+              onClick={() => handleSubmit(() => setPaymentOpen(true))()}
+            >
+              <CreditCard className="size-4" />
+              {t.pages.newMutation.paymentTitle ?? "Pay & Submit"}
             </Button>
           )}
         </div>
       </div>
 
       <UploadDocumentDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+
+      {/* Payment confirmation dialog — opens from the final review step */}
       <PaymentConfirmationDialog
-        key={paymentAttempt}
         open={paymentOpen}
-        amount={fee ? f.money(fee) : f.money({ amount: 0, currency: "BDT" })}
-        onOpenChange={setPaymentOpen}
-        onConfirm={(method: PaymentMethod) => {
-          setValue("paymentMethod", method, { shouldValidate: true });
-          setPaymentOpen(false);
-          setStep(3);
+        amount={fee ? f.money(fee) : "BDT 0"}
+        defaultMethod="bkash"
+        busy={createMutation.isPending}
+        onOpenChange={(open) => {
+          if (!open && !createMutation.isPending) setPaymentOpen(false);
+        }}
+        onConfirm={(confirmedMethod) => {
+          void handleSubmit((values) => onSubmit(values, confirmedMethod))();
         }}
       />
     </div>

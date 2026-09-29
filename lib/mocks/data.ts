@@ -31,6 +31,7 @@ import type {
   GrievanceEvent,
   CommunityPost,
   CommunityComment,
+  CommunityVoteValue,
 } from "@/lib/types";
 import type { FieldSurveyGpsPoint } from "@/lib/types";
 import type { MockSyncReceipt } from "./field-survey-sync-contract";
@@ -875,6 +876,37 @@ export const policies = {
 };
 
 // ---------------------------------------------------------------------------
+// Community — shared by every authenticated role.
+// ---------------------------------------------------------------------------
+export const communityPosts: Omit<CommunityPost, "score" | "viewerVote" | "commentCount" | "comments">[] = [
+  {
+    id: "community-1", authorId: "usr-officer", authorName: "Nasrin Akter", authorRole: "land-office",
+    title: "Digital mutation help desk this Thursday",
+    body: "The Debidwar Land Office will run a walk-in help desk from 10:00 AM to 2:00 PM. Bring your application number and original identity document.",
+    kind: "announcement", createdAt: "2026-09-25T08:30:00Z", updatedAt: "2026-09-25T08:30:00Z",
+  },
+  {
+    id: "community-2", authorId: "usr-ayesha", authorName: "Ayesha Siddika", authorRole: "citizen",
+    title: "What should I bring to a boundary survey?",
+    body: "My first field survey is next week. Which documents are useful to have ready for the field agent?",
+    kind: "discussion", createdAt: "2026-09-24T11:15:00Z", updatedAt: "2026-09-24T11:15:00Z",
+  },
+];
+
+export const communityComments: CommunityComment[] = [
+  {
+    id: "community-comment-1", postId: "community-2", parentId: null, authorId: "usr-agent", authorName: "Rahim Uddin", authorRole: "field-agent",
+    body: "Keep the latest khatian, deed copy, and any earlier survey map ready. The assigned agent can confirm if anything else is needed.",
+    createdAt: "2026-09-24T12:05:00Z",
+  },
+];
+
+export const communityVotes: { postId: string; userId: string; value: CommunityVoteValue }[] = [
+  { postId: "community-1", userId: "usr-ayesha", value: 1 },
+  { postId: "community-1", userId: "usr-agent", value: 1 },
+  { postId: "community-2", userId: "usr-officer", value: 1 },
+];
+
 // Notifications (citizen inbox is richest for the demo)
 // ---------------------------------------------------------------------------
 export const notifications: AppNotification[] = [
@@ -885,48 +917,6 @@ export const notifications: AppNotification[] = [
   { id: "n-5", userId: "usr-ayesha", at: "2026-07-14T10:05:00Z", severity: "info", title: "Namjari in verification", body: "Inheritance mutation MUT-2026-01192 for dag RS-88 is being verified.", content: { code: "mutation-verification", mutationNumber: "MUT-2026-01192", dagNo: "RS-88" }, read: true, href: "/mutations?mutation=m-1192" },
   { id: "n-6", userId: "usr-ayesha", at: "2026-07-10T08:05:00Z", severity: "success", title: "Welcome to VhumiShetu", body: "Your account is active. You can now search records and track disputes.", content: { code: "welcome" }, read: true },
   { id: "n-7", userId: "usr-officer", at: "2026-07-21T09:02:00Z", severity: "warning", title: "New dispute assigned", body: "DSP-2026-00417 requires review.", content: { code: "dispute-assigned", caseNumber: "DSP-2026-00417" }, read: false, href: "/disputes" },
-];
-
-// ---------------------------------------------------------------------------
-// Community — shared by the standalone MSW demo and mirrored in Prisma seed.
-// ---------------------------------------------------------------------------
-export const communityComments: CommunityComment[] = [
-  {
-    id: "cc-1",
-    postId: "cp-1",
-    content: "Keep the payment receipt and the application number. The mutation page will show each verification step after submission.",
-    authorId: "usr-karim",
-    author: { id: "usr-karim", name: "Md. Karim Uddin", avatarUrl: null },
-    createdAt: "2026-09-27T10:30:00Z",
-    updatedAt: "2026-09-27T10:30:00Z",
-    parentId: null,
-    votes: [{ id: "cv-comment-1", value: 1, userId: "usr-ayesha", commentId: "cc-1", postId: null, createdAt: "2026-09-27T11:00:00Z" }],
-  },
-];
-
-export const communityPosts: CommunityPost[] = [
-  {
-    id: "cp-1",
-    title: "What should I keep after submitting an e-Namjari application?",
-    content: "I submitted a mutation request online. Which documents or reference numbers should I save while the land office reviews it?",
-    authorId: "usr-ayesha",
-    author: { id: "usr-ayesha", name: "Ayesha Siddika", avatarUrl: null },
-    createdAt: "2026-09-27T09:00:00Z",
-    updatedAt: "2026-09-27T09:00:00Z",
-    _count: { comments: 1, votes: 1 },
-    votes: [{ id: "cv-post-1", value: 1, userId: "usr-karim", postId: "cp-1", commentId: null, createdAt: "2026-09-27T10:00:00Z" }],
-  },
-  {
-    id: "cp-2",
-    title: "Tip: verify the mouza before searching by dag number",
-    content: "The same dag number can exist in more than one mouza. Selecting the district, upazila, and mouza first gave me the correct record.",
-    authorId: "usr-karim",
-    author: { id: "usr-karim", name: "Md. Karim Uddin", avatarUrl: null },
-    createdAt: "2026-09-26T14:15:00Z",
-    updatedAt: "2026-09-26T14:15:00Z",
-    _count: { comments: 0, votes: 0 },
-    votes: [],
-  },
 ];
 
 // ---------------------------------------------------------------------------

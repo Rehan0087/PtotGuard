@@ -49,7 +49,7 @@ test("citizen mutation selects one required deed PDF from the selected parcel", 
 
 test("mutation uses the shared logo, account-details, and PIN payment flow", () => {
   assert.match(newMutation, /PaymentConfirmationDialog/);
-  assert.match(newMutation, /onConfirm=\{\(method: PaymentMethod\)/);
+  assert.match(newMutation, /onConfirm=\{\(confirmedMethod\)/);
   assert.doesNotMatch(newMutation, /const PAYMENT_METHODS/);
 });
 
