@@ -282,11 +282,12 @@ const VERIFICATION_FIELDS = [
 type CreateMutationBody = {
   parcelId: string;
   type: Mutation["type"];
-  toOwnerId: string;
+  toOwnerId?: string;
   deedNumber?: string;
   deedDate?: string;
   documentIds?: string[];
   paymentMethod: "bkash" | "nagad" | "card";
+  metadata?: Record<string, unknown>;
 };
 
 function recordBody(value: unknown): Record<string, unknown> | null {
@@ -302,13 +303,16 @@ function unexpectedProperty(body: Record<string, unknown>, allowed: readonly str
 function validateCreateMutationBody(value: unknown) {
   const body = recordBody(value);
   if (!body) return { ok: false as const, response: badRequest("Request body must be an object.") };
-  const extra = unexpectedProperty(body, ["parcelId", "type", "toOwnerId", "deedNumber", "deedDate", "documentIds", "paymentMethod"]);
+  const extra = unexpectedProperty(body, ["parcelId", "type", "toOwnerId", "deedNumber", "deedDate", "documentIds", "paymentMethod", "metadata"]);
   if (extra) return { ok: false as const, response: badRequest(`property ${extra} should not exist`) };
   if (typeof body.parcelId !== "string") return { ok: false as const, response: badRequest("parcelId must be a string") };
   if (!MUTATION_TYPES.includes(body.type as typeof MUTATION_TYPES[number])) {
     return { ok: false as const, response: badRequest(`type must be one of the following values: ${MUTATION_TYPES.join(", ")}`) };
   }
-  if (typeof body.toOwnerId !== "string") return { ok: false as const, response: badRequest("toOwnerId must be a string") };
+  // toOwnerId is optional for correction type (no ownership change)
+  if (body.toOwnerId !== undefined && body.toOwnerId !== null && typeof body.toOwnerId !== "string") {
+    return { ok: false as const, response: badRequest("toOwnerId must be a string") };
+  }
   if (!PAYMENT_METHODS.includes(body.paymentMethod as typeof PAYMENT_METHODS[number])) {
     return { ok: false as const, response: badRequest(`paymentMethod must be one of the following values: ${PAYMENT_METHODS.join(", ")}`) };
   }
@@ -324,11 +328,12 @@ function validateCreateMutationBody(value: unknown) {
   return { ok: true as const, value: {
     parcelId: body.parcelId,
     type: body.type,
-    toOwnerId: body.toOwnerId,
+    toOwnerId: typeof body.toOwnerId === "string" ? body.toOwnerId : undefined,
     deedNumber: typeof body.deedNumber === "string" ? body.deedNumber : undefined,
     deedDate: typeof body.deedDate === "string" ? body.deedDate : undefined,
     documentIds: Array.isArray(body.documentIds) ? body.documentIds as string[] : undefined,
     paymentMethod: body.paymentMethod,
+    metadata: recordBody(body.metadata) ?? undefined,
   } as CreateMutationBody };
 }
 
@@ -1237,7 +1242,11 @@ export const handlers = [
     const fraud = url.searchParams.get("fraud");
     const ocr = url.searchParams.get("ocr");
     const mutation = url.searchParams.get("mutation");
+    const parcelId = url.searchParams.get("parcelId");
     let items = db.documents.slice();
+    if (parcelId && parcelId !== "none") {
+      items = items.filter((d) => d.parcelId === parcelId);
+    }
     if (owner === "me") items = items.filter((d) => d.ownerId === currentUser(request).id);
     else if (owner) items = items.filter((d) => d.ownerId === owner);
     // fraud=true means "awaiting fraud review": still flagged, not yet decided.
@@ -1269,8 +1278,12 @@ export const handlers = [
     const parcel = db.parcels.find((p) => p.id === body.parcelId);
     // Mirrors MutationsController.create(): only the recorded owner files.
     if (!parcel || parcel.ownerId !== currentUser(request).id) return notFound("Parcel not found");
-    const toOwner = db.users.find((u) => u.id === body.toOwnerId);
-    if (!toOwner || toOwner.role !== "citizen") return notFound("Recipient not found");
+    const isCorrection = body.type === "correction";
+    let toOwner = null;
+    if (!isCorrection) {
+      toOwner = db.users.find((u) => u.id === body.toOwnerId);
+      if (!toOwner || toOwner.role !== "citizen") return notFound("Recipient not found");
+    }
 
     const restrictions = db.parcelRestrictions.filter((r) => r.parcelId === parcel.id);
     const review = transferReview(restrictions);
@@ -1319,8 +1332,8 @@ export const handlers = [
       // The registry's own fact, not the applicant's claim.
       fromOwnerName: parcel.ownerName,
       fromOwnerId: parcel.ownerId,
-      toOwnerId: toOwner.id,
-      toOwnerName: toOwner.name,
+      toOwnerId: isCorrection ? parcel.ownerId : toOwner!.id,
+      toOwnerName: isCorrection ? parcel.ownerName : toOwner!.name,
       requestedById: me.id,
       requestedAt: now,
       documentIds: requestedDocumentIds,
@@ -1329,6 +1342,7 @@ export const handlers = [
       deedDate: body.deedDate,
       fee: { amount: db.policies.mutationFeeBdt, currency: "BDT" as const },
       paymentMethod: body.paymentMethod,
+      metadata: body.metadata,
       // Simulated — no gateway is called.
       transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
       createdAt: now,

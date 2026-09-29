@@ -56,9 +56,9 @@ export class DocumentsController {
     const where = {
       ...(mutationDocumentIds ? { id: { in: mutationDocumentIds } } : {}),
       ...(owner ? { ownerId: owner } : {}),
-      // fraud=true means "awaiting fraud review": still flagged, not yet decided.
       ...(query.fraud === "true" ? { verificationStatus: "flagged" } : {}),
       ...(query.ocr ? { ocrStatus: query.ocr } : {}),
+      ...(query.parcelId ? { parcelId: query.parcelId === "none" ? null : query.parcelId } : {}),
     };
     const all = await this.prisma.landDocument.findMany({
       where,
