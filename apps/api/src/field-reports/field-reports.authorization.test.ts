@@ -87,6 +87,7 @@ describe("field report assignment authorization", () => {
     caseNumber: string;
     filedById: string;
     status: string;
+    assignedOfficerId?: string | null;
     updatedAt: Date;
   };
   let disputeEvents: Array<Record<string, unknown>>;
