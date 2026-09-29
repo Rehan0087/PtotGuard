@@ -44,6 +44,7 @@ export class CommunityController {
       comments: post.comments.map((comment) => ({
         id: comment.id,
         postId: comment.postId,
+        parentId: comment.parentId,
         authorId: comment.authorId,
         authorName: comment.author.name,
         authorRole: comment.author.role,
@@ -116,10 +117,18 @@ export class CommunityController {
     const authorId = currentUserId(req);
     const post = await this.prisma.communityPost.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundError("Community post not found");
+    if (body.parentId) {
+      const parent = await this.prisma.communityComment.findFirst({
+        where: { id: body.parentId, postId },
+        select: { id: true },
+      });
+      if (!parent) throw new NotFoundError("Parent comment not found");
+    }
     await this.prisma.communityComment.create({
       data: {
         id: `community-comment-${randomUUID()}`,
         postId,
+        parentId: body.parentId ?? null,
         authorId,
         body: body.body.trim(),
       },

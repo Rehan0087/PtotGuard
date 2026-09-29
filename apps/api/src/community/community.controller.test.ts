@@ -66,6 +66,68 @@ describe("community", () => {
     }
   });
 
+  it("creates a reply only when its parent belongs to the same post", async () => {
+    const reply = {
+      id: "community-comment-2",
+      postId: "community-1",
+      parentId: "community-comment-1",
+      authorId: "usr-citizen",
+      author: { name: "Ayesha Siddika", role: "citizen" },
+      body: "Thank you for the checklist.",
+      createdAt: new Date("2026-09-26T09:00:00Z"),
+    };
+    const prisma = {
+      communityPost: {
+        findUnique: vi.fn()
+          .mockResolvedValueOnce({ id: "community-1" })
+          .mockResolvedValueOnce(postRecord({ comments: [reply] })),
+      },
+      communityComment: {
+        findFirst: vi.fn().mockResolvedValue({ id: "community-comment-1" }),
+        create: vi.fn().mockResolvedValue(reply),
+      },
+    };
+    const controller = new CommunityController(prisma as never);
+
+    const result = await controller.comment(
+      "community-1",
+      { body: " Thank you for the checklist. ", parentId: "community-comment-1" },
+      request("usr-citizen", "citizen"),
+    );
+
+    expect(prisma.communityComment.findFirst).toHaveBeenCalledWith({
+      where: { id: "community-comment-1", postId: "community-1" },
+      select: { id: true },
+    });
+    expect(prisma.communityComment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        postId: "community-1",
+        parentId: "community-comment-1",
+        authorId: "usr-citizen",
+        body: "Thank you for the checklist.",
+      }),
+    });
+    expect(result.comments[0].parentId).toBe("community-comment-1");
+  });
+
+  it("rejects a reply whose parent is not in the target post", async () => {
+    const prisma = {
+      communityPost: { findUnique: vi.fn().mockResolvedValue({ id: "community-1" }) },
+      communityComment: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn(),
+      },
+    };
+    const controller = new CommunityController(prisma as never);
+
+    await expect(controller.comment(
+      "community-1",
+      { body: "This parent belongs elsewhere.", parentId: "community-comment-other" },
+      request("usr-citizen", "citizen"),
+    )).rejects.toMatchObject({ status: 404 });
+    expect(prisma.communityComment.create).not.toHaveBeenCalled();
+  });
+
   it("toggles the same vote off instead of counting it twice", async () => {
     const prisma = {
       communityPost: {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowBigDown, ArrowBigUp, BellRing, MessageCircle, MessagesSquare, Plus } from "lucide-react";
+import { ArrowBigDown, ArrowBigUp, BellRing, MessageCircle, MessagesSquare, Plus, Reply } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -20,7 +20,7 @@ import {
 import { initials } from "@/lib/format";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
-import type { CommunityPost, CommunityPostKind, CommunityVoteValue } from "@/lib/types";
+import type { CommunityComment, CommunityPost, CommunityPostKind, CommunityVoteValue } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/store/session";
 
@@ -90,16 +90,112 @@ function VoteRail({ post }: { post: CommunityPost }) {
   );
 }
 
+function CommentThread({
+  comment,
+  repliesByParent,
+  replyingToId,
+  replyBody,
+  isSubmitting,
+  onReply,
+  onReplyBodyChange,
+  onCancelReply,
+  onSubmitReply,
+  depth = 0,
+}: {
+  comment: CommunityComment;
+  repliesByParent: Map<string, CommunityComment[]>;
+  replyingToId: string | null;
+  replyBody: string;
+  isSubmitting: boolean;
+  onReply: (comment: CommunityComment) => void;
+  onReplyBodyChange: (body: string) => void;
+  onCancelReply: () => void;
+  onSubmitReply: (event: React.FormEvent, parentId: string) => void;
+  depth?: number;
+}) {
+  const t = useT();
+  const f = useFmt();
+  const replies = repliesByParent.get(comment.id) ?? [];
+
+  return (
+    <div className={cn("space-y-2", depth > 0 && "ml-4 border-l border-border pl-3 sm:ml-6")}>
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="font-medium">{comment.authorName}</span>
+          <Badge variant="outline" className="h-4 px-1.5 text-[10px]">{t.roles[comment.authorRole]}</Badge>
+          <time className="text-muted-foreground" dateTime={comment.createdAt}>{f.fromNow(comment.createdAt)}</time>
+        </div>
+        <p className="whitespace-pre-wrap text-sm leading-5 text-muted-foreground">{comment.body}</p>
+        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onReply(comment)}>
+          <Reply className="size-3.5" /> {t.pages.community.replyToComment}
+        </Button>
+      </div>
+      {replyingToId === comment.id ? (
+        <form className="space-y-2" onSubmit={(event) => onSubmitReply(event, comment.id)}>
+          <Textarea
+            autoFocus
+            value={replyBody}
+            onChange={(event) => onReplyBodyChange(event.target.value)}
+            placeholder={t.pages.community.replyPlaceholder(comment.authorName)}
+            maxLength={2000}
+            required
+            className="min-h-20"
+            aria-label={t.pages.community.replyPlaceholder(comment.authorName)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onCancelReply}>{t.pages.community.cancel}</Button>
+            <Button type="submit" size="sm" disabled={isSubmitting || !replyBody.trim()}>{t.pages.community.postReply}</Button>
+          </div>
+        </form>
+      ) : null}
+      {replies.map((reply) => (
+        <CommentThread
+          key={reply.id}
+          comment={reply}
+          repliesByParent={repliesByParent}
+          replyingToId={replyingToId}
+          replyBody={replyBody}
+          isSubmitting={isSubmitting}
+          onReply={onReply}
+          onReplyBodyChange={onReplyBodyChange}
+          onCancelReply={onCancelReply}
+          onSubmitReply={onSubmitReply}
+          depth={depth + 1}
+        />
+      ))}
+    </div>
+  );
+}
+
 function PostCard({ post }: { post: CommunityPost }) {
   const t = useT();
   const f = useFmt();
   const comment = useCommentOnCommunityPost();
   const [body, setBody] = useState("");
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyBody, setReplyBody] = useState("");
+
+  const comments = post.comments ?? [];
+  const repliesByParent = new Map<string, CommunityComment[]>();
+  for (const item of comments) {
+    if (!item.parentId) continue;
+    const replies = repliesByParent.get(item.parentId) ?? [];
+    replies.push(item);
+    repliesByParent.set(item.parentId, replies);
+  }
+  const rootComments = comments.filter((item) => !item.parentId);
 
   const submitComment = async (event: React.FormEvent) => {
     event.preventDefault();
     await comment.mutateAsync({ postId: post.id, body });
     setBody("");
+  };
+
+  const submitReply = async (event: React.FormEvent, parentId: string) => {
+    event.preventDefault();
+    await comment.mutateAsync({ postId: post.id, body: replyBody, parentId });
+    setReplyBody("");
+    setReplyingToId(null);
   };
 
   return (
@@ -129,17 +225,27 @@ function PostCard({ post }: { post: CommunityPost }) {
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <MessageCircle className="size-3.5" /> {t.pages.community.comments(post.commentCount)}
           </div>
-          {post.comments?.length ? (
+          {rootComments.length ? (
             <div className="space-y-3 border-l-2 border-border pl-3">
-              {post.comments.map((item) => (
-                <div key={item.id} className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="font-medium">{item.authorName}</span>
-                    <Badge variant="outline" className="h-4 px-1.5 text-[10px]">{t.roles[item.authorRole]}</Badge>
-                    <time className="text-muted-foreground" dateTime={item.createdAt}>{f.fromNow(item.createdAt)}</time>
-                  </div>
-                  <p className="whitespace-pre-wrap text-sm leading-5 text-muted-foreground">{item.body}</p>
-                </div>
+              {rootComments.map((item) => (
+                <CommentThread
+                  key={item.id}
+                  comment={item}
+                  repliesByParent={repliesByParent}
+                  replyingToId={replyingToId}
+                  replyBody={replyBody}
+                  isSubmitting={comment.isPending}
+                  onReply={(selected) => {
+                    setReplyingToId(selected.id);
+                    setReplyBody("");
+                  }}
+                  onReplyBodyChange={setReplyBody}
+                  onCancelReply={() => {
+                    setReplyingToId(null);
+                    setReplyBody("");
+                  }}
+                  onSubmitReply={submitReply}
+                />
               ))}
             </div>
           ) : null}

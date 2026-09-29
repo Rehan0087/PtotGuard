@@ -4670,12 +4670,16 @@ export const handlers = [
     if (!me) return unauthorized();
     const postId = String(params.id);
     if (!db.communityPosts.some((post) => post.id === postId)) return notFound("Community post not found");
-    const body = (await request.json()) as { body?: string };
+    const body = (await request.json()) as { body?: string; parentId?: string };
     const message = body.body?.trim() ?? "";
     if (!message || message.length > 2000) return badRequest("Comment is invalid");
+    if (body.parentId && !db.communityComments.some((comment) => comment.id === body.parentId && comment.postId === postId)) {
+      return notFound("Parent comment not found");
+    }
     db.communityComments.push({
       id: `community-comment-${crypto.randomUUID()}`,
       postId,
+      parentId: body.parentId ?? null,
       authorId: me.id,
       authorName: me.name,
       authorRole: me.role,

@@ -680,15 +680,19 @@ model CommunityPost {
 }
 
 model CommunityComment {
-  id        String        @id
+  id        String             @id
   postId    String
-  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post      CommunityPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    CommunityComment?  @relation("CommunityCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   CommunityComment[] @relation("CommunityCommentReplies")
   authorId  String
-  author    User          @relation("CommunityCommentAuthor", fields: [authorId], references: [id])
+  author    User               @relation("CommunityCommentAuthor", fields: [authorId], references: [id])
   body      String
-  createdAt DateTime      @default(now())
+  createdAt DateTime           @default(now())
 
   @@index([postId, createdAt])
+  @@index([parentId])
   @@map("community_comments")
 }
 

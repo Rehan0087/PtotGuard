@@ -864,7 +864,7 @@ export const communityPosts: Omit<CommunityPost, "score" | "viewerVote" | "comme
 
 export const communityComments: CommunityComment[] = [
   {
-    id: "community-comment-1", postId: "community-2", authorId: "usr-agent", authorName: "Rahim Uddin", authorRole: "field-agent",
+    id: "community-comment-1", postId: "community-2", parentId: null, authorId: "usr-agent", authorName: "Rahim Uddin", authorRole: "field-agent",
     body: "Keep the latest khatian, deed copy, and any earlier survey map ready. The assigned agent can confirm if anything else is needed.",
     createdAt: "2026-09-24T12:05:00Z",
   },
