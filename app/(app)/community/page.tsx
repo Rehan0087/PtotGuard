@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useCommentOnCommunityPost,
   useCommunityPosts,
@@ -39,8 +40,9 @@ function Composer({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Card className="border-primary/20 p-4 shadow-sm">
-      <form className="space-y-4" onSubmit={submit}>
+    <Card className="relative overflow-hidden border-primary/30 p-5 shadow-lg bg-card/80 backdrop-blur-xl transition-all duration-500 animate-in fade-in slide-in-from-top-4">
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+      <form className="relative space-y-4" onSubmit={submit}>
         {role === "land-office" ? (
           <div className="flex gap-2" role="group" aria-label={t.pages.community.postType}>
             <Button type="button" size="sm" variant={kind === "discussion" ? "default" : "outline"} onClick={() => setKind("discussion")}>
@@ -77,13 +79,13 @@ function VoteRail({ post }: { post: CommunityPost }) {
   const vote = useVoteOnCommunityPost();
   const cast = (value: CommunityVoteValue) => vote.mutate({ postId: post.id, value });
   return (
-    <div className="flex min-w-10 flex-row items-center gap-1 rounded-lg bg-muted/60 p-1 sm:flex-col">
-      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.pages.community.upVote} disabled={vote.isPending} onClick={() => cast(1)} className={cn(post.viewerVote === 1 && "bg-primary/10 text-primary")}>
-        <ArrowBigUp className={cn(post.viewerVote === 1 && "fill-current")} />
+    <div className="flex min-w-10 flex-row items-center gap-1 rounded-xl bg-muted/30 p-1.5 sm:flex-col backdrop-blur-md border border-border/40 shadow-sm transition-colors hover:bg-muted/50">
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.pages.community.upVote} disabled={vote.isPending} onClick={() => cast(1)} className={cn("hover:text-primary transition-colors hover:bg-primary/10 rounded-lg", post.viewerVote === 1 && "bg-primary/15 text-primary shadow-sm")}>
+        <ArrowBigUp className={cn(post.viewerVote === 1 && "fill-current", "transition-transform group-hover:-translate-y-0.5")} />
       </Button>
       <span className="min-w-6 text-center text-xs font-semibold" aria-label={t.pages.community.votes(post.score)}>{f.number(post.score)}</span>
-      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.pages.community.downVote} disabled={vote.isPending} onClick={() => cast(-1)} className={cn(post.viewerVote === -1 && "bg-destructive/10 text-destructive")}>
-        <ArrowBigDown className={cn(post.viewerVote === -1 && "fill-current")} />
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.pages.community.downVote} disabled={vote.isPending} onClick={() => cast(-1)} className={cn("hover:text-destructive transition-colors hover:bg-destructive/10 rounded-lg", post.viewerVote === -1 && "bg-destructive/15 text-destructive shadow-sm")}>
+        <ArrowBigDown className={cn(post.viewerVote === -1 && "fill-current", "transition-transform group-hover:translate-y-0.5")} />
       </Button>
       {vote.isError ? <span className="sr-only">{t.pages.community.voteError}</span> : null}
     </div>
@@ -118,7 +120,7 @@ function CommentThread({
   const replies = repliesByParent.get(comment.id) ?? [];
 
   return (
-    <div className={cn("space-y-2", depth > 0 && "ml-4 border-l border-border pl-3 sm:ml-6")}>
+    <div className={cn("space-y-2 group/comment relative transition-all duration-300", depth > 0 && "ml-4 border-l-2 border-primary/20 hover:border-primary/40 pl-4 sm:ml-6")}>
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <span className="font-medium">{comment.authorName}</span>
@@ -199,17 +201,20 @@ function PostCard({ post }: { post: CommunityPost }) {
   };
 
   return (
-    <Card id={post.id} className={cn("scroll-mt-20 overflow-hidden", post.kind === "announcement" && "border-primary/30 bg-primary/[0.025]")}>
+    <Card id={post.id} className={cn(
+      "group scroll-mt-20 overflow-hidden transition-all duration-500 hover:shadow-xl hover:-translate-y-1 border-border/40 backdrop-blur-sm bg-card/80 animate-in fade-in slide-in-from-bottom-4",
+      post.kind === "announcement" ? "border-primary/40 bg-gradient-to-br from-primary/[0.05] to-transparent hover:border-primary/60" : "hover:border-primary/30"
+    )}>
       {post.kind === "announcement" ? (
-        <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-2 text-xs font-semibold text-primary">
-          <BellRing className="size-3.5" /> {t.pages.community.announcement}
+        <div className="flex items-center gap-2 border-b border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary backdrop-blur-md shadow-sm">
+          <BellRing className="size-3.5 animate-pulse" /> {t.pages.community.announcement}
         </div>
       ) : null}
       <div className="flex gap-3 p-4">
         <VoteRail post={post} />
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex items-start gap-2.5">
-            <Avatar size="sm"><AvatarFallback>{initials(post.authorName)}</AvatarFallback></Avatar>
+            <Avatar size="sm" className="ring-2 ring-primary/10 ring-offset-1 ring-offset-background transition-all duration-300 group-hover:ring-primary/40 group-hover:scale-105"><AvatarFallback className="bg-primary/10 text-primary font-medium">{initials(post.authorName)}</AvatarFallback></Avatar>
             <div className="min-w-0 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{post.authorName}</span>
               <span className="mx-1.5">·</span>
@@ -265,21 +270,46 @@ export default function CommunityPage() {
   const { data: posts, isLoading, isError, refetch } = useCommunityPosts();
   const [composing, setComposing] = useState(false);
 
+  const announcements = posts?.filter((post) => post.kind === "announcement") ?? [];
+  const generalPosts = posts?.filter((post) => post.kind !== "announcement") ?? [];
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <PageHeader eyebrow={t.pages.community.eyebrow} title={t.pages.community.title} description={t.pages.community.description}>
         <Button size="sm" onClick={() => setComposing((value) => !value)}><Plus /> {t.pages.community.newPost}</Button>
       </PageHeader>
       {composing ? <Composer onClose={() => setComposing(false)} /> : null}
-      {isLoading ? (
-        <div className="space-y-3">{[0, 1, 2].map((item) => <Skeleton key={item} className="h-48 rounded-xl" />)}</div>
-      ) : isError ? (
-        <Card className="p-6 text-center"><p className="text-sm text-destructive">{t.pages.community.loadError}</p><Button className="mt-3" variant="outline" onClick={() => refetch()}>{t.common.retry}</Button></Card>
-      ) : posts?.length ? (
-        <div className="space-y-3">{posts.map((post) => <PostCard key={post.id} post={post} />)}</div>
-      ) : (
-        <EmptyState icon={MessagesSquare} title={t.pages.community.emptyTitle} description={t.pages.community.emptyBody} />
-      )}
+      
+      <Tabs defaultValue="general" className="w-full">
+        <div className="flex justify-center mb-8">
+          <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted/40 p-1.5 backdrop-blur-lg rounded-full shadow-inner border border-border/50">
+            <TabsTrigger value="general" className="rounded-full data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:text-foreground transition-all duration-300">{t.pages.community.tabDiscussions ?? "Discussions"}</TabsTrigger>
+            <TabsTrigger value="announcements" className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all duration-300">{t.pages.community.tabAnnouncements ?? "Announcements"}</TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="general" className="space-y-4">
+          {isLoading ? (
+            <div className="space-y-3">{[0, 1, 2].map((item) => <Skeleton key={item} className="h-48 rounded-xl" />)}</div>
+          ) : isError ? (
+            <Card className="p-6 text-center"><p className="text-sm text-destructive">{t.pages.community.loadError}</p><Button className="mt-3" variant="outline" onClick={() => refetch()}>{t.common.retry}</Button></Card>
+          ) : generalPosts.length ? (
+            <div className="space-y-3">{generalPosts.map((post) => <PostCard key={post.id} post={post} />)}</div>
+          ) : (
+            <EmptyState icon={MessagesSquare} title={t.pages.community.emptyTitle} description={t.pages.community.emptyBody} />
+          )}
+        </TabsContent>
+        <TabsContent value="announcements" className="space-y-4">
+          {isLoading ? (
+            <div className="space-y-3">{[0, 1, 2].map((item) => <Skeleton key={item} className="h-48 rounded-xl" />)}</div>
+          ) : isError ? (
+            <Card className="p-6 text-center"><p className="text-sm text-destructive">{t.pages.community.loadError}</p><Button className="mt-3" variant="outline" onClick={() => refetch()}>{t.common.retry}</Button></Card>
+          ) : announcements.length ? (
+            <div className="space-y-3">{announcements.map((post) => <PostCard key={post.id} post={post} />)}</div>
+          ) : (
+            <EmptyState icon={BellRing} title={t.pages.community.emptyTitle} description={t.pages.community.emptyBody} />
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

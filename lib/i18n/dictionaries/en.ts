@@ -579,6 +579,8 @@ export const en = {
       eyebrow: "Shared public space",
       title: "Community",
       description: "Ask questions, share local knowledge, and follow official land-office announcements.",
+      tabDiscussions: "Discussions",
+      tabAnnouncements: "Announcements",
       newPost: "Start a discussion",
       newAnnouncement: "Publish announcement",
       titleLabel: "Title",
