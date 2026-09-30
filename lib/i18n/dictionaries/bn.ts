@@ -1899,6 +1899,7 @@ export const bn: Dictionary = {
       allBookedTitle: "প্রাথমিক যাচাইয়ের প্রতিটি মিউটেশনে মাঠকর্মী আছে",
       allBookedBody: "প্রাথমিক যাচাই শুরু হলে এবং পরিদর্শন নির্ধারণ না হওয়া পর্যন্ত মিউটেশনটি এখানে থাকবে।",
       inTheField: "মাঠে",
+      completedReports: "সম্পন্ন মাঠ জরিপ প্রতিবেদন",
       showEveryAgent: "সব মাঠকর্মী দেখুন",
       noneForAgentTitle: "এই মাঠকর্মীর কোনো চলমান কাজ নেই",
       noneForAgentBody: "তাঁর সারি খালি। বাকিদের দেখতে ছাঁকনি সরিয়ে দিন।",

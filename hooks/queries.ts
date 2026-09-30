@@ -783,6 +783,12 @@ export function useFieldReports(params: ListParams = {}) {
     queryKey: ["field-reports", role, params],
     queryFn: () => api.get<Paginated<FieldReport>>(`/field-reports${qs(params)}`),
     placeholderData: keepPreviousData,
+    // Field agents submit from a different authenticated browser session.
+    // Refresh the officer board so status changes and completed reports arrive
+    // without requiring a manual page reload.
+    refetchInterval: role === "land-office" ? 15_000 : false,
+    refetchIntervalInBackground: role === "land-office",
+    refetchOnWindowFocus: role === "land-office",
   });
 }
 
@@ -872,7 +878,11 @@ export function useAddFieldReportMedia(id: string) {
       sketchMap?: { url: string; fileName: string };
     }) => api.post<FieldReport>(`/field-reports/${id}/media`, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["field-reports", id] });
+      // The capture screen reads the singular detail query. Invalidating the
+      // list with an appended id never matched that cache entry, so a
+      // successful photo upload stayed invisible and filing remained blocked.
+      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports"] });
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
     },
   });

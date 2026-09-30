@@ -31,6 +31,11 @@ const assignedVisitCapture = await readFile(
   new URL("../../app/(app)/visits/[id]/page.tsx", import.meta.url),
   "utf8",
 );
+const landOfficeAgents = await readFile(
+  new URL("../../app/(app)/agents/page.tsx", import.meta.url),
+  "utf8",
+);
+const queries = await readFile(new URL("../../hooks/queries.ts", import.meta.url), "utf8");
 const mutationController = await readFile(
   new URL("../../apps/api/src/mutations/mutations.controller.ts", import.meta.url),
   "utf8",
@@ -71,11 +76,26 @@ test("field submission completes verification and links reported disputes automa
   assert.match(boundaryWalk, /await api\.post<Pick<FieldReportDetail, "report" \| "survey">>/);
   assert.match(boundaryWalk, /\/field-reports\/\$\{encodeURIComponent\(fieldReportId\)\}\/survey\/complete/);
   assert.doesNotMatch(boundaryWalk, /queueCompletion\(key/);
-  assert.match(assignedVisitCapture, /disabled=\{!active \|\| !review\.canFile \|\| !walk\.online\}/);
+  assert.match(assignedVisitCapture, /report\.status === "in-progress" && survey\?\.status === "in-progress"/);
+  assert.match(assignedVisitCapture, /disabled=\{!active \|\| !review\.canFile \|\| !walk\.online \|\| filing\}/);
+  assert.doesNotMatch(assignedVisitCapture, /captureFakePoint|Add Fake GPS|Add GPS Point/);
   assert.match(fieldReportController, /status: "field-verification-complete"/);
   assert.match(fieldReportController, /updatedReport\.disputeFound === true/);
   assert.match(fieldReportController, /status: "under-land-office-review"/);
   assert.match(fieldReportController, /disputeId/);
+});
+
+test("land-office board refreshes and keeps submitted field reports visible", () => {
+  assert.match(queries, /refetchInterval: role === "land-office" \? 15_000 : false/);
+  assert.match(landOfficeAgents, /visit\.status === "completed"/);
+  assert.match(landOfficeAgents, /completedReports/);
+  assert.match(landOfficeAgents, /"field-verification-complete" : "field-investigation"/);
+  assert.match(landOfficeAgents, /visit\.submittedAt/);
+});
+
+test("field evidence upload refreshes the active capture detail", () => {
+  assert.match(queries, /queryKey: \["field-report", id\]/);
+  assert.doesNotMatch(queries, /queryKey: \["field-reports", id\]/);
 });
 
 test("DCR payment uses the shared checkout and completes the mutation for BDT 1170", () => {

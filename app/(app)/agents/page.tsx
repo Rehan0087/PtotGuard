@@ -418,12 +418,79 @@ function JobCard({
   );
 }
 
+function VisitCard({ visit, agentName }: { visit: FieldReport; agentName: string }) {
+  const t = useT();
+  const f = useFmt();
+  const s = useStatusMeta();
+  const mutationStatus =
+    visit.status === "completed" ? "field-verification-complete" : "field-investigation";
+
+  return (
+    <Card className="gap-2.5 px-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <IdChip icon={MapPin}>{visit.parcelDagNo}</IdChip>
+          <span className="text-sm font-medium text-foreground">
+            {t.domain.surveyPurpose[visit.purpose]}
+          </span>
+        </div>
+        <StatusMetaBadge meta={s.fieldReport[visit.status]} />
+      </div>
+      <div className="grid gap-1 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <Users2 className="size-3.5 shrink-0" />
+          {agentName}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <CalendarClock className="size-3.5 shrink-0" />
+          {f.dateTime(visit.scheduledFor)}
+        </span>
+        {visit.submittedAt ? (
+          <span className="inline-flex items-center gap-1.5">
+            <ClipboardCheck className="size-3.5 shrink-0" />
+            {t.pages.visits.submitted(f.dateTime(visit.submittedAt))}
+          </span>
+        ) : null}
+        {visit.addressHint ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Navigation className="size-3.5 shrink-0" />
+            {visit.addressHint}
+          </span>
+        ) : null}
+      </div>
+      {visit.disputeId ? (
+        <Link
+          href={`/disputes/${visit.disputeId}`}
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "w-fit text-muted-foreground",
+          )}
+        >
+          {t.pages.agents.viewCase}
+          <ArrowRight className="size-3.5" />
+        </Link>
+      ) : null}
+      {visit.mutationId ? (
+        <Link
+          href={`/mutations?status=${mutationStatus}`}
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "w-fit text-muted-foreground",
+          )}
+        >
+          {t.pages.agents.viewMutation}
+          <ArrowRight className="size-3.5" />
+        </Link>
+      ) : null}
+    </Card>
+  );
+}
+
 // --- Screen ----------------------------------------------------------------
 
 export default function AgentsPage() {
   const t = useT();
   const f = useFmt();
-  const s = useStatusMeta();
   const resolveJurisdictionName = useJurisdictionName();
   const { data: mutationsData, isLoading: mutationsLoading } = useMutations({
     pageSize: 100,
@@ -448,6 +515,14 @@ export default function AgentsPage() {
   const shownVisits = focusedAgent
     ? openVisits.filter((v) => v.assignedAgentId === focusedAgent)
     : openVisits;
+  const completedVisits = reports
+    .filter((visit) => visit.status === "completed")
+    .filter((visit) => !focusedAgent || visit.assignedAgentId === focusedAgent)
+    .sort((left, right) =>
+      (right.submittedAt ?? right.scheduledFor).localeCompare(
+        left.submittedAt ?? left.scheduledFor,
+      ),
+    );
 
   const loading = mutationsLoading || reportsLoading;
 
@@ -593,61 +668,34 @@ export default function AgentsPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {shownVisits.map((v) => (
-              <Card key={v.id} className="gap-2.5 px-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <IdChip icon={MapPin}>{v.parcelDagNo}</IdChip>
-                    <span className="text-sm font-medium text-foreground">
-                      {t.domain.surveyPurpose[v.purpose]}
-                    </span>
-                  </div>
-                  <StatusMetaBadge meta={s.fieldReport[v.status]} />
-                </div>
-                <div className="grid gap-1 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Users2 className="size-3.5 shrink-0" />
-                    {agentById.get(v.assignedAgentId)?.name ?? v.assignedAgentId}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <CalendarClock className="size-3.5 shrink-0" />
-                    {f.dateTime(v.scheduledFor)}
-                  </span>
-                  {v.addressHint ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Navigation className="size-3.5 shrink-0" />
-                      {v.addressHint}
-                    </span>
-                  ) : null}
-                </div>
-                {v.disputeId ? (
-                  <Link
-                    href={`/disputes/${v.disputeId}`}
-                    className={cn(
-                      buttonVariants({ variant: "ghost", size: "sm" }),
-                      "w-fit text-muted-foreground",
-                    )}
-                  >
-                    {t.pages.agents.viewCase}
-                    <ArrowRight className="size-3.5" />
-                  </Link>
-                ) : null}
-                {v.mutationId ? (
-                  <Link
-                    href="/mutations?status=field-investigation"
-                    className={cn(
-                      buttonVariants({ variant: "ghost", size: "sm" }),
-                      "w-fit text-muted-foreground",
-                    )}
-                  >
-                    {t.pages.agents.viewMutation}
-                    <ArrowRight className="size-3.5" />
-                  </Link>
-                ) : null}
-              </Card>
+              <VisitCard
+                key={v.id}
+                visit={v}
+                agentName={agentById.get(v.assignedAgentId)?.name ?? v.assignedAgentId}
+              />
             ))}
           </div>
         )}
       </section>
+
+      {completedVisits.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            {t.pages.agents.completedReports}
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {completedVisits.map((visit) => (
+              <VisitCard
+                key={visit.id}
+                visit={visit}
+                agentName={
+                  agentById.get(visit.assignedAgentId)?.name ?? visit.assignedAgentId
+                }
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

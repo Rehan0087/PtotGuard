@@ -1957,6 +1957,7 @@ export const en = {
       allBookedTitle: "Every field-investigation mutation has an agent",
       allBookedBody: "A mutation appears here after primary verification is completed and until a visit is booked.",
       inTheField: "In the field",
+      completedReports: "Completed field reports",
       showEveryAgent: "Show every agent",
       noneForAgentTitle: "Nothing open for this agent",
       noneForAgentBody: "Their queue is clear. Clear the filter to see the rest of the roster.",
