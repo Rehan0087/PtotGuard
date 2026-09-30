@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { ApiError } from "@/lib/api-client";
 import {
   AlertCircle,
   Banknote,
@@ -69,10 +70,22 @@ function HoldingCard({ holding }: { holding: LandTaxHolding }) {
             ),
           });
         },
-        onError: () =>
-          toast.error(t.pages.landTax.failedTitle, {
-            description: t.pages.landTax.failedBody,
-          }),
+        onError: (err) => {
+          console.error("PAYMENT ERROR", err, err instanceof ApiError ? err.status : "", err instanceof ApiError ? err.reason : "");
+          // 409 means the holding is already paid — stale UI data.
+          // Close the dialog (holdings will re-fetch via usePayLandTax's
+          // onError invalidation) and show a clear explanation.
+          if (err instanceof ApiError && err.status === 409) {
+            setPaying(false);
+            toast.info(t.pages.landTax.paidTitle, {
+              description: t.pages.landTax.settled(String(holding.assessmentYear)),
+            });
+          } else {
+            toast.error(t.pages.landTax.failedTitle, {
+              description: t.pages.landTax.failedBody,
+            });
+          }
+        },
       },
     );
   }
@@ -160,6 +173,7 @@ function HoldingCard({ holding }: { holding: LandTaxHolding }) {
               <PaymentConfirmationDialog
                 open
                 amount={bdt(assessment.total)}
+                defaultMethod="bkash"
                 busy={pay.isPending}
                 onOpenChange={(open) => {
                   if (!open && !pay.isPending) setPaying(false);

@@ -174,6 +174,8 @@ export class LandTaxController {
 
   /** Every holding the signed-in citizen owns, each with its own assessment. */
   @Get("holdings")
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("citizen")
   async holdings(@Req() req: Request) {
     const me = currentUserId(req);
     const [parcels, policy, paid] = await Promise.all([
@@ -323,8 +325,7 @@ export class LandTaxController {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const count = await tx.serviceApplication.count({ where: { serviceType: "land-tax" } });
-      const applicationNo = `LDT-${year}-${String(1000 + count).padStart(6, "0")}`;
+      const applicationNo = `LDT-${year}-${randomUUID().slice(0, 6).toUpperCase()}`;
       const now = new Date();
 
       const created = await tx.serviceApplication.create({

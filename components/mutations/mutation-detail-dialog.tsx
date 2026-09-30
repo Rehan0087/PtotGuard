@@ -382,6 +382,25 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                     value: f.dateTime(fieldReport.reviewedAt),
                   }] : []),
                 ]} />
+                {fieldReport.status === "completed" && (Array.isArray(fieldReport.photos) && fieldReport.photos.length > 0 || fieldReport.sketchMapUrl) ? (
+                  <div className="grid gap-3 pt-3 border-t">
+                    <h4 className="text-sm font-medium text-foreground">{"Attached Files"}</h4>
+                    <div className="flex flex-wrap gap-4">
+                      {fieldReport.sketchMapUrl && (
+                        <div className="space-y-1.5">
+                          <img src={fieldReport.sketchMapUrl} alt="Sketch Map" className="h-32 w-48 rounded-md object-cover border" />
+                          <p className="text-xs text-muted-foreground">{fieldReport.sketchMapFileName || "Sketch Map"}</p>
+                        </div>
+                      )}
+                      {Array.isArray(fieldReport.photos) && (fieldReport.photos as {url: string, caption?: string}[]).map((photo, index: number) => (
+                        <div key={index} className="space-y-1.5">
+                          <img src={photo.url} alt={photo.caption || "Photo"} className="h-32 w-48 rounded-md object-cover border" />
+                          <p className="text-xs text-muted-foreground">{photo.caption || "Photo"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {role === "land-office" && mutation.status === "field-investigation" && fieldReport.status === "completed" && !fieldReport.reviewedAt ? (
                   <Button
                     type="button"
@@ -415,7 +434,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                   onClick={() => assignSurvey.mutate({
                     parcelId: mutation.parcelId,
                     mutationId: mutation.id,
-                    purpose: "boundary-survey",
+                    purpose: "possession-verify",
                     assignedAgentId: agentId,
                     scheduledFor: new Date(scheduledFor).toISOString(),
                     addressHint: parcel?.title,

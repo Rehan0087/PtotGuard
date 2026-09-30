@@ -109,12 +109,8 @@ export class ServiceApplicationsController {
     const actorId = currentUserId(req);
 
     return this.prisma.$transaction(async (tx) => {
-      // Same fragile-but-consistent numbering as disputes/mutations
-      // elsewhere in this codebase: a running count, not a DB sequence.
-      const count = await tx.serviceApplication.count({
-        where: { serviceType: body.serviceType },
-      });
-      const applicationNo = `${APPLICATION_PREFIX[body.serviceType]}-2026-${String(1000 + count).padStart(6, "0")}`;
+      // Use a random suffix to avoid unique constraint collisions with seed data
+      const applicationNo = `${APPLICATION_PREFIX[body.serviceType]}-2026-${randomUUID().slice(0, 6).toUpperCase()}`;
       const now = new Date();
 
       const created = await tx.serviceApplication.create({
