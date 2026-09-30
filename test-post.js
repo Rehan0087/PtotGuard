@@ -1,18 +1,18 @@
-const { sign } = require('./node_modules/jsonwebtoken');
-const { readFileSync } = require('fs');
-const env = readFileSync('apps/api/.env', 'utf-8');
-const secretMatch = env.match(/AUTH_TOKEN_SECRET=\"([^\"]+)\"/);
-const secret = secretMatch[1];
-const token = sign({ sub: 'citizen-demo', role: 'citizen', type: 'access' }, secret, { expiresIn: '1h' });
-console.log('Generated token:', token);
-fetch('http://localhost:3001/api/community/posts', {
+const http = require('http');
+
+const data = JSON.stringify({
+  photo: { url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", caption: "Test" }
+});
+
+const req = http.request({
+  hostname: 'localhost',
+  port: 3001,
+  path: '/api/field-reports/fr-3/media',
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
-  },
-  body: JSON.stringify({ title: 'Test Post', content: 'This is a test post from script' })
-}).then(async r => {
-  console.log('Status:', r.status);
-  console.log('Body:', await r.text());
-}).catch(console.error);
+    'Content-Length': Buffer.byteLength(data),
+    // Auth token needed! Let's get the token. 
+    // We can't easily get the auth token for the field agent.
+  }
+});

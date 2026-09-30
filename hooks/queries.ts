@@ -419,6 +419,12 @@ export function usePayLandTax() {
       qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
       qc.invalidateQueries({ queryKey: ["service-applications"] });
     },
+    // Refresh on error too: a 409 "already paid" conflict means the UI is
+    // showing stale data. Refetching lets the card update to settled state
+    // and hides the Pay button so the citizen isn't stuck in a broken loop.
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ["land-tax-holdings"] });
+    },
   });
 }
 
@@ -860,7 +866,7 @@ export function useAddFieldReportMedia(id: string) {
       sketchMap?: { url: string; fileName: string };
     }) => api.post<FieldReport>(`/field-reports/${id}/media`, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["field-report", id] });
+      qc.invalidateQueries({ queryKey: ["field-reports", id] });
       qc.invalidateQueries({ queryKey: ["field-reports-assigned"] });
     },
   });

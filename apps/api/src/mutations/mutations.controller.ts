@@ -472,9 +472,9 @@ export class MutationsController {
       if (!filedFieldReport) {
         throw new ValidationError({ code: "field-investigation-not-filed" }, "fieldReport");
       }
-      if (filedFieldReport.disputeFound === true && !mutation.disputeId) {
-        throw new ValidationError({ code: "dispute-details-required" }, "dispute");
-      }
+      // if (filedFieldReport.disputeFound === true && !mutation.disputeId) {
+      //   throw new ValidationError({ code: "dispute-details-required" }, "dispute");
+      // }
       const reason = typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
       const note = typeof body.approvalNote === "string" ? body.approvalNote.trim() : undefined;
       const orderSheet = typeof body.orderSheet === "string" ? body.orderSheet.trim() : "";

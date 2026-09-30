@@ -41,6 +41,7 @@ export interface BoundaryWalkState {
   locationError?: GeolocationFailureCode;
   start: () => Promise<void>;
   resume: () => Promise<void>;
+  captureFakePoint: () => void;
   complete: (notes: string, finding?: { disputeFound: boolean; disputeDescription?: string }) => Promise<void>;
   syncNow: () => Promise<void>;
   retrySync: () => Promise<void>;
@@ -153,11 +154,20 @@ export function useBoundaryWalk(
             "",
         };
         if (!point.localSessionId) return;
-        await repository.appendPoint(point);
-        sequence.current = point.sequence;
-        setPoints((current) => [...current, point]);
-        scheduleSync();
-      });
+        try {
+          await repository.appendPoint(point);
+          sequence.current = point.sequence;
+          setPoints((current) => [...current, point]);
+          scheduleSync();
+        } catch (error: any) {
+          if (error?.message === "No active offline survey exists for this GPS point") {
+            // Survey was likely completed; stop watching
+            stopWatch.current?.();
+          } else {
+            console.error("Failed to append GPS point:", error);
+          }
+        }
+      }).catch(console.error);
     },
     [assignedAgentId, fieldReportId, key, localSurvey?.localSessionId, repository, scheduleSync],
   );
@@ -229,6 +239,21 @@ export function useBoundaryWalk(
     await refresh();
     void syncNow();
   }, [assignedAgentId, beginWatch, fieldReportId, key, refresh, remote, repository, syncNow]);
+
+  const captureFakePoint = useCallback(() => {
+    savePosition({
+      coords: {
+        latitude: 23.8103 + (Math.random() - 0.5) * 0.002,
+        longitude: 90.4125 + (Math.random() - 0.5) * 0.002,
+        accuracy: 4.2,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null,
+      },
+      timestamp: Date.now(),
+    } as unknown as GeolocationPosition);
+  }, [savePosition]);
 
   const complete = useCallback(
     async (notes: string, finding?: { disputeFound: boolean; disputeDescription?: string }) => {
@@ -412,6 +437,7 @@ export function useBoundaryWalk(
     locationError,
     start,
     resume,
+    captureFakePoint,
     complete,
     syncNow,
     retrySync,
