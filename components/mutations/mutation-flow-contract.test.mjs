@@ -36,6 +36,10 @@ const landOfficeAgents = await readFile(
   "utf8",
 );
 const queries = await readFile(new URL("../../hooks/queries.ts", import.meta.url), "utf8");
+const paymentDialog = await readFile(
+  new URL("../payment-confirmation-dialog.tsx", import.meta.url),
+  "utf8",
+);
 const mutationController = await readFile(
   new URL("../../apps/api/src/mutations/mutations.controller.ts", import.meta.url),
   "utf8",
@@ -56,6 +60,17 @@ test("mutation uses the shared logo, account-details, and PIN payment flow", () 
   assert.match(newMutation, /PaymentConfirmationDialog/);
   assert.match(newMutation, /onConfirm=\{\(confirmedMethod\)/);
   assert.doesNotMatch(newMutation, /const PAYMENT_METHODS/);
+});
+
+test("mobile wallets require OTP 1234 before PIN without exposing the demo PIN", () => {
+  assert.match(paymentDialog, /type Step = "method-and-number" \| "otp" \| "pin"/);
+  assert.match(paymentDialog, /setStep\(isCard \? "pin" : "otp"\)/);
+  assert.match(paymentDialog, /if \(otp !== "1234"\)/);
+  assert.match(paymentDialog, /setStep\("pin"\)/);
+  assert.match(paymentDialog, /if \(pin !== "1234"\)/);
+  assert.match(paymentDialog, /onConfirm\(method\)/);
+  assert.doesNotMatch(paymentDialog, /Demo OTP/);
+  assert.doesNotMatch(paymentDialog, /Demo PIN/);
 });
 
 test("submitted mutation verification is routed to its OCR queue", () => {

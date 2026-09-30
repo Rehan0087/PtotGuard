@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import {
-  CreditCard,
-  Smartphone,
   ArrowLeft,
   CheckCircle2,
   Loader2,
@@ -67,7 +65,7 @@ const METHODS: {
   },
 ];
 
-type Step = "method-and-number" | "pin";
+type Step = "method-and-number" | "otp" | "pin";
 
 type Props = {
   open: boolean;
@@ -81,9 +79,10 @@ type Props = {
 /**
  * Multi-step checkout dialog:
  *   Step 1 – Choose method (bKash / Nagad / Card) + enter account/card number
- *   Step 2 – PIN flash card to confirm payment
- * Account/card details and PIN never leave this component; the API receives
- * only the selected method after a successful PIN entry.
+ *   Step 2 – Verify bKash / Nagad with the demo OTP (cards skip this step)
+ *   Step 3 – PIN flash card to confirm payment
+ * Account/card details, OTP, and PIN never leave this component; the API
+ * receives only the selected method after successful verification.
  */
 export function PaymentConfirmationDialog({
   open,
@@ -98,6 +97,7 @@ export function PaymentConfirmationDialog({
   const [account, setAccount] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvv, setCvv] = useState("");
+  const [otp, setOtp] = useState("");
   const [pin, setPin] = useState("");
   const [step, setStep] = useState<Step>("method-and-number");
   const [error, setError] = useState("");
@@ -123,7 +123,7 @@ export function PaymentConfirmationDialog({
     return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
   }
 
-  // ── Step 1 validation → advance to PIN step ───────────────────────────────
+  // ── Step 1 validation → advance to OTP/PIN step ───────────────────────────
   function handleProceed() {
     const digits = account.replace(/\D/g, "");
     if (isCard && digits.length !== 16) {
@@ -143,11 +143,23 @@ export function PaymentConfirmationDialog({
       return;
     }
     setError("");
+    setOtp("");
+    setPin("");
+    setStep(isCard ? "pin" : "otp");
+  }
+
+  // ── Wallet OTP validation → advance to PIN step ──────────────────────────
+  function handleConfirmOtp() {
+    if (otp !== "1234") {
+      setError(t.common.payment.invalidOtp);
+      return;
+    }
+    setError("");
     setPin("");
     setStep("pin");
   }
 
-  // ── Step 2 PIN validation → fire onConfirm ───────────────────────────────
+  // ── Final PIN validation → fire onConfirm ─────────────────────────────────
   function handleConfirmPin() {
     if (pin !== "1234") {
       setError(t.common.payment.invalidPin);
@@ -164,6 +176,7 @@ export function PaymentConfirmationDialog({
       setAccount("");
       setExpiry("");
       setCvv("");
+      setOtp("");
       setPin("");
       setError("");
       setMethod(defaultMethod);
@@ -205,7 +218,6 @@ export function PaymentConfirmationDialog({
                 <span className="block text-sm font-medium text-foreground">{t.common.payment.method}</span>
                 <div className="grid grid-cols-3 gap-2">
                   {METHODS.map((option) => {
-                    const Icon = option.value === "card" ? CreditCard : Smartphone;
                     const isSelected = method === option.value;
                     return (
                       <button
@@ -314,15 +326,15 @@ export function PaymentConfirmationDialog({
                   )}
                 >
                   <Lock className="size-3.5" />
-                  {t.common.payment.verifyPin}
+                  {isCard ? t.common.payment.continueToPin : t.common.payment.continueToOtp}
                 </Button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Step 2: PIN Flash Card ────────────────────────────────────── */}
-        {step === "pin" && (
+        {/* ── Wallet OTP / final PIN flash card ─────────────────────────── */}
+        {(step === "otp" || step === "pin") && (
           <div className="flex flex-col">
             {/* Gradient brand band */}
             <div
@@ -362,35 +374,37 @@ export function PaymentConfirmationDialog({
             {/* Dotted receipt separator */}
             <div className="border-t border-dashed border-border mx-0" />
 
-            {/* PIN entry */}
+            {/* OTP / PIN entry */}
             <div className="space-y-4 p-6">
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-foreground">
-                  {t.common.payment.pin}
+                  {step === "otp" ? t.common.payment.otp : t.common.payment.pin}
                 </label>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    id="payment-pin-input"
+                    id={step === "otp" ? "payment-otp-input" : "payment-pin-input"}
                     inputMode="numeric"
                     type="password"
                     maxLength={4}
                     autoFocus
                     placeholder="••••"
-                    value={pin}
+                    value={step === "otp" ? otp : pin}
                     onChange={(e) => {
-                      setPin(e.target.value.replace(/\D/g, "").slice(0, 4));
+                      const value = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      if (step === "otp") setOtp(value);
+                      else setPin(value);
                       setError("");
                     }}
                     disabled={busy}
                     className="font-mono text-center text-xl tracking-[0.6em] pl-10 h-12"
-                    onKeyDown={(e) => e.key === "Enter" && handleConfirmPin()}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      if (step === "otp") handleConfirmOtp();
+                      else handleConfirmPin();
+                    }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <ShieldCheck className="size-3" />
-                  Demo PIN: <span className="font-mono font-semibold">1234</span>
-                </p>
               </div>
 
               {error && (
@@ -401,7 +415,8 @@ export function PaymentConfirmationDialog({
                 <Button
                   variant="ghost"
                   onClick={() => {
-                    setStep("method-and-number");
+                    setStep(step === "pin" && !isCard ? "otp" : "method-and-number");
+                    setOtp("");
                     setPin("");
                     setError("");
                   }}
@@ -412,8 +427,8 @@ export function PaymentConfirmationDialog({
                   {t.common.payment.back}
                 </Button>
                 <Button
-                  onClick={handleConfirmPin}
-                  disabled={busy || pin.length < 4}
+                  onClick={step === "otp" ? handleConfirmOtp : handleConfirmPin}
+                  disabled={busy || (step === "otp" ? otp.length < 4 : pin.length < 4)}
                   className={cn(
                     "gap-1.5 bg-gradient-to-r transition-all shadow-md border-0 text-white hover:opacity-90",
                     selectedMethod.gradientFrom,
@@ -425,7 +440,11 @@ export function PaymentConfirmationDialog({
                   ) : (
                     <CheckCircle2 className="size-4" />
                   )}
-                  {busy ? t.common.payment.verifying : t.common.payment.pay(amount)}
+                  {busy
+                    ? t.common.payment.verifying
+                    : step === "otp"
+                      ? t.common.payment.continueToPin
+                      : t.common.payment.pay(amount)}
                 </Button>
               </div>
             </div>
