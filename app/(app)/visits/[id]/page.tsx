@@ -60,19 +60,13 @@ export default function CapturePage() {
   const [notes, setNotes] = useState<string | null>(null);
   const [disputeFound, setDisputeFound] = useState(false);
   const [disputeDescription, setDisputeDescription] = useState("");
+  const [filing, setFiling] = useState(false);
 
   useEffect(() => {
     if (!storedAgentId && data?.report.assignedAgentId) {
       useSessionStore.setState({ userId: data.report.assignedAgentId });
     }
   }, [data?.report.assignedAgentId, storedAgentId]);
-
-  useEffect(() => {
-    if (walk.data?.report.status === "in-progress" && walk.points.length < 2) {
-      setTimeout(() => walk.captureFakePoint(), 500);
-      setTimeout(() => walk.captureFakePoint(), 1500);
-    }
-  }, [walk.data?.report.status, walk.points.length, walk]);
 
   if (isLoading && walk.restoring && !walk.data) return <div className="space-y-6"><Skeleton className="h-8 w-40" /><Skeleton className="h-64 rounded-xl" /></div>;
   if (isError && !walk.data && !(error instanceof ApiError && error.status === 404)) {
@@ -85,7 +79,7 @@ export default function CapturePage() {
   const draftNotes = notes ?? report.notes ?? "";
   const review = filingReview(report, draftNotes, { gpsCount: walk.points.length });
   const closed = report.status === "completed" || report.status === "cancelled";
-  const active = report.status === "in-progress" || report.status === "en-route";
+  const active = report.status === "in-progress" && survey?.status === "in-progress";
   const locationMessage = (failure: unknown) => {
     if (!(failure instanceof GeolocationFailure)) return t.common.somethingWentWrong;
     if (failure.code === "denied") return t.pages.capture.permissionDenied;
@@ -131,6 +125,8 @@ export default function CapturePage() {
     }
   };
   const file = async () => {
+    if (filing) return;
+    setFiling(true);
     try {
       await walk.complete(draftNotes, {
         disputeFound,
@@ -142,6 +138,8 @@ export default function CapturePage() {
       toast.error(t.common.somethingWentWrong, {
         description: failure instanceof Error ? failure.message : t.common.tryAgain,
       });
+    } finally {
+      setFiling(false);
     }
   };
 
@@ -172,12 +170,7 @@ export default function CapturePage() {
         <div className="flex items-center justify-between gap-2"><h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground"><Crosshair className="size-4 text-marker" />{t.pages.capture.gpsPoints}</h2><span className="tabular text-xs text-muted-foreground">{review.gpsNeed > 0 ? t.pages.capture.required(review.gpsHave, review.gpsNeed) : f.number(review.gpsHave)}</span></div>
         <BoundaryWalkMap parcel={parcel} points={walk.points} />
         {walk.points.length === 0 ? <p className="text-xs text-muted-foreground">{t.pages.capture.noGps}</p> : <ul className="max-h-52 space-y-1.5 overflow-y-auto">{walk.points.map((point) => <li key={point.id} className="rounded-md bg-secondary/40 px-3 py-2 text-xs"><div className="font-medium text-foreground">P{f.number(point.sequence)}</div><div className="tabular text-muted-foreground">{formatCoord(point.latitude, point.longitude)} · {t.pages.capture.accuracy(point.accuracyMeters)}{point.accuracyMeters > 25 ? ` · ${t.pages.capture.lowAccuracy}` : ""}</div></li>)}</ul>}
-        {!closed && active ? (
-          <div className="flex gap-2">
-            <Button size="sm" className="w-fit" disabled={walk.tracking} onClick={() => void resume()}><Crosshair className="size-3.5" />{walk.tracking ? t.pages.capture.tracking : t.pages.capture.resumeTracking}</Button>
-            <Button size="sm" variant="secondary" className="w-fit" onClick={() => walk.captureFakePoint()}><Crosshair className="size-3.5" />Add Fake GPS</Button>
-          </div>
-        ) : null}
+        {!closed && active ? <Button size="sm" className="w-fit" disabled={walk.tracking} onClick={() => void resume()}><Crosshair className="size-3.5" />{walk.tracking ? t.pages.capture.tracking : t.pages.capture.resumeTracking}</Button> : null}
         <SurveyCorners />
       </Card>
 
@@ -202,10 +195,7 @@ export default function CapturePage() {
       {closed ? <p className="rounded-md bg-secondary/50 px-3 py-2 text-sm text-secondary-foreground">{report.notes ?? t.common.notAvailable}</p> : <Textarea value={draftNotes} onChange={(event) => setNotes(event.target.value)} placeholder={t.pages.capture.notesPlaceholder} rows={5} />}
       {!closed && report.mutationId ? <div className="space-y-2 rounded-lg border border-border p-3"><label className="flex items-center gap-2 text-sm font-medium"><Checkbox checked={disputeFound} onCheckedChange={(value) => setDisputeFound(value === true)} />{t.pages.capture.disputeFound}</label>{disputeFound ? <Textarea value={disputeDescription} onChange={(event) => setDisputeDescription(event.target.value)} placeholder={t.pages.capture.disputeDescription} /> : null}</div> : null}
       {!closed ? <>{review.blockers.length > 0 ? <Alert><AlertDescription><span className="font-medium">{t.pages.capture.needsBefore}</span><ul className="mt-1 list-disc space-y-0.5 pl-4">{review.blockers.map((blocker) => <li key={blocker.code}>{blockerText(t, blocker)}</li>)}</ul></AlertDescription></Alert> : null}
-      <div className="flex gap-2">
-        <Button className="w-fit" disabled={!active || !review.canFile || !walk.online} onClick={() => void file()}><Send className="size-3.5" />{t.pages.capture.fileReport}</Button>
-        {active ? <Button type="button" variant="secondary" onClick={() => walk.captureFakePoint()}><Crosshair className="size-3.5 mr-2" />Add GPS Point</Button> : null}
-      </div>
+      <Button className="w-fit" disabled={!active || !review.canFile || !walk.online || filing} onClick={() => void file()}><Send className="size-3.5" />{filing ? t.pages.capture.filing : t.pages.capture.fileReport}</Button>
       </> : report.submittedAt ? <p className="text-xs text-muted-foreground">{t.pages.visits.submitted(f.dateTime(report.submittedAt))}</p> : null}
     </Card>
   </div>;
