@@ -547,6 +547,8 @@ export const bn: Dictionary = {
       eyebrow: "সবার জন্য উন্মুক্ত স্থান",
       title: "কমিউনিটি",
       description: "প্রশ্ন করুন, স্থানীয় জ্ঞান ভাগ করুন এবং ভূমি অফিসের আনুষ্ঠানিক ঘোষণা অনুসরণ করুন।",
+      tabDiscussions: "আলোচনা",
+      tabAnnouncements: "ঘোষণা",
       newPost: "আলোচনা শুরু করুন",
       newAnnouncement: "ঘোষণা প্রকাশ করুন",
       titleLabel: "শিরোনাম",
