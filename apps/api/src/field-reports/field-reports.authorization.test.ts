@@ -24,6 +24,8 @@ type ReportFixture = {
   addressHint: string;
   gpsCaptures: unknown[];
   photos: unknown[];
+  sketchMapUrl?: string | null;
+  sketchMapFileName?: string | null;
   notes: string | null;
   submittedAt: Date | null;
   disputeFound?: boolean | null;
@@ -86,6 +88,7 @@ describe("field report assignment authorization", () => {
     id: string;
     caseNumber: string;
     filedById: string;
+    assignedOfficerId: string;
     status: string;
     assignedOfficerId?: string | null;
     updatedAt: Date;
@@ -98,6 +101,12 @@ describe("field report assignment authorization", () => {
   let mutation: {
     id: string;
     mutationNumber: string;
+    parcelId: string;
+    parcelDagNo: string;
+    fromOwnerName: string;
+    toOwnerName: string;
+    documentIds: string[];
+    disputeId?: string | null;
     status: string;
     assignedOfficerId: string;
     updatedAt: Date;
@@ -139,6 +148,12 @@ describe("field report assignment authorization", () => {
     mutation = {
       id: "m-1",
       mutationNumber: "MUT-2026-00001",
+      parcelId: "parcel-1",
+      parcelDagNo: "1452",
+      fromOwnerName: "Old owner",
+      toOwnerName: "New owner",
+      documentIds: ["doc-1"],
+      disputeId: null,
       status: "field-investigation",
       assignedOfficerId: "usr-officer",
       updatedAt: new Date("2026-09-10T08:00:00Z"),
@@ -274,6 +289,15 @@ describe("field report assignment authorization", () => {
           dispute = { ...dispute, ...data };
           return dispute;
         },
+        count: async () => 1,
+        create: async ({ data }: { data: typeof dispute }) => {
+          dispute = { ...data };
+          return dispute;
+        },
+      },
+      user: {
+        findUnique: async ({ where }: { where: { id: string } }) =>
+          where.id === "usr-agent" ? { id: "usr-agent", name: "Field Agent" } : null,
       },
       disputeEvent: {
         create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -757,6 +781,9 @@ describe("field report assignment authorization", () => {
       .set("authorization", token)
       .expect(201);
     report.gpsCaptures = [{ id: "g-1" }, { id: "g-2" }];
+    report.photos = [{ id: "ph-1", url: "data:image/jpeg;base64,AA==" }];
+    report.sketchMapUrl = "data:application/pdf;base64,AA==";
+    report.sketchMapFileName = "mutation-sketch.pdf";
 
     const response = await request(app.getHttpServer())
       .post("/field-reports/fr-1/survey/complete")
@@ -801,6 +828,9 @@ describe("field report assignment authorization", () => {
       .set("authorization", token)
       .expect(201);
     report.gpsCaptures = [{ id: "g-1" }, { id: "g-2" }];
+    report.photos = [{ id: "ph-1", url: "data:image/jpeg;base64,AA==" }];
+    report.sketchMapUrl = "data:application/pdf;base64,AA==";
+    report.sketchMapFileName = "mutation-sketch.pdf";
 
     const response = await request(app.getHttpServer())
       .post("/field-reports/fr-1/survey/complete")
@@ -826,6 +856,43 @@ describe("field report assignment authorization", () => {
         userId: "usr-officer",
         body: expect.stringContaining("field verification complete"),
       }),
+    ]));
+  });
+
+  it("advances a disputed mutation and creates its linked land-office dispute", async () => {
+    report.status = "accepted";
+    report.mutationId = mutation.id;
+    const token = bearer("usr-agent", "field-agent");
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/start")
+      .set("authorization", token)
+      .expect(201);
+    report.gpsCaptures = [{ id: "g-1" }, { id: "g-2" }];
+    report.photos = [{ id: "ph-1", url: "data:image/jpeg;base64,AA==" }];
+    report.sketchMapUrl = "data:application/pdf;base64,AA==";
+    report.sketchMapFileName = "disputed-land-sketch.pdf";
+
+    await request(app.getHttpServer())
+      .post("/field-reports/fr-1/survey/complete")
+      .set("authorization", token)
+      .send({
+        notes: "The registered boundary is occupied.",
+        disputeFound: true,
+        disputeDescription: "Neighbour occupies the eastern boundary.",
+      })
+      .expect(200);
+
+    expect(mutation.status).toBe("field-verification-complete");
+    expect(mutation.disputeId).toBe(dispute.id);
+    expect(dispute).toMatchObject({
+      status: "under-land-office-review",
+      parcelId: mutation.parcelId,
+      assignedOfficerId: "usr-officer",
+    });
+    expect(report.disputeId).toBe(dispute.id);
+    expect(auditEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "field-verification-complete" }),
+      expect.objectContaining({ action: "dispute-filed" }),
     ]));
   });
 

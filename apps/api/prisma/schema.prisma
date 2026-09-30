@@ -337,6 +337,10 @@ model Mutation {
   orderSheet              String?
   digitalSignature        String?
   mutationKhatianNumber   String?           @unique
+  /// Fixed DCR charge recorded separately from the mutation application fee.
+  dcrAmount               Int?
+  dcrPaymentMethod        String?
+  dcrTransactionId        String?
   dcrPaidAt               DateTime?
   /// Type-specific metadata: correctionReason, heirRelationship, partitionNote, etc.
   metadata                Json?

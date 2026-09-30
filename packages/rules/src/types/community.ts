@@ -14,7 +14,6 @@ export interface CommunityComment {
   body: string;
   createdAt: ISODateString;
 }
-
 export interface CommunityPost {
   id: ID;
   authorId: ID;

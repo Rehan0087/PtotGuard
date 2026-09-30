@@ -40,6 +40,7 @@ import type {
   AuditVerifyResult,
   Policy,
   MutationVerificationChecklist,
+  PaymentMethod,
   MediationOutcome,
   LandRecordDetail,
   Grievance,
@@ -384,7 +385,8 @@ export function useMutationDecision(id: string) {
 export function usePayMutationDcr(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.patch<LandMutation>(`/mutations/${id}/dcr-payment`),
+    mutationFn: (paymentMethod: PaymentMethod) =>
+      api.patch<LandMutation>(`/mutations/${id}/dcr-payment`, { paymentMethod }),
     onSuccess: () => invalidateMutationWorkflow(qc, id),
   });
 }
@@ -685,6 +687,8 @@ export function useUploadDocument() {
     mutationFn: (body: Partial<LandDocument>) => api.post<LandDocument>("/documents", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      qc.invalidateQueries({ queryKey: ["mutation"] });
       invalidateRecordViews(qc);
     },
   });
@@ -703,6 +707,8 @@ export function useDocumentDecision() {
     }) => api.patch<LandDocument>(`/documents/${id}/decision`, { decision }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["mutations"] });
+      qc.invalidateQueries({ queryKey: ["mutation"] });
       invalidateRecordViews(qc);
     },
   });
@@ -1191,7 +1197,10 @@ export function useGrievance(id: string) {
 export function useFileGrievance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: any) => api.post<Grievance>("/grievances", body),
+    mutationFn: (body: {
+      category: "technical" | "delay" | "staff-conduct" | "corruption";
+      description: string;
+    }) => api.post<Grievance>("/grievances", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["grievances"] }),
   });
 }

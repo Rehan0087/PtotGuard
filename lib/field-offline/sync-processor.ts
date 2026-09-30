@@ -3,6 +3,11 @@ import type { FieldOfflineRepository } from "./repository.ts";
 import type { FieldSyncAcknowledgement, FieldSyncOperation } from "./types.ts";
 
 const MAX_AUTOMATIC_RETRIES = 5;
+const LEASE_RETRY_DELAY_MS = 100;
+const LEASE_WAIT_TIMEOUT_MS = 16_000;
+
+const wait = (milliseconds: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 interface SyncTransport {
   isOnline: () => boolean;
@@ -55,6 +60,19 @@ export class FieldSyncProcessor {
     let leased = false;
     try {
       leased = await this.repository.acquireSyncLease(this.owner);
+      // Another hook instance or browser tab can own the lease while a GPS
+      // batch is uploading. A filing operation may be queued during that
+      // upload. Returning immediately used to strand COMPLETE_SURVEY in
+      // IndexedDB: the UI reported an error while the API correctly remained
+      // `in-progress`, and no later timer was guaranteed to drain the queue.
+      // Wait through one lease lifetime so the caller that filed the report
+      // takes over as soon as the current uploader releases (or its lease
+      // expires after an interrupted tab).
+      const leaseDeadline = Date.now() + LEASE_WAIT_TIMEOUT_MS;
+      while (!leased && this.transport.isOnline() && Date.now() < leaseDeadline) {
+        await wait(LEASE_RETRY_DELAY_MS);
+        leased = await this.repository.acquireSyncLease(this.owner);
+      }
       if (!leased) return;
       await this.repository.recoverInterruptedUploads();
       while (this.rerunRequested && this.transport.isOnline()) {

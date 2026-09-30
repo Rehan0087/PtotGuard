@@ -14,13 +14,13 @@ import {
   Plus,
   Stamp,
 } from "lucide-react";
-import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { IdChip } from "@/components/id-chip";
 import { mutationActionState } from "@/components/mutations/mutation-action-state";
 import { MutationDecisionDialog } from "@/components/mutations/mutation-decision-dialog";
 import { MutationDetailDialog } from "@/components/mutations/mutation-detail-dialog";
+import { PaymentConfirmationDialog } from "@/components/payment-confirmation-dialog";
 import {
   mutationDecisionSuccessState,
   retryMutationQueue,
@@ -30,21 +30,18 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  useCompleteMutationVerification,
   useMutations,
-  useMutationDecision,
   usePayMutationDcr,
   useRole,
   useSession,
-  useStartMutationVerification,
 } from "@/hooks/queries";
-import { approvalGate, type MutationHold } from "@plotguard/rules";
+import { approvalGate, MUTATION_DCR_AMOUNT_BDT, type MutationHold } from "@plotguard/rules";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
 import type { Dictionary } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { Mutation as LandMutation, MutationStatus } from "@/lib/types";
+import type { Mutation as LandMutation, MutationStatus, PaymentMethod } from "@/lib/types";
 
 const MUTATION_STATUSES = [
   "submitted",
@@ -70,14 +67,6 @@ const STATUS_FILTERS = [
 ] as const;
 
 const SCOPE_FILTERS = ["all", "assigned"] as const;
-
-// The route integrates all three workflow mutations. Start runs directly on
-// a queue card; complete and decision run in the composed workflow dialogs.
-const MUTATION_WORKFLOW_HOOKS = {
-  useStartMutationVerification,
-  useCompleteMutationVerification,
-  useMutationDecision,
-} as const;
 
 type Scope = "all" | "assigned";
 
@@ -113,7 +102,6 @@ function MutationCard({
   const t = useT();
   const f = useFmt();
   const s = useStatusMeta();
-  const start = MUTATION_WORKFLOW_HOOKS.useStartMutationVerification(mutation.id);
   const action = mutationActionState(mutation, actorId);
   const assignmentBlocked = action.holdCode === "assigned-to-other-officer";
   const controlsDisabled = !actionsReady || assignmentBlocked;
@@ -123,19 +111,6 @@ function MutationCard({
   const primary = action.primary ?? availableWhenAssigned.primary;
   const gate = approvalGate(mutation);
   const decided = action.terminal !== null;
-
-  function startVerification() {
-    start.mutate(undefined, {
-      onSuccess: () =>
-        toast.success(t.pages.mutations.verificationStartedTitle, {
-          description: t.pages.mutations.verificationStartedBody,
-        }),
-      onError: () =>
-        toast.error(t.pages.mutations.startVerificationFailedTitle, {
-          description: t.pages.mutations.startVerificationFailedBody,
-        }),
-    });
-  }
 
   return (
     <Card className="relative gap-4 px-5">
@@ -252,16 +227,16 @@ function MutationCard({
           ) : null}
 
           {primary === "start-verification" ? (
-            <Button
-              size="sm"
-              disabled={controlsDisabled || start.isPending}
-              onClick={startVerification}
-            >
-              {start.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-              {start.isPending
-                ? t.pages.mutations.startingVerification
-                : t.pages.mutations.startVerification}
-            </Button>
+            controlsDisabled ? (
+              <Button size="sm" disabled>{t.pages.mutations.startVerification}</Button>
+            ) : (
+              <Button
+                size="sm"
+                render={<Link href={`/ocr-queue?mutation=${mutation.id}`} />}
+              >
+                {t.pages.mutations.startVerification}
+              </Button>
+            )
           ) : null}
 
           {primary === "complete-verification" ? (
@@ -346,9 +321,12 @@ function MyMutationCard({ mutation, highlighted }: { mutation: LandMutation; hig
   const s = useStatusMeta();
   const gate = approvalGate(mutation);
   const payDcr = usePayMutationDcr(mutation.id);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const decided = mutation.status === "complete" || mutation.status === "rejected";
+  const dcrAmount = f.money({ amount: mutation.dcrAmount ?? MUTATION_DCR_AMOUNT_BDT, currency: "BDT" });
 
   return (
+    <>
     <Card
       id={`mutation-${mutation.id}`}
       className={cn("scroll-mt-24 gap-4 px-5", highlighted && "ring-2 ring-primary")}
@@ -452,13 +430,24 @@ function MyMutationCard({ mutation, highlighted }: { mutation: LandMutation; hig
           {t.pages.mutations.viewParcel}
         </Link>
         {mutation.status === "awaiting-dcr-payment" ? (
-          <Button size="sm" disabled={payDcr.isPending} onClick={() => payDcr.mutate()}>
+          <Button size="sm" disabled={payDcr.isPending} onClick={() => setPaymentOpen(true)}>
             {payDcr.isPending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            {t.pages.mutations.payDcr}
+            {t.pages.mutations.payDcr} · {dcrAmount}
           </Button>
         ) : null}
       </div>
     </Card>
+    <PaymentConfirmationDialog
+      key={`${mutation.id}-${paymentOpen}`}
+      open={paymentOpen}
+      amount={dcrAmount}
+      busy={payDcr.isPending}
+      onOpenChange={setPaymentOpen}
+      onConfirm={(method: PaymentMethod) =>
+        payDcr.mutate(method, { onSuccess: () => setPaymentOpen(false) })
+      }
+    />
+    </>
   );
 }
 

@@ -11,4 +11,3 @@ export class CreateCommunityCommentDto {
   @MaxLength(128)
   parentId?: string;
 }
-

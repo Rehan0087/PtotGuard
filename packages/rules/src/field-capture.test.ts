@@ -61,6 +61,21 @@ describe("filingReview", () => {
     expect(review.blockers).toContainEqual({ code: "need-photos", have: 0, need: 1 });
   });
 
+  it("requires a land photo and sketch before filing a mutation field report", () => {
+    const mutationReport = report({ mutationId: "m-1", gpsCaptures: gps(2) });
+
+    expect(filingReview(mutationReport, NOTES).blockers).toEqual([
+      { code: "need-photos", have: 0, need: 1 },
+      { code: "need-sketch" },
+    ]);
+    expect(filingReview({
+      ...mutationReport,
+      photos: photos(1),
+      sketchMapUrl: "data:application/pdf;base64,AA==",
+      sketchMapFileName: "survey-sketch.pdf",
+    }, NOTES).canFile).toBe(true);
+  });
+
   it("asks a possession check for a photo but no GPS", () => {
     const review = filingReview(
       report({ purpose: "possession-verify", photos: photos(1) }),

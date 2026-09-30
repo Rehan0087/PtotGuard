@@ -242,7 +242,7 @@ describe("mutation verification references", () => {
       [{ ...deed, id: "receipt", type: "tax-receipt" }],
     )).toEqual({
       ok: false,
-      reason: { code: "supporting-document-type-required", expectedTypes: ["sale-deed"] },
+      reason: { code: "supporting-document-type-required", expectedTypes: ["sale-deed", "title-deed"] },
     });
   });
 });

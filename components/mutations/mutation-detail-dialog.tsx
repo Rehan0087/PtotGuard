@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { ArrowRight, FileText, Loader2, MapPin, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 import { IdChip } from "@/components/id-chip";
@@ -25,9 +26,7 @@ import {
   useMutationById,
   useRole,
   useSession,
-  useStartMutationVerification,
   useAssignFieldSurvey,
-  useJurisdictions,
   useReviewFieldInvestigation,
   useFlagMutationDispute,
   useUsers,
@@ -45,8 +44,7 @@ import { ApiError } from "@/lib/api-client";
 import { useFmt } from "@/lib/i18n/format";
 import { useT } from "@/lib/i18n/provider";
 import { useStatusMeta } from "@/lib/i18n/status";
-import type { MutationDetail, MutationVerificationChecklist } from "@/lib/types";
-import { rankCandidates } from "@plotguard/rules";
+import type { LandDocument, MutationDetail, MutationVerificationChecklist } from "@/lib/types";
 
 const CHECKLIST_KEYS: (keyof MutationVerificationChecklist)[] = [
   "applicantVerified",
@@ -97,7 +95,7 @@ function DefinitionList({ rows }: { rows: { label: string; value: React.ReactNod
   );
 }
 
-function DocumentListItem({ document, verificationStatus }: { document: any, verificationStatus: string }) {
+function DocumentListItem({ document, verificationStatus }: { document: LandDocument; verificationStatus: string }) {
   const t = useT();
   const f = useFmt();
   const s = useStatusMeta();
@@ -181,7 +179,11 @@ function DocumentListItem({ document, verificationStatus }: { document: any, ver
                         { id: document.id, decision: "verify" },
                         {
                           onSuccess: () => toast.success("Document verified"),
-                          onError: (error: any) => toast.error(error?.message || "Failed to verify document. Ensure fields are correct."),
+                          onError: (error: unknown) => toast.error(
+                            error instanceof ApiError
+                              ? error.message
+                              : "Failed to verify document. Ensure fields are correct.",
+                          ),
                         }
                       );
                     }}
@@ -277,13 +279,10 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
   const s = useStatusMeta();
   const role = useRole();
   const session = useSession();
-  const start = useStartMutationVerification(detail.mutation.id);
   const assignSurvey = useAssignFieldSurvey();
   const reviewInvestigation = useReviewFieldInvestigation(detail.mutation.id);
   const flagDispute = useFlagMutationDispute(detail.mutation.id);
-  const runOcr = useRunOcr();
   const agents = useUsers({ role: "field-agent", pageSize: 50 });
-  const jurisdictions = useJurisdictions();
   const [agentId, setAgentId] = useState("");
   const [scheduledFor, setScheduledFor] = useState(() => {
     const date = new Date(Date.now() + 86_400_000);
@@ -309,25 +308,11 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
   const actorId = session.data?.user.id;
   const action = actorId ? mutationActionState(mutation, actorId, new Date(), dispute?.status) : null;
   const requiresDisputeEntry = fieldReport?.disputeFound === true && !mutation.disputeId;
-  const eligibleAgents = rankCandidates(
-    parcel ?? undefined,
-    agents.data?.items ?? [],
-    fieldReport ? [fieldReport] : [],
-    jurisdictions.data ?? [],
-  ).filter((candidate) => !candidate.blocker);
-
-  function startVerification() {
-    start.mutate(undefined, {
-      onSuccess: () =>
-        toast.success(t.pages.mutations.verificationStartedTitle, {
-          description: t.pages.mutations.verificationStartedBody,
-        }),
-      onError: () =>
-        toast.error(t.pages.mutations.startVerificationFailedTitle, {
-          description: t.pages.mutations.startVerificationFailedBody,
-        }),
-    });
-  }
+  // The selector is a directory, not an eligibility filter. Every active
+  // field agent must be visible (including agents from another jurisdiction);
+  // the server receives the explicit outside-jurisdiction override and still
+  // rejects suspended accounts.
+  const assignableAgents = agents.data?.items ?? [];
 
   return (
     <>
@@ -423,8 +408,10 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                 <Select value={agentId} onValueChange={(value) => setAgentId(value ?? "")}>
                   <SelectTrigger><SelectValue placeholder={t.pages.mutations.selectFieldAgent} /></SelectTrigger>
                   <SelectContent>
-                    {eligibleAgents.map(({ agent }) => (
-                      <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+                    {assignableAgents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id} disabled={agent.status !== "active"}>
+                        {agent.name}{agent.title ? ` · ${agent.title}` : ""}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -438,6 +425,7 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                     assignedAgentId: agentId,
                     scheduledFor: new Date(scheduledFor).toISOString(),
                     addressHint: parcel?.title,
+                    allowOutsideJurisdiction: true,
                   }, {
                     onSuccess: () => toast.success(t.pages.agents.assignedTitle),
                     onError: () => toast.error(t.pages.agents.failedTitle, {
@@ -485,17 +473,19 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
             )}
           </DetailSection>
 
-          <DetailSection title={t.pages.mutations.documents}>
-            {presentation.documents.length ? (
-              <ul className="divide-y divide-border">
-                {presentation.documents.map(({ document, verificationStatus }) => (
-                  <DocumentListItem key={document.id} document={document} verificationStatus={verificationStatus} />
-                ))}
-              </ul>
-            ) : (
-              <span className="text-sm text-muted-foreground">{t.common.none}</span>
-            )}
-          </DetailSection>
+          {role !== "land-office" ? (
+            <DetailSection title={t.pages.mutations.documents}>
+              {presentation.documents.length ? (
+                <ul className="divide-y divide-border">
+                  {presentation.documents.map(({ document, verificationStatus }) => (
+                    <DocumentListItem key={document.id} document={document} verificationStatus={verificationStatus} />
+                  ))}
+                </ul>
+              ) : (
+                <span className="text-sm text-muted-foreground">{t.common.none}</span>
+              )}
+            </DetailSection>
+          ) : null}
 
           <DetailSection title={t.pages.mutations.verification}>
             <div className="space-y-3">
@@ -534,11 +524,8 @@ function MutationDetailContent({ detail, open }: { detail: MutationDetail; open:
                 </div>
               ) : null}
               {role === "land-office" && action?.primary === "start-verification" ? (
-                <Button type="button" disabled={start.isPending} onClick={startVerification}>
-                  {start.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                  {start.isPending
-                    ? t.pages.mutations.startingVerification
-                    : t.pages.mutations.startVerification}
+                <Button render={<Link href={`/ocr-queue?mutation=${mutation.id}`} />}>
+                  {t.pages.mutations.startVerification}
                 </Button>
               ) : null}
               {role === "land-office" && action?.primary === "complete-verification" ? (
