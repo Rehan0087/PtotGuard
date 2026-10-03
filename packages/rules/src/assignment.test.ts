@@ -98,7 +98,7 @@ function dispute(id: string, over: Partial<Dispute> = {}): Dispute {
     parcelId: "p-1",
     parcelDagNo: "CS-1",
     type: "boundary",
-    status: "under-review",
+    status: "under-land-office-review",
     priority: "medium",
     filedById: "usr-1",
     filedByName: "Aleya Begum",
@@ -166,7 +166,7 @@ describe("disputesNeedingSurvey", () => {
     expect(disputesNeedingSurvey([dispute("ds-1")], [done])).toEqual([]);
   });
 
-  it.each(["resolved", "rejected", "withdrawn"] as const)(
+  it.each(["decided", "rejected", "withdrawn"] as const)(
     "never asks for a survey on a %s dispute",
     (status) => {
       expect(disputesNeedingSurvey([dispute("ds-1", { status })], [])).toEqual([]);
